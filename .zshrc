@@ -3,7 +3,13 @@ export ZSH=$HOME/.oh-my-zsh
 PATH="/usr/local/share/python/:$PATH"
 PATH=$PATH:$HOME/Workspace/scripts
 
-export MEMENTO_IP="175.207.13.224"
+export MEMENTO1_IP="175.207.13.224"
+export MEMENTO10_IP="175.207.13.227"
+export MEMENTO11_IP="175.207.13.228"
+export MEMENTO2_IP="175.207.13.225"
+export MEMENTO20_IP="175.207.13.229"
+export MEMENTO21_IP="175.207.13.230"
+
 export HOME_IP="maynet.iptime.org"
 
 # Set name of the theme to load.
@@ -56,6 +62,19 @@ ZSH_THEME="agnoster"
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(git bower sublime brew history node npm sudo web-search)  
 plugins=(zsh-autosuggestions)
+source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+
+function preexec() {
+  timer=${timer:-$SECONDS}
+}
+
+function precmd() {
+  if [ $timer ]; then
+    timer_show=$(($SECONDS - $timer))
+    export RPROMPT="%F{cyan}${timer_show}s %{$reset_color%}"
+    unset timer
+  fi
+}
 
 # User configuration
 
@@ -100,3 +119,6 @@ export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 export PATH=/usr/local/bin:$PATH
+export PATH="/usr/local/opt/coreutils/libexec/gnubin:$PATH"
+export PATH="$HOME/.rbenv/bin:$PATH"
+eval "$(rbenv init -)"

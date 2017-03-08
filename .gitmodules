@@ -1,3 +1,6 @@
 [submodule ".zsh/zsh-autosuggestions"]
 	path = .zsh/zsh-autosuggestions
 	url = https://github.com/zsh-users/zsh-autosuggestions.git
+[submodule ".zsh/zsh-virtualenv-prompt"]
+	path = .zsh/zsh-virtualenv-prompt
+	url = https://github.com/tonyseek/oh-my-zsh-virtualenv-prompt
