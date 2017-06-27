@@ -1,6 +1,6 @@
 # init submodules
 git submodule init
-git submoudle update
+git submodule update
 
 # install vundle
 git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
