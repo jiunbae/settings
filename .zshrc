@@ -1,8 +1,9 @@
 # Path to your oh-my-zsh installation.
 export ZSH=$HOME/.oh-my-zsh
-PATH="/usr/local/share/python/:$PATH"
 
-export HOME_IP="maynet.iptime.org"
+alias fucking=sudo
+alias gcc=gcc-5
+alias g++=g++-5
 
 # Set name of the theme to load.
 # Look in ~/.oh-my-zsh/themes/
@@ -100,13 +101,6 @@ setopt PROMPT_SUBST
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-
-# This for own computer disable show device host name
-# prompt_context() {
-#   if [[ "$USER" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
-#     prompt_segment black default "%(!.%{%F{yellow}%}.)$USER"
-#   fi
-# }
 
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
