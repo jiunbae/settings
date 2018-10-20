@@ -2,7 +2,7 @@
 sudo apt install git wget -y
 
 # install htop, bat
-sudo apt install htop bat -y
+sudo apt install htop -y
 
 # init submodules
 git submodule init
