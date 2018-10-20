@@ -23,6 +23,15 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$PATH"
 source $ZSH/oh-my-zsh.sh
 setopt PROMPT_SUBST
 
+# disable these function if you want to show hostname on zsh
+prompt_context() {
+  if [[ "$USER" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
+    prompt_segment black default "%(!.%{%F{yellow}%}.)$USER"
+  fi
+}
+
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
+
+# user defined path
 
