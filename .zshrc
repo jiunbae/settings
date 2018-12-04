@@ -2,8 +2,7 @@ export ZSH=$HOME/.oh-my-zsh
 
 ZSH_THEME="agnoster"
 
-plugins=(git bower sublime brew history node npm sudo web-search)  
-plugins=(zsh-autosuggestions)
+plugins=(git bower sublime brew history node npm sudo web-search zsh-autosuggestions)
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 
 function preexec() {
