@@ -2,8 +2,7 @@ export ZSH=$HOME/.oh-my-zsh
 
 ZSH_THEME="agnoster"
 
-plugins=(git bower sublime brew history node npm sudo web-search zsh-autosuggestions)
-source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+plugins=(git bower sublime brew history node npm sudo web-search zsh-autosuggestions fast-syntax-highlighting)
 
 function preexec() {
   timer=${timer:-$SECONDS}
@@ -33,7 +32,6 @@ export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 # alias
-alias top=htop
 
 # user defined path
 
