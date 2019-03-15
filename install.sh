@@ -1,6 +1,7 @@
 # change apt mirror to kakao
-cp /etc/apt/sources.list /etc/apt/sources.list.org
-sed -e 's/\(us.\)\?archive.ubuntu.com/mirror.kakao.com/g' -e 's/security.ubuntu.com/mirror.kakao.com/g' < /etc/apt/sources.list.org > /etc/apt/sources.list
+sudo cp /etc/apt/sources.list /etc/apt/sources.list.org
+sed -e 's/\(us.\)\?archive.ubuntu.com/mirror.kakao.com/g' -e 's/security.ubuntu.com/mirror.kakao.com/g' < /etc/apt/sources.list.org > sources.list
+sudo mv sources.list /etc/apt
 sudo apt update
 
 # change pip mirror to kakao
