@@ -34,7 +34,7 @@ prompt_context() {
 
 # Display Virtual Environment
 prompt_virtualenv() {
-  local env='';
+  local env='base';
 
   if [[ -n "$CONDA_DEFAULT_ENV" ]]; then
     env="$CONDA_DEFAULT_ENV"
