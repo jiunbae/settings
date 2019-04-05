@@ -19,9 +19,10 @@ hi CursorLine ctermbg=14 ctermfg=16 cterm=bold guibg=Grey40
 
 set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
-	Plugin 'gmarik/Vundle.vim'
-	Bundle 'Lokaltog/powerline', {'rtp': 'powerline/bindings/vim/'}
+    Plugin 'gmarik/Vundle.vim'
+    Bundle 'powerline/powerline', {'rtp': 'powerline/bindings/vim/'}
 call vundle#end()
+
 	    
 set laststatus=2
 

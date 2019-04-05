@@ -4,6 +4,13 @@ sed -e 's/\(us.\)\?archive.ubuntu.com/mirror.kakao.com/g' -e 's/security.ubuntu.
 sudo mv sources.list /etc/apt
 sudo apt update
 
+# install conda (Miniconda)
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+bash ~/miniconda.sh -b -p $HOME/conda
+export CONDA_HOME=$HOME/conda
+export PYTHON_VERSION='python3.6'
+rm ~/miniconda.sh
+
 # change pip mirror to kakao
 mkdir -p ~/.pip
 cp pip.conf ~/.pip
@@ -14,6 +21,9 @@ locale-gen en_US.UTF-8
 
 # install default packages
 sudo apt install wget vim zsh -y
+
+# install powerline
+pip install powerline-status
 
 # install vundle
 git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
@@ -33,5 +43,6 @@ cp .zshrc ~/
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 cp .tmux.conf ~/
-tmux source ~/.tmux.conf
+tmux source "$CONDA_HOME/lib/$PYTHON_VERSION/site-packages/powerline/bindings/tmux/powerline.conf" 
+tmux source "$HOME/.tmux.conf"
 
