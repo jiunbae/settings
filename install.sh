@@ -52,6 +52,7 @@ sudo apt install neovim -y
 
 # install spacevim
 curl -sLf https://spacevim.org/install.sh | bash
+mkdir ~/.SpaceVim.d
 cp .SpaceVim.d/init.toml ~/.SpaceVim.d/init.toml
 
 source ~/.zshrc
