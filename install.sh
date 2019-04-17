@@ -5,7 +5,7 @@ sudo mv sources.list /etc/apt
 sudo apt update
 
 # install default packages
-sudo apt install wget curl zsh -y
+sudo apt install wget curl tmux zsh -y
 
 # install locale for en_US
 sudo apt install locales -y
@@ -53,4 +53,6 @@ sudo apt install neovim -y
 # install spacevim
 curl -sLf https://spacevim.org/install.sh | bash
 cp .SpaceVim.d/init.toml ~/.SpaceVim.d/init.toml
+
+source ~/.zshrc
 
