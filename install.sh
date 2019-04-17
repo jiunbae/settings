@@ -48,7 +48,7 @@ tmux source "$HOME/.tmux.conf"
 # install neovim
 sudo add-apt-repository ppa:neovim-ppa/stable -y
 sudo apt update
-sudo apt install neovim
+sudo apt install neovim -y
 
 # install spacevim
 curl -sLf https://spacevim.org/install.sh | bash
