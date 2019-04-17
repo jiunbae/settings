@@ -84,6 +84,7 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:LD_LIBRARY_PATH
 ################################
 # User Custom Path
 alias top=htop
+alias vim=nvim
 
 export server1=166.104.110.143
 export server2=166.104.110.144

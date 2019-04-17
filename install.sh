@@ -4,6 +4,28 @@ sed -e 's/\(us.\)\?archive.ubuntu.com/mirror.kakao.com/g' -e 's/security.ubuntu.
 sudo mv sources.list /etc/apt
 sudo apt update
 
+# install default packages
+sudo apt install wget curl zsh -y
+
+# install locale for en_US
+sudo apt install locales -y
+locale-gen en_US.UTF-8
+
+# install tpm
+# --- Shell
+# install powerline
+pip install powerline-status
+
+# install oh-my-zsh
+sh -c "$(wget https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh -O -)"
+
+# install omz plugins
+git clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
+git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+
+cp .zshrc ~/
+
+# --- Python
 # install conda (Miniconda)
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
 bash ~/miniconda.sh -b -p $HOME/conda
@@ -15,34 +37,20 @@ rm ~/miniconda.sh
 mkdir -p ~/.pip
 cp pip.conf ~/.pip
 
-# install locale for en_US
-sudo apt install locales -y
-locale-gen en_US.UTF-8
-
-# install default packages
-sudo apt install wget vim zsh -y
-
-# install powerline
-pip install powerline-status
-
-# install vundle
-git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
-cp .vimrc ~/
-vim +PluginInstall +qall
-
-# install oh-my-zsh
-sh -c "$(wget https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh -O -)"
-
-# install omz plugins
-git clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
-git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-
-cp .zshrc ~/
-
-# install tpm
+# --- Utilities
+# install Tmux
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 cp .tmux.conf ~/
 tmux source "$CONDA_HOME/lib/$PYTHON_VERSION/site-packages/powerline/bindings/tmux/powerline.conf" 
 tmux source "$HOME/.tmux.conf"
+
+# install neovim
+sudo add-apt-repository ppa:neovim-ppa/stable -y
+sudo apt update
+sudo apt install neovim
+
+# install spacevim
+curl -sLf https://spacevim.org/install.sh | bash
+cp .SpaceVim.d/init.toml ~/.SpaceVim.d/init.toml
 
