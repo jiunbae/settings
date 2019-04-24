@@ -23,7 +23,7 @@ sh -c "$(wget https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/to
 git clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
 git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
 
-cp .zshrc ~/
+cp .zshrc ~/.zshrc
 
 # --- Python
 # install conda (Miniconda)
@@ -32,6 +32,7 @@ bash ~/miniconda.sh -b -p $HOME/conda
 export CONDA_HOME=$HOME/conda
 export PYTHON_VERSION='python3.6'
 rm ~/miniconda.sh
+cp .condarc ~/.condarc
 
 # change pip mirror to kakao
 mkdir -p ~/.pip
