@@ -38,13 +38,12 @@ cp .condarc ~/.condarc
 mkdir -p ~/.pip
 cp pip.conf ~/.pip
 
+pip install powerline-stats
 # --- Utilities
 # install Tmux
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 
 cp .tmux.conf ~/
-tmux source "$CONDA_HOME/lib/$PYTHON_VERSION/site-packages/powerline/bindings/tmux/powerline.conf" 
-tmux source "$HOME/.tmux.conf"
 
 # install neovim
 sudo add-apt-repository ppa:neovim-ppa/stable -y
