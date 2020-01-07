@@ -90,3 +90,6 @@ alias gdrive.sh='curl gdrive.sh | bash -s'
 export server1=166.104.110.143
 export server2=166.104.110.144
 
+export EDITOR=vim
+################################
+
