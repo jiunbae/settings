@@ -10,6 +10,7 @@ OVERWRITE=false
 PROFILE=~/.bashrc
 PROFILE_DRAFT=false
 
+
 ########################################
 # Arguments
 POSITIONAL=()
@@ -203,6 +204,12 @@ fzf() {
     $GIT clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
     ~/.fzf/install
 }
+
+########################################
+# Check requirements
+if [[ ! $(command -v whiptail) ]]; then
+    $SUDOPREFIX $MANAGER install whiptail -y
+fi
 
 ########################################
 # Get options
