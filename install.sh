@@ -9,7 +9,7 @@ VERBOSE=false
 OVERWRITE=false
 PROFILE=~/.bashrc
 PROFILE_DRAFT=false
-
+DRAFT=false
 
 ########################################
 # Arguments
@@ -66,30 +66,31 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 # Install, download and update
 install() {
     {
-        retval=$($1 2>&1 >/dev/null) && retval=true;
-    } &> /dev/null;
-    echo "$retval";
+        retval=$($1 2>&1 >/dev/null) && retval=true
+    } &> /dev/null
+    echo "$retval"
 }
 
 download() {
     if [[ -f $2 && $OVERWRITE = false ]]; then
         :
     else
-        curl -sLf $1 --output $2;
+        curl -sLf $1 --output $2
     fi
 }
 
 update_profile() {
-    FLAG=false;
+    FLAG=false
     PATTERN="## $1"
     while read line; do
         if [[ $line =~ $PATTERN ]] ; then 
-            FLAG=true; break;  
+            FLAG=true
+            break
         fi
     done < $PROFILE
     if [ $FLAG = false ]; then
         echo "$PATTERN$2" >> $PROFILE
-        PROFILE_DRAFT=true;
+        PROFILE_DRAFT=true
     fi
 }
 
@@ -201,7 +202,7 @@ alias ls=exa
 
 fzf() {
     $GIT clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-    ~/.fzf/install
+    ~/.fzf/install --all
 }
 
 ########################################
@@ -357,14 +358,19 @@ for arg in $arguments; do
         break
         ;;
     esac
+    DRAFT=true
 done
 
-echo "Installation done"
+if [ $DRAFT = true ]; then
+    echo "Installation done"
 
-if [ -d "$TEMPDIR" ]; then
-    read -p 'Clear temp directory? [Y/n]' -e -i 'y' CLEAR
+    if [ -d "$TEMPDIR" ]; then
+        read -p 'Clear temp directory? [Y/n]' -e -i 'y' CLEAR
 
-    if [ $CLEAR == 'y' ]; then
-        rm -r $TEMPDIR
+        if [ $CLEAR == 'y' ]; then
+            rm -r $TEMPDIR
+        fi
     fi
+else
+    echo "Installation canceled"
 fi
