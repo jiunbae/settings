@@ -367,7 +367,7 @@ if [ $DRAFT = true ]; then
     if [ -d "$TEMPDIR" ]; then
         read -p 'Clear temp directory? [Y/n]' -e -i 'y' CLEAR
 
-        if [ $CLEAR == 'y' ]; then
+        if [ $CLEAR = 'y' ]; then
             rm -r $TEMPDIR
         fi
     fi
