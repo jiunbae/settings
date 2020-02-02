@@ -44,10 +44,12 @@ prompt_virtualenv() {
 
   if [[ -n $env ]]; then
     prompt_segment white $PRIMARY_FG
-    print -Pn "\xf0\x9f\x90\x8d $(basename $env)"
+    print -Pn "\xf0\x9f\x90\x8d %F{blue}$(basename $env)"
   fi
 }
 
 ################################
 # Default Settings
-export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
+export PATH=$PATH:$HOME/.local/bin
+alias gdrive.sh='curl gdrive.sh | bash -s'
+
