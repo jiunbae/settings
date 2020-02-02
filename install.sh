@@ -119,7 +119,7 @@ zsh() {
 
     $( download $URLPREFIX/.zshrc ~/.zshrc )
 
-    $PROFILE=~/.zshrc
+    export PROFILE=~/.zshrc
     $SUDOPREFIX chsh -s `which zsh`
 }
 
