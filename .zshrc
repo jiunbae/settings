@@ -27,9 +27,11 @@ function precmd() {
 
 # Disable hostname
 prompt_context() {
-  if [[ "$USER" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
-    prompt_segment black default "%(!.%{%F{yellow}%}.)$USER"
+  NAME=$USER
+  if [[ "$SSH_CLIENT" ]]; then
+    NAME="$NAME@$HOSTNAME"
   fi
+  prompt_segment black default "%(!.%{%F{yellow}%}.)$NAME"
 }
 
 # Display Virtual Environment
@@ -51,5 +53,6 @@ prompt_virtualenv() {
 ################################
 # Default Settings
 export PATH=$PATH:$HOME/.local/bin
+export HOSTNAME=""
 alias gdrive.sh='curl gdrive.sh | bash -s'
 
