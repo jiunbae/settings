@@ -205,6 +205,14 @@ fzf() {
     ~/.fzf/install --all
 }
 
+gcc() {
+    $SUDOPREFIX apt install software-properties-common
+    $SUDOPREFIX add-apt-repository ppa:ubuntu-toolchain-r/test
+
+    $SUDOPREFIX apt install gcc-9 g++-9 -y
+    $SUDOPREFIX update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 --slave /usr/bin/g++ g++ /usr/bin/g++-9 --slave /usr/bin/gcov gcov /usr/bin/gcov-9
+}
+
 ########################################
 # Check requirements
 if [[ ! $(command -v whiptail) ]]; then
