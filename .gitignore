@@ -1,1 +1,39 @@
-*.DS_Store
+# VS Code ignores
+.vscode/
+
+# Jetbrain IDE ignores
+.idea/
+
+# Python ignores
+__pycache__/
+dist/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+.ipynb_checkpoints/
+MANIFEST
+
+# C/C++ ignores
+*.d
+*.slo
+*.lo
+*.o
+*.obj
+*.gch
+*.pch
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# CMake ignores
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Makefile
+cmake_install.cmake
+cmake-build-*/
+.vs/
+
