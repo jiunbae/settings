@@ -211,6 +211,12 @@ fd() {
     rm fd_8.1.1_amd64.deb
 }
 
+bat() {
+    $( download https://github.com/sharkdp/bat/releases/download/v0.15.4/bat_0.15.4_amd64.deb)
+    yes | $SUDOPREFIX dpkg -i bat_0.15.4_amd64.deb
+    rm bat_0.15.4_amd64.deb
+}
+
 gcc() {
     $SUDOPREFIX apt install software-properties-common
     $SUDOPREFIX add-apt-repository ppa:ubuntu-toolchain-r/test
@@ -245,6 +251,7 @@ arguments=$(
         9. "Install 'exa' to replace 'ls'" on\
         10. "Install 'fzf': fuzzy finder" on\
         11. "Install 'fd': alternative to 'find'" on\
+        11. "Install 'bat': alternative to 'cat'" on\
         3>&1 1>&2 2>&3
 )
 
@@ -375,6 +382,18 @@ for arg in $arguments; do
     11.)
         title="Install 'fd': alternative to 'find'"
         result=$( install fd )
+        if [ "$result" = true ]; then
+            echo -e "\xE2\x9C\x94 $title"
+        else
+            echo -e "\xE2\x9D\x8C $title Failed"
+            if [ "$VERBOSE" = true ]; then
+                echo -e "$result"
+            fi
+        fi
+        ;;
+    12.)
+        title="Install 'bat': alternative to 'cat'"
+        result=$( install bat )
         if [ "$result" = true ]; then
             echo -e "\xE2\x9C\x94 $title"
         else
