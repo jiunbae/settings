@@ -3,6 +3,7 @@ SUDOPREFIX=$([ $EUID -eq 0 ] && echo "" || echo "sudo")
 MANAGER=apt
 SHELL=sh
 GIT=git
+DPKG=dpkg
 TEMPDIR=temp
 URLPREFIX="https://raw.githubusercontent.com/MaybeS/settings/master"
 VERBOSE=false
@@ -206,15 +207,13 @@ fzf() {
 }
 
 fd() {
-    $( download https://github.com/sharkdp/fd/releases/download/v8.1.1/fd_8.1.1_amd64.deb)
-    yes | $SUDOPREFIX dpkg -i fd_8.1.1_amd64.deb
-    rm fd_8.1.1_amd64.deb
+    $( download https://github.com/sharkdp/fd/releases/download/v8.1.1/fd_8.1.1_amd64.deb $TEMPDIR/fd.deb)
+    yes | $SUDOPREFIX $DPKG -i $TEMPDIR/fd.deb
 }
 
 bat() {
-    $( download https://github.com/sharkdp/bat/releases/download/v0.15.4/bat_0.15.4_amd64.deb)
-    yes | $SUDOPREFIX dpkg -i bat_0.15.4_amd64.deb
-    rm bat_0.15.4_amd64.deb
+    $( download https://github.com/sharkdp/bat/releases/download/v0.15.4/bat_0.15.4_amd64.deb $TEMPDIR/bat.deb)
+    yes | $SUDOPREFIX $DPKG -i $TEMPDIR/bat.deb
 }
 
 gcc() {
@@ -251,7 +250,7 @@ arguments=$(
         9. "Install 'exa' to replace 'ls'" on\
         10. "Install 'fzf': fuzzy finder" on\
         11. "Install 'fd': alternative to 'find'" on\
-        11. "Install 'bat': alternative to 'cat'" on\
+        12. "Install 'bat': alternative to 'cat'" on\
         3>&1 1>&2 2>&3
 )
 
