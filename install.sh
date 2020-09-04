@@ -71,8 +71,20 @@ install() {
     echo "$retval"
 }
 
+install_wrapper() {
+    result=$( install $1 )
+    if [[ ( "$result" = true ) || ( -z "$result" ) ]]; then
+        echo "echo -e \xE2\x9C\x94 $2"
+    else
+        echo "echo -e \xE2\x9D\x8C $2 Failed"
+        if [ "$VERBOSE" = true ]; then
+            echo "echo -e $result"
+        fi
+    fi
+}
+
 download() {
-    if [[ -f $2 && $OVERWRITE = false ]]; then
+    if [[ -f $2 && ($3 && $OVERWRITE = false) ]]; then
         :
     else
         curl -sLf $1 --output $2
@@ -107,22 +119,6 @@ default_packages() {
     $SUDOPREFIX $MANAGER install curl vim zip build-essential -y;
 }
 
-zsh() {
-    # install zsh and requirements
-    $SUDOPREFIX $MANAGER install git zsh -y
-
-    # install omz
-    $SHELL -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed '/\s*env\s\s*zsh\s*/d')"
-    # plugins
-    $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
-    $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-
-    $( download $URLPREFIX/.zshrc ~/.zshrc )
-
-    export PROFILE=~/.zshrc
-    $SUDOPREFIX chsh -s `which zsh`
-}
-
 change_locale() {
     $SUDOPREFIX $MANAGER install locales -y
     $SUDOPREFIX locale-gen en_US.UTF-8
@@ -133,9 +129,21 @@ export LANG=en_US.UTF-8
     " )
 }
 
+zsh() {
+    # install omz
+    $SHELL -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+
+    # plugins
+    $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
+    $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+
+    curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc
+
+    export PROFILE=~/.zshrc
+    $SUDOPREFIX chsh -s `which zsh`
+}
+
 vim() {
-    $SUDOPREFIX $MANAGER install neovim -y
-    
     mkdir -p ~/.SpaceVim.d
     curl -sLf https://spacevim.org/install.sh | bash
     $( download $URLPREFIX/.SpaceVim.d/init.toml ~/.SpaceVim.d/init.toml )
@@ -147,10 +155,9 @@ export EDITOR=vim
 }
 
 tmux() {
-    $SUDOPREFIX $MANAGER install tmux -y
     $GIT clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
-
-    $( download $URLPREFIX/.tmux.conf ~/.tmux.conf )
+    
+    curl -sLf $URLPREFIX/.tmux.conf --output ~/.tmux.conf
 }
 
 conda() {
@@ -220,18 +227,19 @@ git() {
 ########################################
 # Check requirements
 if [[ ! $(command -v whiptail) ]]; then
-    $SUDOPREFIX $MANAGER install whiptail -y
+    echo "Install requirements ... [whiptail]"
+    $SUDOPREFIX $MANAGER install whiptail -y > /dev/null 2>&1;
 fi
 
 ########################################
 # Get options
 arguments=$(
-    whiptail --title "Selet options" --separate-output --checklist "Select options"\
-        10 60 5\
+    whiptail --title "Jiun's Settings" --separate-output --checklist "Selet options using arrow key and <TAB>" \
+        $(stty size) 11 \
         1. "Change source mirror [kakao]" on\
         2. "Install default packages" on\
-        3. "Install zsh and change default shell" on\
-        4. "Change default locale [en_US]" on\
+        3. "Change default locale [en_US]" on\
+        4. "Install zsh and change default shell" on\
         5. "Install NeoVim/SpaceVim and set default editor" on\
         6. "Install tmux and change default config" on\
         7. "Install conda python and init conda" on\
@@ -241,129 +249,44 @@ arguments=$(
         3>&1 1>&2 2>&3
 )
 
-$SUDOPREFIX $MANAGER update &> /dev/null;
+echo "Update package manager ..."
+$SUDOPREFIX $MANAGER update > /dev/null 2>&1;
 
 for arg in $arguments; do
     case $arg in
     1.) 
-        title="Change source mirror [kakao]"
-        result=$( install change_mirror )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $( install_wrapper change_mirror "Change source mirror [kakao]" )
         ;;
     2.) 
-        title="Install default packages"
-        result=$( install default_packages )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $( install_wrapper default_packages "Install default packages" )
         ;;
-    3.) 
-        title="Install zsh and change default shell"
-        result=$( install zsh )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+    3.)     
+        $( install_wrapper change_locale "Change default locale [en_US]" )
         ;;
     4.) 
-        title="Change default locale [en_US]"
-        result=$( install change_locale )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        # install zsh and requirements
+        $SUDOPREFIX $MANAGER install git zsh -y > /dev/null 2>&1;
+        $( install_wrapper zsh "Install zsh and change default shell" )
         ;;
     5.) 
-        title="Install Neo/SpaceVim and set default editor"
-        result=$( install vim )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $SUDOPREFIX $MANAGER install neovim -y > /dev/null 2>&1;
+        $( install_wrapper vim "Install Neo/SpaceVim and set default editor" )
         ;;
     6.) 
-        title="Install tmux and change default config"
-        result=$( install tmux )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $SUDOPREFIX $MANAGER install tmux -y > /dev/null 2>&1;
+        $( install_wrapper tmux "Install tmux and change default config" )
         ;;
     7.) 
-        title="Install conda python and init conda"
-        result=$( install conda )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $( install_wrapper conda "Install conda python and init conda" )
         ;;
     8.) 
-        title="Change pip mirror [kakao]"
-        result=$( install change_pip )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $( install_wrapper change_pip "Change pip mirror [kakao]" )
         ;;
     9.) 
-        title="Install 'exa' to replace 'ls'"
-        result=$( install exa )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $( install_wrapper exa "Install 'exa' to replace 'ls'" )
         ;;
     0.) 
-        title="Install 'fzf': fuzzy finder"
-        result=$( install fzf )
-        if [ "$result" = true ]; then
-            echo -e "\xE2\x9C\x94 $title"
-        else
-            echo -e "\xE2\x9D\x8C $title Failed"
-            if [ "$VERBOSE" = true ]; then
-                echo -e "$result"
-            fi
-        fi
+        $( install_wrapper fzf "Install 'fzf': fuzzy finder" )
         ;;
     *)
         echo "Invalid arguments"
@@ -375,6 +298,15 @@ done
 
 if [ $DRAFT = true ]; then
     echo "Installation done"
+    echo "---------"
+    echo "Go to github.com/powerline/fonts and download the powerline font and set to terminal"
+    echo "Exit and restart the terminal."
+    echo "-- vim --"
+    echo "The first time you open vim, several installations can start."
+    echo "-- zsh --"
+    echo "If your default shell has not been changed to zsh,"
+    echo "you can change the default shell with sudo chsh -s `which zsh`."
+    echo "---------"
 
     if [ -d "$TEMPDIR" ]; then
         read -p 'Clear temp directory? [Y/n]' -e -i 'y' CLEAR
