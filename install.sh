@@ -131,7 +131,7 @@ export LANG=en_US.UTF-8
 
 zsh() {
     # install omz
-    $SHELL -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    $SHELL -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended > /dev/null 2>&1;
 
     # plugins
     $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
@@ -224,6 +224,16 @@ git() {
     $GIT config --global core.autocrlf true
 }
 
+fd() {
+    $( download https://github.com/sharkdp/fd/releases/download/v8.1.1/fd_8.1.1_amd64.deb $TEMPDIR/fd.deb)
+    yes | $SUDOPREFIX $DPKG -i $TEMPDIR/fd.deb
+}
+
+bat() {
+    $( download https://github.com/sharkdp/bat/releases/download/v0.15.4/bat_0.15.4_amd64.deb $TEMPDIR/bat.deb)
+    yes | $SUDOPREFIX $DPKG -i $TEMPDIR/bat.deb
+}
+
 ########################################
 # Check requirements
 if [[ ! $(command -v whiptail) ]]; then
@@ -245,7 +255,9 @@ arguments=$(
         7. "Install conda python and init conda" on\
         8. "Change pip mirror [kakao]" on\
         9. "Install 'exa' to replace 'ls'" on\
-        0. "Install 'fzf': fuzzy finder" on\
+        10. "Install 'fzf': fuzzy finder" on\
+        11. "Install 'fd': alternative to 'find'" on\
+        12. "Install 'bat': alternative to 'cat'" on\
         3>&1 1>&2 2>&3
 )
 
@@ -285,8 +297,14 @@ for arg in $arguments; do
     9.) 
         $( install_wrapper exa "Install 'exa' to replace 'ls'" )
         ;;
-    0.) 
+    10.) 
         $( install_wrapper fzf "Install 'fzf': fuzzy finder" )
+        ;;
+    11.)
+        $( install_wrapper fd "Install 'fd': alternative to 'find'" )
+        ;;
+    12.)
+        $( install_wrapper bat "Install 'bat': alternative to 'cat'" )
         ;;
     *)
         echo "Invalid arguments"
