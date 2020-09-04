@@ -10,6 +10,7 @@ OVERWRITE=false
 PROFILE=~/.bashrc
 PROFILE_DRAFT=false
 DRAFT=false
+DPKG=dpkg
 
 ########################################
 # Arguments
