@@ -280,6 +280,10 @@ for arg in $arguments; do
         # install zsh and requirements
         $SUDOPREFIX $MANAGER install git zsh -y > /dev/null 2>&1;
         $( install_wrapper zsh "Install zsh and change default shell" )
+        curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc
+
+        export PROFILE=~/.zshrc
+        $SUDOPREFIX chsh -s `which zsh`
         ;;
     5.) 
         $SUDOPREFIX $MANAGER install neovim -y > /dev/null 2>&1;
