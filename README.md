@@ -3,7 +3,7 @@
 Some default settings for [me](https://github.com/MaybeS)
 
 ```
-curl -sLf github.com/MaybeS/settings/releases/latest/download/install.sh | bash
+curl -sLf https://github.com/MaybeS/settings/releases/latest/download/install.sh | bash
 ```
 
 ## Includes
@@ -18,3 +18,5 @@ curl -sLf github.com/MaybeS/settings/releases/latest/download/install.sh | bash
 - Change pip mirror [kakao]
 - Install 'exa' to replace 'ls'
 - Install 'fzf': fuzzy finder
+- Install 'fd': alternative to 'find'
+- Install 'bat': alternative to 'cat'
