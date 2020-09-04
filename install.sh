@@ -134,14 +134,14 @@ zsh() {
     # install omz
     $SHELL -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended > /dev/null 2>&1;
 
-    # plugins
-    $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
-    $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-
     curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc
 
     export PROFILE=~/.zshrc
     $SUDOPREFIX chsh -s `which zsh`
+    
+    # plugins
+    $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
+    $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
 }
 
 vim() {
@@ -264,6 +264,7 @@ arguments=$(
 
 echo "Update package manager ..."
 $SUDOPREFIX $MANAGER update > /dev/null 2>&1;
+$SUDOPREFIX $MANAGER install git -y > /dev/null 2>&1;
 
 for arg in $arguments; do
     case $arg in
@@ -277,13 +278,11 @@ for arg in $arguments; do
         $( install_wrapper change_locale "Change default locale [en_US]" )
         ;;
     4.) 
-        # install zsh and requirements
-        $SUDOPREFIX $MANAGER install git zsh -y > /dev/null 2>&1;
+        $SUDOPREFIX $MANAGER install zsh -y > /dev/null 2>&1;
         $( install_wrapper zsh "Install zsh and change default shell" )
-        curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc
 
-        export PROFILE=~/.zshrc
-        $SUDOPREFIX chsh -s `which zsh`
+        $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
+        $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
         ;;
     5.) 
         $SUDOPREFIX $MANAGER install neovim -y > /dev/null 2>&1;
@@ -329,6 +328,9 @@ if [ $DRAFT = true ]; then
     echo "-- zsh --"
     echo "If your default shell has not been changed to zsh,"
     echo "you can change the default shell with sudo chsh -s `which zsh`."
+    echo "If plugin is not installed, you can install plugins uinsg command below:"
+    echo "\tgit clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting"
+    echo "\tgit clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
     echo "---------"
 
     if [[ -d "$TEMPDIR" ]]; then
