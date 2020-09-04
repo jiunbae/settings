@@ -328,11 +328,7 @@ if [ $DRAFT = true ]; then
     echo "---------"
 
     if [[ -d "$TEMPDIR" ]]; then
-        read -p 'Clear temp directory? [Y/n]' -e -i 'y' CLEAR
-
-        if [[ $CLEAR = 'y' ]]; then
-            rm -r $TEMPDIR
-        fi
+        rm -r $TEMPDIR;
     fi
 else
     echo "Installation canceled"
