@@ -245,7 +245,7 @@ fi
 # Get options
 arguments=$(
     whiptail --title "Jiun's Settings" --separate-output --checklist "Selet options using arrow key and <TAB>" \
-        $(stty size) 11 \
+        32 80 11 \
         1. "Change source mirror [kakao]" on\
         2. "Install default packages" on\
         3. "Change default locale [en_US]" on\
