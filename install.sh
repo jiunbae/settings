@@ -280,9 +280,6 @@ for arg in $arguments; do
     4.) 
         $SUDOPREFIX $MANAGER install zsh -y > /dev/null 2>&1;
         $( install_wrapper zsh "Install zsh and change default shell" )
-
-        $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
-        $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
         ;;
     5.) 
         $SUDOPREFIX $MANAGER install neovim -y > /dev/null 2>&1;
