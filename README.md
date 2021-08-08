@@ -1,9 +1,9 @@
 # Settings
 
-Some default settings for [me](https://github.com/MaybeS)
+Some default settings for [Jiun](https://github.com/jiunbae)
 
 ```
-curl -sLf https://github.com/MaybeS/settings/releases/latest/download/install.sh | bash
+curl -sLf https://github.com/jiunbae/settings/releases/latest/download/install.sh | bash
 ```
 
 ## Includes
