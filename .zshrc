@@ -1,5 +1,5 @@
 # Maydev ZSH Settings
-# github.com/MaybeS/settings.git
+# github.com/jiunbae/settings.git
 ################################
 # Default ZSH
 export ZSH=$HOME/.oh-my-zsh
