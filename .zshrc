@@ -22,6 +22,7 @@ plugins=(
   zsh-autosuggestions
   fast-syntax-highlighting
   fzf
+  tmux
 )
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7'
 
@@ -65,6 +66,7 @@ alias vim="nvim"
 alias vi="nvim"
 alias vimdiff="nvim -d"
 alias ls="exa"
+alias cat="bat"
 export EDITOR=/usr/local/bin/nvim
 
 export LC_ALL=en_US.UTF-8  
