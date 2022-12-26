@@ -20,7 +20,7 @@ setopt PROMPT_SUBST
 plugins=(
   git
   zsh-autosuggestions
-  fast-syntax-highlighting
+  zsh-syntax-highlighting
   fzf
   tmux
 )
