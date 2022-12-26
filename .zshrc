@@ -28,39 +28,42 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7'
 
 source $ZSH/oh-my-zsh.sh
 
-if [[ $(arch) == "arm64" ]]; then
-  export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
-else
-  export PATH="/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+export PATH=$HOME/bin:$HOME/conda/bin:$HOME/.local/bin:$PATH
+
+################################
+# OS Based settings
+if [[ $(grep microsoft /proc/version) ]]; then
+  # wsl settings
+  export PATH=/usr/lib/wsl/lib:$PATH
 fi
-export PATH=$HOME/bin:$HOME/.local/bin:$PATH
-
-alias za="arch -arch arm64e /bin/zsh"
-alias zx="arch -arch x86_64 /bin/zsh"
-
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/opt/homebrew/Caskroom/miniforge/base/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "/opt/homebrew/Caskroom/miniforge/base/etc/profile.d/conda.sh" ]; then
-        . "/opt/homebrew/Caskroom/miniforge/base/etc/profile.d/conda.sh"
+case `uname` in
+  Darwin)
+    # macos settings
+    alias za="arch -arch arm64e /bin/zsh"
+    alias zx="arch -arch x86_64 /bin/zsh"
+    if [[ $(arch) == "arm64" ]]; then
+      export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
     else
-        export CONDA_BASE="/opt/homebrew/Caskroom/miniforge/base"
-        export PATH="$CONDA_BASE/bin:$PATH"
+      export PATH="/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
     fi
-fi
-unset __conda_setup
-# <<< conda initialize <<<
+      export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+   ;;
+  Linux)
+    # Linux settings
+    if [ -z $LD_LIBRARY_PATH ]; then
+      LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib
+    else
+      LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/lib
+    fi
+    export LD_LIBRARY_PATH
+    export PATH=/usr/local/cuda/bin:$PATH
+  ;;
+esac
 
 ################################
 # Default Settings
 alias gdrive.sh='curl gdrive.sh | bash -s'
-
-###############################
-# Brew
-eval "$(/opt/homebrew/bin/brew shellenv)"
 
 alias vim="nvim"
 alias vi="nvim"
@@ -76,7 +79,4 @@ set -g default-command "reattach-to-user-namespace -l zsh"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-
-# Export binaries
-export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
