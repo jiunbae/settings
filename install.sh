@@ -111,7 +111,7 @@ update_profile() {
 # Install functions
 change_mirror() {
     $SUDOPREFIX cp /etc/apt/sources.list /etc/apt/sources.list.org;
-    sed -e 's/\(us.\)\?archive.ubuntu.com/mirror.kakao.com/g' -e 's/security.ubuntu.com/mirror.kakao.com/g' < /etc/apt/sources.list.org > sources.list;
+    sed -e 's/\(us.\|kr.\)\?archive.ubuntu.com/mirror.kakao.com/g' -e 's/security.ubuntu.com/mirror.kakao.com/g' < /etc/apt/sources.list.org > sources.list;
     $SUDOPREFIX mv sources.list /etc/apt;
     $SUDOPREFIX $MANAGER update;
 }
@@ -140,7 +140,7 @@ zsh() {
     $SUDOPREFIX chsh -s `which zsh`
     
     # plugins
-    $GIT clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting
+    $GIT clone https://github.com/zsh-users/zsh-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
     $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
 }
 
