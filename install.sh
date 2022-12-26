@@ -209,8 +209,7 @@ alias ls=exa
 }
 
 fzf() {
-    $GIT clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-    ~/.fzf/install --all
+    $SUDOPREFIX apt install fzf
 }
 
 gcc() {
