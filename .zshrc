@@ -35,6 +35,7 @@ export PATH=$HOME/bin:$HOME/conda/bin:$HOME/.local/bin:$PATH
 if [[ $(grep microsoft /proc/version) ]]; then
   # wsl settings
   export PATH=/usr/lib/wsl/lib:$PATH
+  export LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH
 fi
 case `uname` in
   Darwin)
