@@ -1,11 +1,5 @@
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
-# Maydev ZSH Settings
+# Jiun Bae
+# ZSH Settings
 # github.com/jiunbae/settings.git
 ################################
 # Default ZSH
@@ -35,7 +29,6 @@ export PATH=$HOME/bin:$HOME/conda/bin:$HOME/.local/bin:$PATH
 if [[ $(grep microsoft /proc/version) ]]; then
   # wsl settings
   export PATH=/usr/lib/wsl/lib:$PATH
-  export LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH
 fi
 case `uname` in
   Darwin)
