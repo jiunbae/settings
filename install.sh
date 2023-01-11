@@ -133,17 +133,18 @@ export LANG=en_US.UTF-8
 zsh() {
     # install omz
     $SHELL -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended > /dev/null 2>&1;
-    $GIT clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+    $SHELL -c "$GIT clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
 
-    curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc
+    $SHELL -c "$(curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc)"
+    $SHELL -c "$(curl -sLf $URLPREFIX/.p10k.zsh --output ~/.p10k.zsh)"
 
     export PROFILE=~/.zshrc
     
     # plugins
-    $GIT clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-    $GIT clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+    $SHELL -c "$GIT clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting"
+    $SHELL -c "$GIT clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
 
-    $SUDOPREFIX chsh -s `which zsh`
+    $SHELL -c "$SUDOPREFIX chsh -s `which zsh`"
 }
 
 vim() {
@@ -158,9 +159,9 @@ export EDITOR=vim
 }
 
 tmux() {
-    $GIT clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+    $SHELL -c "$GIT clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm"
     
-    curl -sLf $URLPREFIX/.tmux.conf --output ~/.tmux.conf
+    $SHELL -c "curl -sLf $URLPREFIX/.tmux.conf --output ~/.tmux.conf"
 }
 
 conda() {
@@ -223,7 +224,7 @@ gcc() {
 }
 
 git() {
-    $GIT config --global core.autocrlf true
+    $SHELL -c "$GIT config --global core.autocrlf true"
 }
 
 fd() {
@@ -323,12 +324,6 @@ if [ $DRAFT = true ]; then
     echo "Exit and restart the terminal."
     echo "-- vim --"
     echo "The first time you open vim, several installations can start."
-    echo "-- zsh --"
-    echo "If your default shell has not been changed to zsh,"
-    echo "you can change the default shell with sudo chsh -s `which zsh`."
-    echo "If plugin is not installed, you can install plugins uinsg command below:"
-    echo "\tgit clone https://github.com/zdharma/fast-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/fast-syntax-highlighting"
-    echo "\tgit clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
     echo "---------"
 
     if [[ -d "$TEMPDIR" ]]; then
