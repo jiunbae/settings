@@ -133,15 +133,17 @@ export LANG=en_US.UTF-8
 zsh() {
     # install omz
     $SHELL -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended > /dev/null 2>&1;
+    $GIT clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
 
     curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc
 
     export PROFILE=~/.zshrc
-    $SUDOPREFIX chsh -s `which zsh`
     
     # plugins
-    $GIT clone https://github.com/zsh-users/zsh-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
-    $GIT clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+    $GIT clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+    $GIT clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+
+    $SUDOPREFIX chsh -s `which zsh`
 }
 
 vim() {
