@@ -249,18 +249,15 @@ fi
 arguments=$(
     whiptail --title "Jiun's Settings" --separate-output --checklist "Selet options using arrow key and <TAB>" \
         32 80 11 \
-        1. "Change source mirror [kakao]" on\
-        2. "Install default packages" on\
-        3. "Change default locale [en_US]" on\
-        4. "Install zsh and change default shell" on\
-        5. "Install NeoVim/SpaceVim and set default editor" on\
-        6. "Install tmux and change default config" on\
-        7. "Install conda python and init conda" on\
-        8. "Change pip mirror [kakao]" on\
-        9. "Install 'exa' to replace 'ls'" on\
-        10. "Install 'fzf': fuzzy finder" on\
-        11. "Install 'fd': alternative to 'find'" on\
-        12. "Install 'bat': alternative to 'cat'" on\
+        1. "Install default packages" on\
+        2. "Change default locale [en_US]" on\
+        3. "Install zsh and change default shell" on\
+        4. "Install NeoVim/SpaceVim and set default editor" on\
+        5. "Install tmux and change default config" on\
+        6. "Install conda python and init conda" on\
+        7. "[Optional] Install 'exa' to replace 'ls'" on\
+        8. "[Optional] Install 'fzf': fuzzy finder" on\
+        9. "[Optional] Install 'fd': alternative to 'find'" on\
         3>&1 1>&2 2>&3
 )
 
@@ -271,43 +268,34 @@ $SUDOPREFIX $MANAGER install git -y > /dev/null 2>&1;
 for arg in $arguments; do
     case $arg in
     1.) 
-        $( install_wrapper change_mirror "Change source mirror [kakao]" )
-        ;;
-    2.) 
         $( install_wrapper default_packages "Install default packages" )
         ;;
-    3.)     
+    2.)     
         $( install_wrapper change_locale "Change default locale [en_US]" )
         ;;
-    4.) 
+    3.) 
         $SUDOPREFIX $MANAGER install zsh -y > /dev/null 2>&1;
         $( install_wrapper zsh "Install zsh and change default shell" )
         ;;
-    5.) 
+    4.) 
         $SUDOPREFIX $MANAGER install neovim -y > /dev/null 2>&1;
         $( install_wrapper vim "Install Neo/SpaceVim and set default editor" )
         ;;
-    6.) 
+    5.) 
         $SUDOPREFIX $MANAGER install tmux -y > /dev/null 2>&1;
         $( install_wrapper tmux "Install tmux and change default config" )
         ;;
-    7.) 
+    6.) 
         $( install_wrapper conda "Install conda python and init conda" )
         ;;
-    8.) 
-        $( install_wrapper change_pip "Change pip mirror [kakao]" )
-        ;;
-    9.) 
+    7.) 
         $( install_wrapper exa "Install 'exa' to replace 'ls'" )
         ;;
-    10.) 
+    8.) 
         $( install_wrapper fzf "Install 'fzf': fuzzy finder" )
         ;;
-    11.)
+    9.)
         $( install_wrapper fd "Install 'fd': alternative to 'find'" )
-        ;;
-    12.)
-        $( install_wrapper bat "Install 'bat': alternative to 'cat'" )
         ;;
     *)
         echo "Invalid arguments"
