@@ -1,4 +1,16 @@
 #!/bin/bash
+
+
+########################################
+# Update global variables
+# See also https://stackoverflow.com/questions/23564995/how-to-modify-a-global-variable-within-a-function-in-bash
+_passback() { while [ 1 -lt $# ]; do printf '%q=%q;' "$1" "${!1}"; shift; done; return $1; }
+passback() { _passback "$@" "$?"; }
+_capture() { { out="$("${@:2}" 3<&-; "$2_" >&3)"; ret=$?; printf "%q=%q;" "$1" "$out"; } 3>&1; echo "(exit $ret)"; }
+capture() { eval "$(_capture "$@")"; }
+
+########################################
+# Globals
 SUDOPREFIX=$([ $EUID -eq 0 ] && echo "" || echo "sudo")
 MANAGER=apt
 SHELL=sh
@@ -11,6 +23,34 @@ PROFILE=~/.bashrc
 PROFILE_DRAFT=false
 DRAFT=false
 DPKG=dpkg
+Y_FLAG=-y
+
+prepare_globals_() { 
+    passback SUDOPREFIX;
+    passback MANAGER;
+    passback SHELL;
+}
+prepare_globals() {
+    system=$( uname -s );
+    case $system in
+        Linux)
+            SUDOPREFIX=$([ $EUID -eq 0 ] && echo "" || echo "sudo")
+            MANAGER=apt
+            SHELL=sh
+            Y_FLAG=-y
+            ;;
+        Darwin)
+            SUDOPREFIX=""
+            MANAGER=brew
+            SHELL=sh
+            Y_FLAG=""
+            ;;
+        *)
+            echo "Unsupported system" >&2
+            exit 1
+            ;;
+    esac
+}
 
 ########################################
 # Arguments
@@ -64,7 +104,7 @@ done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
 ########################################
-# Install, download and update
+# Install, download and update, utility functions
 install() {
     {
         retval=$($1 2>&1 >/dev/null) && retval=true
@@ -107,6 +147,33 @@ update_profile() {
     fi
 }
 
+run_task() {
+    echo "$2 ..." >&2
+    $1 > /dev/null 2>&1;
+    if [ $? -ne 0 ]; then
+        echo "$2 false" >&2
+        echo "false"
+        return
+    fi
+    echo "true"
+}
+
+prepare_packages() {
+    if [[ ! $(command -v whiptail) ]]; then
+        if [ "$( run_task "$SUDOPREFIX $MANAGER install whiptail $Y_FLAG" "Install requirements [whiptail]" )" == false ]; then
+            return 0
+        fi
+    fi
+
+    if [ "$( run_task "$SUDOPREFIX $MANAGER update" "Update package manager" )" == false ]; then
+        return 0
+    fi
+    
+    if [ "$( run_task "$SUDOPREFIX $MANAGER install git $Y_FLAG" "Install requirements [git]" )" == false ]; then
+        return 0
+    fi
+}
+
 ########################################
 # Install functions
 change_mirror() {
@@ -117,11 +184,11 @@ change_mirror() {
 }
 
 default_packages() {
-    $SUDOPREFIX $MANAGER install curl vim zip build-essential -y;
+    $SUDOPREFIX $MANAGER install curl vim zip build-essential $Y_FLAG;
 }
 
 change_locale() {
-    $SUDOPREFIX $MANAGER install locales -y
+    $SUDOPREFIX $MANAGER install locales $Y_FLAG
     $SUDOPREFIX locale-gen en_US.UTF-8
 
     $( update_profile "Locale" "
@@ -219,7 +286,7 @@ gcc() {
     $SUDOPREFIX apt install software-properties-common
     $SUDOPREFIX add-apt-repository ppa:ubuntu-toolchain-r/test
 
-    $SUDOPREFIX apt install gcc-9 g++-9 -y
+    $SUDOPREFIX apt install gcc-9 g++-9 $Y_FLAG
     $SUDOPREFIX update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 --slave /usr/bin/g++ g++ /usr/bin/g++-9 --slave /usr/bin/gcov gcov /usr/bin/gcov-9
 }
 
@@ -238,11 +305,9 @@ bat() {
 }
 
 ########################################
-# Check requirements
-if [[ ! $(command -v whiptail) ]]; then
-    echo "Install requirements ... [whiptail]"
-    $SUDOPREFIX $MANAGER install whiptail -y > /dev/null 2>&1;
-fi
+# Prepare
+prepare_globals
+prepare_packages
 
 ########################################
 # Get options
@@ -261,10 +326,8 @@ arguments=$(
         3>&1 1>&2 2>&3
 )
 
-echo "Update package manager ..."
-$SUDOPREFIX $MANAGER update > /dev/null 2>&1;
-$SUDOPREFIX $MANAGER install git -y > /dev/null 2>&1;
-
+########################################
+# Install
 for arg in $arguments; do
     case $arg in
     1.) 
@@ -274,15 +337,15 @@ for arg in $arguments; do
         $( install_wrapper change_locale "Change default locale [en_US]" )
         ;;
     3.) 
-        $SUDOPREFIX $MANAGER install zsh -y > /dev/null 2>&1;
+        $SUDOPREFIX $MANAGER install zsh $Y_FLAG > /dev/null 2>&1;
         $( install_wrapper zsh "Install zsh and change default shell" )
         ;;
     4.) 
-        $SUDOPREFIX $MANAGER install neovim -y > /dev/null 2>&1;
+        $SUDOPREFIX $MANAGER install neovim $Y_FLAG > /dev/null 2>&1;
         $( install_wrapper vim "Install Neo/SpaceVim and set default editor" )
         ;;
     5.) 
-        $SUDOPREFIX $MANAGER install tmux -y > /dev/null 2>&1;
+        $SUDOPREFIX $MANAGER install tmux $Y_FLAG > /dev/null 2>&1;
         $( install_wrapper tmux "Install tmux and change default config" )
         ;;
     6.) 
@@ -305,6 +368,8 @@ for arg in $arguments; do
     DRAFT=true
 done
 
+########################################
+# Finalize
 if [ $DRAFT = true ]; then
     echo "Installation done"
     echo "---------"
@@ -318,5 +383,5 @@ if [ $DRAFT = true ]; then
         rm -r $TEMPDIR;
     fi
 else
-    echo "Installation canceled"
+    echo "Installation canceled";
 fi
