@@ -3,7 +3,7 @@
 
 ########################################
 # Update global variables
-# See also https://stackoverflow.com/questions/23564995/how-to-modify-a-global-variable-within-a-function-in-bash
+# See also https://stackoverflow.com/a/47556292/5615965
 _passback() { while [ 1 -lt $# ]; do printf '%q=%q;' "$1" "${!1}"; shift; done; return $1; }
 passback() { _passback "$@" "$?"; }
 _capture() { { out="$("${@:2}" 3<&-; "$2_" >&3)"; ret=$?; printf "%q=%q;" "$1" "$out"; } 3>&1; echo "(exit $ret)"; }
@@ -12,6 +12,7 @@ capture() { eval "$(_capture "$@")"; }
 ########################################
 # Globals
 SUDOPREFIX=$([ $EUID -eq 0 ] && echo "" || echo "sudo")
+SYSTEM=$( uname -s )
 MANAGER=apt
 SHELL=sh
 GIT=git
@@ -19,20 +20,22 @@ TEMPDIR=temp
 URLPREFIX="https://raw.githubusercontent.com/jiunbae/settings/master"
 VERBOSE=false
 OVERWRITE=false
-PROFILE=~/.bashrc
+PROFILE=~/.zshrc
 PROFILE_DRAFT=false
 DRAFT=false
 DPKG=dpkg
 Y_FLAG=-y
+LOG_FILE=install.log
 
 prepare_globals_() { 
     passback SUDOPREFIX;
     passback MANAGER;
     passback SHELL;
+    passback Y_FLAG;
+    passback LOG_FILE;
 }
 prepare_globals() {
-    system=$( uname -s );
-    case $system in
+    case $SYSTEM in
         Linux)
             SUDOPREFIX=$([ $EUID -eq 0 ] && echo "" || echo "sudo")
             MANAGER=apt
@@ -46,7 +49,7 @@ prepare_globals() {
             Y_FLAG=""
             ;;
         *)
-            echo "Unsupported system" >&2
+            echo "Unsupported system $SYSTEM" >&2
             exit 1
             ;;
     esac
@@ -114,6 +117,7 @@ install() {
 
 install_wrapper() {
     result=$( install $1 )
+    echo "$2" >> $LOG_FILE
     if [[ ( "$result" = true ) || ( -z "$result" ) ]]; then
         echo "echo -e \xE2\x9C\x94 $2"
     else
@@ -128,6 +132,7 @@ download() {
     if [[ -f $2 && ($3 && $OVERWRITE = false) ]]; then
         :
     else
+        echo "Downloading $1 to $2" >> $LOG_FILE
         curl -sLf $1 --output $2
     fi
 }
@@ -135,13 +140,16 @@ download() {
 update_profile() {
     FLAG=false
     PATTERN="## $1"
+    
     while read line; do
         if [[ $line =~ $PATTERN ]] ; then 
             FLAG=true
             break
         fi
     done < $PROFILE
+    
     if [ $FLAG = false ]; then
+        echo "Write $1 to $PROFILE" >> $LOG_FILE
         echo "$PATTERN$2" >> $PROFILE
         PROFILE_DRAFT=true
     fi
@@ -150,6 +158,7 @@ update_profile() {
 run_task() {
     echo "$2 ..." >&2
     $1 > /dev/null 2>&1;
+    echo "$2" >> $LOG_FILE
     if [ $? -ne 0 ]; then
         echo "$2 false" >&2
         echo "false"
@@ -159,6 +168,9 @@ run_task() {
 }
 
 prepare_packages() {
+    mkdir -p $TEMPDIR
+    echo "Prepare packages" >> $LOG_FILE
+
     if [[ ! $(command -v whiptail) ]]; then
         if [ "$( run_task "$SUDOPREFIX $MANAGER install whiptail $Y_FLAG" "Install requirements [whiptail]" )" == false ]; then
             return 0
@@ -184,7 +196,15 @@ change_mirror() {
 }
 
 default_packages() {
-    $SUDOPREFIX $MANAGER install curl vim zip build-essential $Y_FLAG;
+    $SUDOPREFIX $MANAGER install curl wget zip gcc g++ $Y_FLAG;
+    case $SYSTEM in
+        Linux)
+            $SUDOPREFIX $MANAGER install build-essential $Y_FLAG;
+            ;;
+        Darwin)
+            xcode-select --install
+            ;;
+    esac
 }
 
 change_locale() {
@@ -194,7 +214,7 @@ change_locale() {
     $( update_profile "Locale" "
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
-    " )
+" )
 }
 
 zsh() {
@@ -205,13 +225,19 @@ zsh() {
     $SHELL -c "$(curl -sLf $URLPREFIX/.zshrc --output ~/.zshrc)"
     $SHELL -c "$(curl -sLf $URLPREFIX/.p10k.zsh --output ~/.p10k.zsh)"
 
-    export PROFILE=~/.zshrc
+    PROFILE=~/.zshrc
     
     # plugins
-    $SHELL -c "$GIT clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting"
-    $SHELL -c "$GIT clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
+    if [[ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting" ]]; then
+        $SHELL -c "$GIT clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting"
+    fi
 
-    $SHELL -c "$SUDOPREFIX chsh -s `which zsh`"
+    if [[ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" ]]; then
+        $SHELL -c "$GIT clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
+    fi
+
+    # change default shell
+    $SHELL -c "$SUDOPREFIX chsh -s `which zsh`" >/dev/null 2>&1;
 }
 
 vim() {
@@ -232,8 +258,6 @@ tmux() {
 }
 
 conda() {
-    mkdir -p $TEMPDIR
-
     $( download https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh $TEMPDIR/miniconda.sh )
     $SHELL $TEMPDIR/miniconda.sh -b -p $HOME/conda
 
@@ -258,7 +282,7 @@ else
 fi
 unset __conda_setup
 # <<< conda initialize <<<
-    ")
+")
 }
 
 change_pip() {
@@ -266,16 +290,27 @@ change_pip() {
     $( download $URLPREFIX/pip.conf ~/.pip/pip.conf)
 }
 
-exa() {
-    mkdir -p $TEMPDIR
+eza() {
+    case $SYSTEM in
+        Linux)
+            cd $TEMPDIR
 
-    $( download https://github.com/ogham/exa/releases/download/v0.9.0/exa-linux-x86_64-0.9.0.zip $TEMPDIR/exa.zip )
-    unzip -u $TEMPDIR/exa.zip -d $TEMPDIR
-    $SUDOPREFIX mv $TEMPDIR/exa-linux-x86_64 /usr/local/bin/exa
+            wget -c https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-gnu.tar.gz -O - | tar xz
+            $SUDOPREFIX chmod +x eza
+            $SUDOPREFIX chown root:root eza
+            $SUDOPREFIX mv eza /usr/local/bin/eza
 
-    $( update_profile "exa" "
-alias ls=exa
-    ")
+            cd -
+            ;;
+        Darwin)
+            $SUDOPREFIX $MANAGER install eza
+            ;;
+    esac
+
+    $( update_profile "eza" "
+alias ls=eza
+")
+    
 }
 
 fzf() {
@@ -306,7 +341,7 @@ bat() {
 
 ########################################
 # Prepare
-prepare_globals
+capture ret prepare_globals
 prepare_packages
 
 ########################################
@@ -320,7 +355,7 @@ arguments=$(
         4. "Install NeoVim/SpaceVim and set default editor" on\
         5. "Install tmux and change default config" on\
         6. "Install conda python and init conda" on\
-        7. "[Optional] Install 'exa' to replace 'ls'" on\
+        7. "[Optional] Install 'eza' to replace 'ls'" on\
         8. "[Optional] Install 'fzf': fuzzy finder" on\
         9. "[Optional] Install 'fd': alternative to 'find'" on\
         3>&1 1>&2 2>&3
@@ -352,7 +387,7 @@ for arg in $arguments; do
         $( install_wrapper conda "Install conda python and init conda" )
         ;;
     7.) 
-        $( install_wrapper exa "Install 'exa' to replace 'ls'" )
+        $( install_wrapper eza "Install 'eza' to replace 'ls'" )
         ;;
     8.) 
         $( install_wrapper fzf "Install 'fzf': fuzzy finder" )
@@ -371,14 +406,8 @@ done
 ########################################
 # Finalize
 if [ $DRAFT = true ]; then
-    echo "Installation done"
-    echo "---------"
-    echo "Go to github.com/powerline/fonts and download the powerline font and set to terminal"
-    echo "Exit and restart the terminal."
-    echo "-- vim --"
-    echo "The first time you open vim, several installations can start."
-    echo "---------"
-
+    echo "Installation completed, please restart your shell"
+    echo "See also $LOG_FILE"
     if [[ -d "$TEMPDIR" ]]; then
         rm -r $TEMPDIR;
     fi
