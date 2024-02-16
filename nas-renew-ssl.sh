@@ -9,13 +9,12 @@ certs_src_dir="/usr/syno/etc/certificate/system/default"
 
 /usr/local/share/acme.sh/acme.sh --renew --force --dns dns_acmedns \
 	-d "*.jiun.dev" \
-  --cert-file $certs_src_dir/cert.pem \
+	--cert-file $certs_src_dir/cert.pem \
 	--key-file $certs_src_dir/privkey.pem \
 	--ca-file $certs_src_dir/chain.pem \
 	--fullchain-file $certs_src_dir/fullchain.pem \
 	--reloadcmd "synosystemctl reload nginx" \
 	--server letsencrypt
-
 
 DEBUG=  # Set to any non-empty value to turn on debug mode
 error_exit() { echo "[ERROR] $1"; exit 1; }
@@ -37,7 +36,9 @@ target_cert_dirs=(
     "/usr/local/etc/certificate/WebDAVServer/webdav/"
     "/usr/local/etc/certificate/ActiveBackup/ActiveBackup/"
     "/usr/syno/etc/certificate/smbftpd/ftpd/"
-    "/volume1/Workspace/.cert")
+    "/volume1/Workspace/.cert"
+    "/volume1/docker/shared/.cert"
+    )
 
 # Add the default directory
 default_dir_name=$(</usr/syno/etc/certificate/_archive/DEFAULT)
@@ -93,4 +94,3 @@ fi
 /usr/syno/bin/synosystemctl restart nginx
 
 info "Completed"
-
