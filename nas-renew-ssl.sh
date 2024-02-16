@@ -8,8 +8,8 @@ export ACMEDNS_SUBDOMAIN="REDACTED_SUBDOMAIN"
 certs_src_dir="/usr/syno/etc/certificate/system/default"
 
 /usr/local/share/acme.sh/acme.sh --renew --force --dns dns_acmedns \
-	-d example.com -d *.example.com \
-	--cert-file $certs_src_dir/cert.pem \
+	-d "*.example.com" \
+  --cert-file $certs_src_dir/cert.pem \
 	--key-file $certs_src_dir/privkey.pem \
 	--ca-file $certs_src_dir/chain.pem \
 	--fullchain-file $certs_src_dir/fullchain.pem \
@@ -93,3 +93,4 @@ fi
 /usr/syno/bin/synosystemctl restart nginx
 
 info "Completed"
+
