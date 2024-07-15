@@ -13,6 +13,7 @@ export FZF_BASE=/opt/homebrew/opt/fzf
 setopt PROMPT_SUBST
 plugins=(
   git
+  git-extra-commands
   zsh-autosuggestions
   zsh-syntax-highlighting
   fzf
@@ -22,7 +23,7 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7'
 
 source $ZSH/oh-my-zsh.sh
 
-export PATH=$HOME/bin:$HOME/conda/bin:$HOME/.local/bin:$PATH
+export PATH=$HOME/bin:$HOME/.local/bin:$HOME/.scripts:$PATH
 
 ################################
 # OS Based settings
