@@ -236,6 +236,10 @@ zsh() {
         $SHELL -c "$GIT clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
     fi
 
+    if [[ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/git-extra-commands" ]]; then
+        $SHELL -c "$GIT clone git clone https://github.com/unixorn/git-extra-commands.git ${$ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/git-extra-commands"
+    fi
+
     # change default shell
     $SHELL -c "$SUDOPREFIX chsh -s `which zsh`" >/dev/null 2>&1;
 }
