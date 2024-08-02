@@ -184,6 +184,11 @@ prepare_packages() {
     if [ "$( run_task "$SUDOPREFIX $MANAGER install git $Y_FLAG" "Install requirements [git]" )" == false ]; then
         return 0
     fi
+
+    if [ "$( run_task "curl https://sh.rustup.rs -sSf | sh -s -- -y" )" == false ]; then
+        return 0
+    fi
+    . "$HOME/.cargo/env"
 }
 
 ########################################
@@ -295,21 +300,7 @@ change_pip() {
 }
 
 eza() {
-    case $SYSTEM in
-        Linux)
-            cd $TEMPDIR
-
-            wget -c https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-gnu.tar.gz -O - | tar xz
-            $SUDOPREFIX chmod +x eza
-            $SUDOPREFIX chown root:root eza
-            $SUDOPREFIX mv eza /usr/local/bin/eza
-
-            cd -
-            ;;
-        Darwin)
-            $SUDOPREFIX $MANAGER install eza
-            ;;
-    esac
+    $( run_task cargo install eza )
 
     $( update_profile "eza" "
 alias ls=eza
@@ -318,7 +309,7 @@ alias ls=eza
 }
 
 fzf() {
-    $SUDOPREFIX apt install fzf
+    $SUDOPREFIX $MANAGER install fzf
 }
 
 gcc() {
