@@ -46,14 +46,17 @@ case `uname` in
       # wsl settings
       export PATH=/usr/lib/wsl/lib:$PATH
 
-      DOCKER_DISTRO="Ubuntu"
-      DOCKER_DIR="/mnt/wsl/shared-docker"
-      DOCKER_SOCK="$DOCKER_DIR/docker.sock"
-      export DOCKER_HOST="unix://$DOCKER_SOCK"
-      if [ ! -S "$DOCKER_SOCK" ]; then
-        mkdir -pm o=,ug=rwx "$DOCKER_DIR"
-        chgrp docker "$DOCKER_DIR"
-        nohup sudo -b dockerd < /dev/null > $DOCKER_DIR/dockerd.log 2>&1
+      if command -v docker &> /dev/null; then
+        DOCKER_DISTRO="Ubuntu"
+        DOCKER_DIR="/mnt/wsl/shared-docker"
+        DOCKER_SOCK="$DOCKER_DIR/docker.sock"
+        export DOCKER_HOST="unix://$DOCKER_SOCK"
+        if [ ! -S "$DOCKER_SOCK" ]; then
+          mkdir -pm o=,ug=rwx "$DOCKER_DIR"
+          chgrp docker "$DOCKER_DIR"
+          nohup sudo -b dockerd < /dev/null > $DOCKER_DIR/dockerd.log 2>&1
+        fi
+      else
       fi
     fi
 
@@ -87,3 +90,10 @@ set -g default-command "reattach-to-user-namespace -l zsh"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+## Vim
+alias vim=nvim
+export EDITOR=vim
+    
+## eza
+alias ls=eza
+
