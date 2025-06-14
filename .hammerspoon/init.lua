@@ -29,7 +29,10 @@ hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e)
   return false
 end):start()
 
-local MAP = { i = "up", j = "left", k = "down", l = "right" }
+local MAP = { 
+  i = "up", j = "left", k = "down", l = "right",
+  ["ㅑ"] = "up", ["ㅓ"] = "left", ["ㅏ"] = "down", ["ㅣ"] = "right",
+}
 
 hs.eventtap.new(
   { hs.eventtap.event.types.keyDown, hs.eventtap.event.types.keyUp },
