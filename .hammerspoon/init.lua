@@ -1,5 +1,54 @@
 local application = require "hs.application"
 
+-- Fn + I/J/K/L to arrow keys for internal keyboards
+local fnDown = false
+local INTERNAL_TYPES = { 91 }
+
+-- Function to convert flags table to a list of modifiers
+local function flagsToList(flags)
+  local list = {}
+  for mod, on in pairs(flags) do
+    if on and mod ~= "fn" then
+      table.insert(list, mod)
+    end
+  end
+  return list
+end
+
+-- Function to check if the event is from an internal keyboard
+local function isInternal(event)
+  local kt = event:getProperty(hs.eventtap.event.properties.keyboardEventKeyboardType)
+  for _, v in ipairs(INTERNAL_TYPES) do
+    if kt == v then return true end
+  end
+end
+
+-- tracking Fn key state
+hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e)
+  fnDown = e:getFlags().fn or false
+  return false
+end):start()
+
+local MAP = { i = "up", j = "left", k = "down", l = "right" }
+
+hs.eventtap.new(
+  { hs.eventtap.event.types.keyDown, hs.eventtap.event.types.keyUp },
+  function(e)
+    if not fnDown then return false end
+    if not isInternal(e) then return false end
+
+    local char = (e:getCharacters(true) or ""):lower()
+    local arrow = MAP[char]
+    if not arrow then return false end
+
+    local modsList = flagsToList(e:getFlags())
+    local isDown   = (e:getType() == hs.eventtap.event.types.keyDown)
+
+    hs.eventtap.event.newKeyEvent(modsList, arrow, isDown):post()
+    return true
+  end
+):start()
+
 -- Function to move the mouse to a specific screen
 function moveMouseToScreen(screenIndex)
   local screens = hs.screen.allScreens()
