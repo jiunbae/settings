@@ -1,9 +1,9 @@
 #!/bin/bash
 
-export ACMEDNS_UPDATE_URL="https://auth.acme-dns.io/update"
-export ACMEDNS_USERNAME="REDACTED_USERNAME"
-export ACMEDNS_PASSWORD="REDACTED_PASSWORD"
-export ACMEDNS_SUBDOMAIN="REDACTED_SUBDOMAIN"
+export ACMEDNS_UPDATE_URL=
+export ACMEDNS_USERNAME=
+export ACMEDNS_PASSWORD=
+export ACMEDNS_SUBDOMAIN=
 
 certs_src_dir="/usr/syno/etc/certificate/system/default"
 
