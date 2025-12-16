@@ -146,3 +146,5 @@ export PATH="$HOME/.local/bin:$PATH"
 if command -v uv &> /dev/null; then
   eval "$(uv generate-shell-completion zsh 2>/dev/null)" || true
 fi
+
+. "$HOME/.local/bin/env"
