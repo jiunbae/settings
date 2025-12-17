@@ -21,6 +21,25 @@ Modern dotfiles installer with animated progress display.
 
 ## Quick Start
 
+### One-Line Install (Recommended)
+
+```bash
+# Install everything with a single command
+curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- --all
+
+# Or install specific components
+curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- zsh nvim tmux
+```
+
+### Using Release (Bundled Installer)
+
+```bash
+# Download and run the bundled installer (no git required)
+curl -fsSL https://github.com/jiunbae/settings/releases/latest/download/install-bundled.sh | bash -s -- --all
+```
+
+### Manual Clone
+
 ```bash
 # Clone and install everything
 git clone https://github.com/jiunbae/settings.git
@@ -116,6 +135,7 @@ Components:
 ```
 settings/
 ├── install.sh              # Main entry point
+├── bootstrap.sh            # Remote installation bootstrap
 ├── lib/                    # Core libraries
 │   ├── core.sh            #   Logging, spinner, utilities
 │   ├── platform.sh        #   Platform detection, package manager
@@ -128,11 +148,15 @@ settings/
 │   ├── rust.sh            #   Rust + cargo-binstall
 │   ├── python.sh          #   uv
 │   └── tools.sh           #   CLI tools
-└── configs/                # Configuration files
-    ├── .zshrc
-    ├── .p10k.zsh
-    ├── .tmux.conf
-    └── .SpaceVim.d/
+├── scripts/                # Build scripts
+│   └── bundle.sh          #   Create bundled installer
+├── configs/                # Configuration files
+│   ├── .zshrc
+│   ├── .p10k.zsh
+│   ├── .tmux.conf
+│   └── .SpaceVim.d/
+└── .github/workflows/      # CI/CD
+    └── release.yml         #   Auto-release on tag
 ```
 
 ## Platform Support
