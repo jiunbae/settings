@@ -37,11 +37,13 @@ jobs:
 
       - name: Create release archive
         run: |
-          tar -czvf settings-${{ steps.version.outputs.version }}.tar.gz \
+          ARCHIVE_NAME="settings-${{ steps.version.outputs.version }}.tar.gz"
+          tar -czvf "/tmp/$ARCHIVE_NAME" \
             --exclude='.git' \
             --exclude='.github' \
-            --exclude='*.tar.gz' \
+            --exclude='install-bundled.sh' \
             .
+          mv "/tmp/$ARCHIVE_NAME" .
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
