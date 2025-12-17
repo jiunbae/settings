@@ -1,3 +1,20 @@
+# Security - Sensitive files
+.env
+.env.*
+.env.local
+.env.production
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa
+id_ed25519
+*.secret
+credentials.json
+service-account*.json
+nas-renew-ssl.sh
+
 # VS Code ignores
 .vscode/
 
