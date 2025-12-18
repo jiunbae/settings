@@ -30,6 +30,7 @@ install_uv_package() {
         if [[ "$FORCE" == "true" ]]; then
             log_info "Reinstalling uv..."
         else
+            track_skipped "uv"
             return 0
         fi
     fi
@@ -48,6 +49,7 @@ install_uv_package() {
 
     if command_exists uv; then
         log_info "uv version: $(uv --version)"
+        track_installed "uv"
     else
         log_error "uv installation failed"
         return 1

@@ -37,18 +37,21 @@ source "$SCRIPT_DIR/modules/python.sh"
 source "$SCRIPT_DIR/modules/tools.sh"
 
 # ==============================================================================
-# Component Names (for display)
+# Component Names (for display) - bash 3.2 compatible
 # ==============================================================================
-declare -A COMPONENT_NAMES=(
-    [base]="Base packages"
-    [zsh]="Zsh + Oh-My-Zsh + Powerlevel10k"
-    [nvim]="NeoVim + SpaceVim"
-    [tmux]="tmux + TPM"
-    [rust]="Rust toolchain"
-    [uv]="uv (Python)"
-    [tools]="CLI tools"
-    [tools-extra]="Extra CLI tools"
-)
+get_component_name() {
+    case "$1" in
+        base)        echo "Base packages" ;;
+        zsh)         echo "Zsh + Oh-My-Zsh + Powerlevel10k" ;;
+        nvim)        echo "NeoVim + SpaceVim" ;;
+        tmux)        echo "tmux + TPM" ;;
+        rust)        echo "Rust toolchain" ;;
+        uv)          echo "uv (Python)" ;;
+        tools)       echo "CLI tools" ;;
+        tools-extra) echo "Extra CLI tools" ;;
+        *)           echo "$1" ;;
+    esac
+}
 
 # ==============================================================================
 # Main Function
@@ -78,7 +81,8 @@ main() {
 
     # Install selected components
     for component in "${SELECTED_COMPONENTS[@]}"; do
-        local display_name="${COMPONENT_NAMES[$component]:-$component}"
+        local display_name
+        display_name="$(get_component_name "$component")"
         progress_start_component "$display_name"
 
         case "$component" in
@@ -112,8 +116,11 @@ main() {
         esac
     done
 
-    # Print summary
+    # Print progress completion
     progress_finish
+
+    # Print detailed installation summary
+    print_install_summary
 
     # Log completion
     echo "=== Installation completed at $(date) ===" >> "$LOG_FILE"

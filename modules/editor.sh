@@ -29,6 +29,7 @@ install_neovim() {
     if command_exists nvim; then
         log_info "NeoVim is already installed: $(nvim --version | head -1)"
         if [[ "$FORCE" != "true" ]]; then
+            track_skipped "NeoVim"
             return 0
         fi
     fi
@@ -49,6 +50,7 @@ install_neovim() {
             ;;
     esac
 
+    track_installed "NeoVim"
     log_success "NeoVim installed"
 }
 
@@ -62,6 +64,7 @@ install_spacevim() {
             rm -rf "$HOME/.vim"
         else
             log_info "SpaceVim is already installed"
+            track_skipped "SpaceVim"
             return 0
         fi
     fi
@@ -75,17 +78,13 @@ install_spacevim() {
     git_clone "https://github.com/SpaceVim/SpaceVim.git" "$SPACEVIM_DIR"
 
     # Create symlink for vim compatibility
-    if [[ ! -e "$HOME/.vim" ]]; then
-        ln -sf "$SPACEVIM_DIR" "$HOME/.vim"
-    fi
+    backup_and_link "$SPACEVIM_DIR" "$HOME/.vim"
 
     # Create symlink for neovim
-    local nvim_config_dir="$HOME/.config/nvim"
-    if [[ ! -e "$nvim_config_dir" ]]; then
-        mkdir -p "$HOME/.config"
-        ln -sf "$SPACEVIM_DIR" "$nvim_config_dir"
-    fi
+    mkdir -p "$HOME/.config"
+    backup_and_link "$SPACEVIM_DIR" "$HOME/.config/nvim"
 
+    track_installed "SpaceVim"
     log_success "SpaceVim installed"
 }
 

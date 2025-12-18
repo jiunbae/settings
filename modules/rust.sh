@@ -31,6 +31,7 @@ install_rustup() {
         if [[ "$FORCE" == "true" ]]; then
             run_with_spinner "Updating Rust" rustup update
         fi
+        track_skipped "Rust"
         return 0
     fi
 
@@ -50,6 +51,7 @@ install_rustup() {
 
     if command_exists rustc; then
         log_info "Rust version: $(rustc --version)"
+        track_installed "Rust"
     fi
 }
 
@@ -70,6 +72,7 @@ install_cargo_binstall() {
     if command_exists cargo-binstall; then
         log_info "cargo-binstall is already installed"
         if [[ "$FORCE" != "true" ]]; then
+            track_skipped "cargo-binstall"
             return 0
         fi
     fi
@@ -83,12 +86,13 @@ install_cargo_binstall() {
     local install_script="https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh"
     if run_with_spinner "Installing cargo-binstall" \
         bash -c "curl -L --proto '=https' --tlsv1.2 -sSf '$install_script' | bash"; then
-        :  # Success
+        track_installed "cargo-binstall"
     else
         # Fallback to cargo install
         log_warn "Binary install failed, building from source..."
         run_with_spinner "Building cargo-binstall from source" \
             cargo install cargo-binstall
+        track_installed "cargo-binstall"
     fi
 }
 

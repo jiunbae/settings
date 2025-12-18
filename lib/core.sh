@@ -38,6 +38,12 @@ PROGRESS_TOTAL=0
 PROGRESS_CURRENT=0
 PROGRESS_COMPONENT=""
 
+# Installation tracking (for summary)
+INSTALLED_ITEMS=()      # Newly installed items
+SKIPPED_ITEMS=()        # Already installed (skipped)
+LINKED_ITEMS=()         # Created symlinks
+BACKUP_ITEMS=()         # Backed up files
+
 # ==============================================================================
 # Logging Functions
 # ==============================================================================
@@ -160,6 +166,7 @@ backup_and_link() {
         local backup="${target}.backup.$(date +%Y%m%d%H%M%S)"
         log_info "Backing up existing file: $target -> $backup"
         mv "$target" "$backup"
+        track_backup "$target" "$backup"
     fi
 
     # Remove existing symlink if force mode
@@ -177,6 +184,7 @@ backup_and_link() {
 
     # Create symlink
     ln -sf "$source" "$target"
+    track_linked "$source" "$target"
     log_success "Linked: $source -> $target"
 }
 
@@ -493,4 +501,85 @@ print_summary() {
         echo -e "Log file: ${CYAN}$LOG_FILE${NC}"
         echo ""
     fi
+}
+
+# ==============================================================================
+# Installation Tracking Functions
+# ==============================================================================
+
+# Track newly installed item
+track_installed() {
+    local item="$1"
+    INSTALLED_ITEMS+=("$item")
+}
+
+# Track skipped item (already installed)
+track_skipped() {
+    local item="$1"
+    SKIPPED_ITEMS+=("$item")
+}
+
+# Track created symlink
+track_linked() {
+    local source="$1"
+    local target="$2"
+    LINKED_ITEMS+=("$target -> $source")
+}
+
+# Track backed up file
+track_backup() {
+    local original="$1"
+    local backup="$2"
+    BACKUP_ITEMS+=("$original -> $backup")
+}
+
+# Print installation summary report
+print_install_summary() {
+    echo ""
+    printf "${BOLD}${BLUE}"
+    printf "╔══════════════════════════════════════════════════════════════╗\n"
+    printf "║                    Installation Summary                      ║\n"
+    printf "╚══════════════════════════════════════════════════════════════╝${NC}\n"
+    echo ""
+
+    # Installed items
+    if [[ ${#INSTALLED_ITEMS[@]} -gt 0 ]]; then
+        printf "  ${BOLD}${GREEN}✓ Installed (${#INSTALLED_ITEMS[@]})${NC}\n"
+        for item in "${INSTALLED_ITEMS[@]}"; do
+            printf "    ${GREEN}•${NC} %s\n" "$item"
+        done
+        echo ""
+    fi
+
+    # Skipped items
+    if [[ ${#SKIPPED_ITEMS[@]} -gt 0 ]]; then
+        printf "  ${BOLD}${YELLOW}○ Already installed (${#SKIPPED_ITEMS[@]})${NC}\n"
+        for item in "${SKIPPED_ITEMS[@]}"; do
+            printf "    ${YELLOW}•${NC} %s\n" "$item"
+        done
+        echo ""
+    fi
+
+    # Linked items
+    if [[ ${#LINKED_ITEMS[@]} -gt 0 ]]; then
+        printf "  ${BOLD}${CYAN}⟶ Symlinks created (${#LINKED_ITEMS[@]})${NC}\n"
+        for item in "${LINKED_ITEMS[@]}"; do
+            printf "    ${CYAN}•${NC} %s\n" "$item"
+        done
+        echo ""
+    fi
+
+    # Backed up items
+    if [[ ${#BACKUP_ITEMS[@]} -gt 0 ]]; then
+        printf "  ${BOLD}${BLUE}⟳ Backups created (${#BACKUP_ITEMS[@]})${NC}\n"
+        for item in "${BACKUP_ITEMS[@]}"; do
+            printf "    ${BLUE}•${NC} %s\n" "$item"
+        done
+        echo ""
+    fi
+
+    # Summary line
+    local total=$((${#INSTALLED_ITEMS[@]} + ${#SKIPPED_ITEMS[@]}))
+    printf "  ${BOLD}Total: %d items processed${NC}\n" "$total"
+    echo ""
 }
