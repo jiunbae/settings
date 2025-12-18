@@ -28,11 +28,13 @@ install_tmux_package() {
     if command_exists tmux; then
         log_info "tmux is already installed: $(tmux -V)"
         if [[ "$FORCE" != "true" ]]; then
+            track_skipped "tmux"
             return 0
         fi
     fi
 
     pkg_install tmux
+    track_installed "tmux"
     log_success "tmux installed"
 }
 
@@ -45,11 +47,13 @@ install_tpm() {
             rm -rf "$TPM_DIR"
         else
             log_info "TPM is already installed"
+            track_skipped "TPM"
             return 0
         fi
     fi
 
     git_clone "https://github.com/tmux-plugins/tpm" "$TPM_DIR"
+    track_installed "TPM"
     log_success "TPM installed"
 }
 

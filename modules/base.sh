@@ -52,6 +52,7 @@ install_xcode_clt() {
 
     if xcode-select -p &>/dev/null; then
         log_info "Xcode Command Line Tools already installed"
+        track_skipped "Xcode CLT"
         return 0
     fi
 
@@ -69,6 +70,7 @@ install_xcode_clt() {
         sleep 5
     done
 
+    track_installed "Xcode CLT"
     log_success "Xcode Command Line Tools installed"
 }
 
@@ -81,6 +83,7 @@ install_base_packages() {
     # Install common packages
     log_info "Installing common packages..."
     pkg_install "${BASE_PACKAGES_COMMON[@]}"
+    track_installed "Base packages (curl, wget, git)"
 
     # Install platform-specific packages
     case "$PLATFORM" in
@@ -88,10 +91,12 @@ install_base_packages() {
             install_xcode_clt
             log_info "Installing macOS-specific packages..."
             pkg_install "${BASE_PACKAGES_MACOS[@]}"
+            track_installed "macOS packages (coreutils)"
             ;;
         linux|wsl)
             log_info "Installing Linux-specific packages..."
             pkg_install "${BASE_PACKAGES_LINUX[@]}"
+            track_installed "Linux packages (build-essential, gcc, etc.)"
             ;;
     esac
 

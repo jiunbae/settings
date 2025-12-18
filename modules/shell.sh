@@ -35,10 +35,12 @@ install_zsh_package() {
 
     if command_exists zsh; then
         log_info "Zsh is already installed: $(zsh --version)"
+        track_skipped "Zsh"
         return 0
     fi
 
     pkg_install zsh
+    track_installed "Zsh"
     log_success "Zsh installed"
 }
 
@@ -51,6 +53,7 @@ install_oh_my_zsh() {
             rm -rf "$HOME/.oh-my-zsh"
         else
             echo -e "${GREEN}✓${NC} Oh-My-Zsh (already installed)"
+            track_skipped "Oh-My-Zsh"
             return 0
         fi
     fi
@@ -63,6 +66,7 @@ install_oh_my_zsh() {
     # Install silently
     run_with_spinner "Installing Oh-My-Zsh" \
         sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    track_installed "Oh-My-Zsh"
 }
 
 install_powerlevel10k() {
@@ -74,11 +78,13 @@ install_powerlevel10k() {
             rm -rf "$P10K_THEME_DIR"
         else
             log_info "Powerlevel10k is already installed"
+            track_skipped "Powerlevel10k"
             return 0
         fi
     fi
 
     git_clone "https://github.com/romkatv/powerlevel10k.git" "$P10K_THEME_DIR"
+    track_installed "Powerlevel10k"
     log_success "Powerlevel10k installed"
 }
 
@@ -99,11 +105,13 @@ install_zsh_plugins() {
                 rm -rf "$plugin_dir"
             else
                 log_info "Plugin already installed: $name"
+                track_skipped "Zsh plugin: $name"
                 continue
             fi
         fi
 
         git_clone "$url" "$plugin_dir"
+        track_installed "Zsh plugin: $name"
     done
 
     log_success "Zsh plugins installed"

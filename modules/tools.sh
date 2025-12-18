@@ -77,6 +77,7 @@ install_tool_via_binstall() {
 
     if command_exists "$cmd_name"; then
         printf "\r${CLEAR_LINE:-}  ${GREEN}✓${NC} %s (already installed)\n" "$tool"
+        track_skipped "$tool"
         return 0
     fi
 
@@ -87,10 +88,12 @@ install_tool_via_binstall() {
     fi
 
     if run_with_spinner "Installing $tool" bash -c "${cargo_env}cargo binstall -y '$tool'"; then
+        track_installed "$tool"
         return 0
     else
         log_warn "binstall failed, trying cargo install..."
         if run_with_spinner "Building $tool" bash -c "${cargo_env}cargo install '$tool'"; then
+            track_installed "$tool"
             return 0
         else
             printf "\r${CLEAR_LINE:-}  ${RED}✗${NC} Failed to install %s\n" "$tool"
@@ -127,6 +130,7 @@ install_fzf() {
     if command_exists fzf; then
         log_info "fzf is already installed: $(fzf --version)"
         if [[ "$FORCE" != "true" ]]; then
+            track_skipped "fzf"
             return 0
         fi
     fi
@@ -157,6 +161,7 @@ install_fzf() {
             ;;
     esac
 
+    track_installed "fzf"
     log_success "fzf installed"
 }
 

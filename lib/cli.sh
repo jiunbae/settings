@@ -10,19 +10,32 @@ readonly VERSION="2.0.0"
 # ==============================================================================
 # Available Components
 # ==============================================================================
-declare -A COMPONENTS_DESC=(
-    [base]="Basic packages (curl, wget, git, build-essential)"
-    [zsh]="Zsh + Oh-My-Zsh + Powerlevel10k"
-    [nvim]="NeoVim + SpaceVim"
-    [tmux]="tmux + TPM (Tmux Plugin Manager)"
-    [rust]="Rust toolchain + cargo-binstall"
-    [uv]="uv (fast Python package manager)"
-    [tools]="CLI tools (eza, fd, bat, ripgrep)"
-    [tools-extra]="Extra CLI tools (delta, dust, procs, bottom)"
-)
-
-# Order for display
+# Component list (bash 3.2 compatible - no associative arrays)
 readonly COMPONENTS_ORDER=(base zsh nvim tmux rust uv tools tools-extra)
+
+# Get component description (bash 3.2 compatible alternative to associative array)
+get_component_desc() {
+    case "$1" in
+        base)        echo "Basic packages (curl, wget, git, build-essential)" ;;
+        zsh)         echo "Zsh + Oh-My-Zsh + Powerlevel10k" ;;
+        nvim)        echo "NeoVim + SpaceVim" ;;
+        tmux)        echo "tmux + TPM (Tmux Plugin Manager)" ;;
+        rust)        echo "Rust toolchain + cargo-binstall" ;;
+        uv)          echo "uv (fast Python package manager)" ;;
+        tools)       echo "CLI tools (eza, fd, bat, ripgrep)" ;;
+        tools-extra) echo "Extra CLI tools (delta, dust, procs, bottom)" ;;
+        *)           echo "" ;;
+    esac
+}
+
+# Check if component is valid
+is_valid_component() {
+    local comp="$1"
+    for c in "${COMPONENTS_ORDER[@]}"; do
+        [[ "$c" == "$comp" ]] && return 0
+    done
+    return 1
+}
 
 # Selected components to install
 SELECTED_COMPONENTS=()
@@ -51,7 +64,7 @@ ${BOLD}COMPONENTS:${NC}
 EOF
 
     for comp in "${COMPONENTS_ORDER[@]}"; do
-        printf "    ${CYAN}%-12s${NC}  %s\n" "$comp" "${COMPONENTS_DESC[$comp]}"
+        printf "    ${CYAN}%-12s${NC}  %s\n" "$comp" "$(get_component_desc "$comp")"
     done
 
     cat << EOF
@@ -112,7 +125,7 @@ parse_args() {
                 ;;
             *)
                 # Check if it's a valid component
-                if [[ -n "${COMPONENTS_DESC[$1]:-}" ]]; then
+                if is_valid_component "$1"; then
                     SELECTED_COMPONENTS+=("$1")
                 else
                     log_error "Unknown component: $1"
@@ -164,7 +177,7 @@ print_selected() {
     echo ""
     log_info "Selected components:"
     for comp in "${SELECTED_COMPONENTS[@]}"; do
-        echo "  - $comp: ${COMPONENTS_DESC[$comp]}"
+        echo "  - $comp: $(get_component_desc "$comp")"
     done
     echo ""
 
