@@ -21,7 +21,6 @@ fi
 readonly TOOLS_BASIC=(
     "eza"           # ls replacement with icons and git integration
     "fd-find"       # find replacement
-    "bat"           # cat replacement with syntax highlighting
     "ripgrep"       # grep replacement (provides 'rg' command)
 )
 
@@ -217,7 +216,6 @@ ${BOLD}Installed tools and their commands:${NC}
 Basic tools:
   ${CYAN}eza${NC}      - Modern ls replacement (alias: ls, ll)
   ${CYAN}fd${NC}       - Modern find replacement
-  ${CYAN}bat${NC}      - Modern cat with syntax highlighting
   ${CYAN}rg${NC}       - ripgrep, fast grep replacement
   ${CYAN}fzf${NC}      - Fuzzy finder
 

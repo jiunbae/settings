@@ -108,12 +108,6 @@ if command -v eza &> /dev/null; then
   alias lt='eza -T --icons'
 fi
 
-## bat (cat replacement)
-if command -v bat &> /dev/null; then
-  alias cat='bat --paging=never'
-  alias catp='bat'
-fi
-
 ## fd (find replacement)
 if command -v fd &> /dev/null; then
   alias find='fd'
