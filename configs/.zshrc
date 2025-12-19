@@ -86,11 +86,6 @@ case `uname` in
 esac
 
 ################################
-# Utility
-alias gdrive.sh='curl gdrive.sh | bash -s'
-alias DONE="curl -d '${USER}@${HOST}' ntfy.sh/jiunbae"
-
-################################
 # Alias
 alias vim="nvim"
 alias vi="nvim"
