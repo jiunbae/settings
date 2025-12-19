@@ -13,6 +13,9 @@ readonly VERSION="2.0.0"
 # Component list (bash 3.2 compatible - no associative arrays)
 readonly COMPONENTS_ORDER=(base zsh nvim tmux rust uv tools tools-extra)
 
+# Basic components for --basic option
+readonly BASIC_COMPONENTS=(base zsh nvim tmux)
+
 # Get component description (bash 3.2 compatible alternative to associative array)
 get_component_desc() {
     case "$1" in
@@ -54,6 +57,7 @@ ${BOLD}USAGE:${NC}
 
 ${BOLD}OPTIONS:${NC}
     -a, --all           Install all components
+    -b, --basic         Install basic dev environment (base, zsh, nvim, tmux)
     -f, --force         Force reinstall (overwrite existing)
     -c, --copy          Copy config files instead of symlink
     -l, --link          Create symlinks for config files (default)
@@ -73,6 +77,7 @@ EOF
 
 ${BOLD}EXAMPLES:${NC}
     install.sh --all                    # Install everything (symlink mode)
+    install.sh --basic                  # Install basic dev environment
     install.sh --copy --all             # Install everything (copy mode)
     install.sh zsh nvim tmux            # Install specific components
     install.sh -v tools tools-extra     # Install tools with verbose output
@@ -99,6 +104,10 @@ parse_args() {
         case $1 in
             -a|--all)
                 SELECTED_COMPONENTS=("${COMPONENTS_ORDER[@]}")
+                shift
+                ;;
+            -b|--basic)
+                SELECTED_COMPONENTS=("${BASIC_COMPONENTS[@]}")
                 shift
                 ;;
             -f|--force)
