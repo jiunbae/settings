@@ -40,12 +40,20 @@ install_uv_package() {
         return 0
     fi
 
-    # Install via official installer
-    run_with_spinner "Installing uv" \
-        bash -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
-
-    # Add to PATH for current session
-    export PATH="$UV_INSTALL_DIR:$PATH"
+    # Install based on platform
+    case "$PLATFORM" in
+        macos)
+            # Use Homebrew on macOS to avoid Gatekeeper issues
+            pkg_install uv
+            ;;
+        linux|wsl)
+            # Install via official installer on Linux
+            run_with_spinner "Installing uv" \
+                bash -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
+            # Add to PATH for current session
+            export PATH="$UV_INSTALL_DIR:$PATH"
+            ;;
+    esac
 
     if command_exists uv; then
         log_info "uv version: $(uv --version)"
