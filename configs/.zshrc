@@ -7,9 +7,6 @@ export ZSH=$HOME/.oh-my-zsh
 
 ZSH_THEME="powerlevel10k/powerlevel10k"
 
-export FZF_BASE=/opt/homebrew/opt/fzf
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
 setopt PROMPT_SUBST
 plugins=(
   git
@@ -46,12 +43,16 @@ case `uname` in
     else
       export PATH="/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
     fi
-      export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-   ;;
+    export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
+    # Homebrew
+    if [[ -x /opt/homebrew/bin/brew ]]; then
+      eval "$(/opt/homebrew/bin/brew shellenv)"
+      export FZF_BASE=/opt/homebrew/opt/fzf
+    fi
+    ;;
   Linux)
     # Linux settings
-    if [[ $(grep microsoft /proc/version) ]]; then
+    if [[ -f /proc/version ]] && grep -q microsoft /proc/version 2>/dev/null; then
       # wsl settings
       export PATH=/usr/lib/wsl/lib:$PATH
 
@@ -65,18 +66,23 @@ case `uname` in
           chgrp docker "$DOCKER_DIR"
           nohup sudo -b dockerd < /dev/null > $DOCKER_DIR/dockerd.log 2>&1
         fi
-      else
       fi
     fi
 
-    if [ -z $LD_LIBRARY_PATH ]; then
-      LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib
-    else
-      LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/lib
+    # CUDA settings
+    if [[ -d /usr/local/cuda ]]; then
+      if [[ -z "$LD_LIBRARY_PATH" ]]; then
+        LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib
+      else
+        LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/lib
+      fi
+      export LD_LIBRARY_PATH
+      export PATH=/usr/local/cuda/bin:$PATH
     fi
-    export LD_LIBRARY_PATH
-    export PATH=/usr/local/cuda/bin:$PATH
-  ;;
+
+    # FZF
+    [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+    ;;
 esac
 
 ################################
@@ -89,7 +95,7 @@ alias DONE="curl -d '${USER}@${HOST}' ntfy.sh/jiunbae"
 alias vim="nvim"
 alias vi="nvim"
 alias vimdiff="nvim -d"
-export EDITOR=/usr/local/bin/nvim
+export EDITOR=nvim
 export GPG_TTY=$(tty)
 
 export LC_ALL=en_US.UTF-8  
@@ -142,6 +148,12 @@ fi
 ################################
 # Rust/Cargo
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+
+################################
+# Node.js (NVM)
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
 ################################
 # uv (Python package manager)
