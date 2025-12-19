@@ -31,6 +31,7 @@ readonly CURSOR_SHOW="${ESC}[?25h"
 VERBOSE=${VERBOSE:-false}
 DRY_RUN=${DRY_RUN:-false}
 FORCE=${FORCE:-false}
+LINK_MODE=${LINK_MODE:-symlink}  # symlink or copy
 LOG_FILE="${LOG_FILE:-$HOME/.install.log}"
 
 # Progress state (initialized here, used by logging)
@@ -151,13 +152,17 @@ download_file() {
     log_debug "Downloaded to: $dest"
 }
 
-# Backup existing file and create symlink
+# Backup existing file and deploy config (symlink or copy based on LINK_MODE)
 backup_and_link() {
     local source=$1
     local target=$2
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would link: $source -> $target"
+        if [[ "$LINK_MODE" == "copy" ]]; then
+            log_info "[DRY-RUN] Would copy: $source -> $target"
+        else
+            log_info "[DRY-RUN] Would link: $source -> $target"
+        fi
         return 0
     fi
 
@@ -169,12 +174,12 @@ backup_and_link() {
         track_backup "$target" "$backup"
     fi
 
-    # Remove existing symlink if force mode
-    if [[ -L "$target" ]]; then
+    # Remove existing symlink or file if force mode
+    if [[ -L "$target" || -e "$target" ]]; then
         if [[ "$FORCE" == "true" ]]; then
-            rm "$target"
+            rm -rf "$target"
         else
-            log_warn "Symlink already exists: $target (use --force to overwrite)"
+            log_warn "Target already exists: $target (use --force to overwrite)"
             return 0
         fi
     fi
@@ -182,10 +187,15 @@ backup_and_link() {
     # Create parent directory if needed
     mkdir -p "$(dirname "$target")"
 
-    # Create symlink
-    ln -sf "$source" "$target"
-    track_linked "$source" "$target"
-    log_success "Linked: $source -> $target"
+    # Deploy based on mode
+    if [[ "$LINK_MODE" == "copy" ]]; then
+        cp -r "$source" "$target"
+        log_success "Copied: $source -> $target"
+    else
+        ln -sf "$source" "$target"
+        track_linked "$source" "$target"
+        log_success "Linked: $source -> $target"
+    fi
 }
 
 # Run a command with optional dry-run support

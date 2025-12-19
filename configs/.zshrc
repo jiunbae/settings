@@ -26,6 +26,15 @@ source $ZSH/oh-my-zsh.sh
 export PATH=$HOME/bin:$HOME/.local/bin:$HOME/.scripts:$PATH
 
 ################################
+# Load environment files from ~/.envs
+# Store secrets in ~/.envs/*.env (not tracked by git)
+if [[ -d "$HOME/.envs" ]]; then
+  for env_file in "$HOME/.envs"/*.env(N); do
+    [[ -f "$env_file" ]] && source "$env_file"
+  done
+fi
+
+################################
 # OS Based settings
 case `uname` in
   Darwin)
@@ -147,4 +156,4 @@ if command -v uv &> /dev/null; then
   eval "$(uv generate-shell-completion zsh 2>/dev/null)" || true
 fi
 
-. "$HOME/.local/bin/env"
+[[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
