@@ -550,6 +550,8 @@
   # Custom prefix.
   # typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_PREFIX='took '
 
+  typeset -g POWERLEVEL9K_TIME_LEFT_RIGHT_WHITESPACE=' %k%234F\uE0B4'
+
   #######################[ background_jobs: presence of background jobs ]#######################
   # Background jobs color.
   typeset -g POWERLEVEL9K_BACKGROUND_JOBS_FOREGROUND=6
