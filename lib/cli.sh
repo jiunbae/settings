@@ -25,7 +25,7 @@ get_component_desc() {
         tmux)        echo "tmux + TPM (Tmux Plugin Manager)" ;;
         rust)        echo "Rust toolchain + cargo-binstall" ;;
         uv)          echo "uv (fast Python package manager)" ;;
-        tools)       echo "CLI tools (eza, fd, bat, ripgrep)" ;;
+        tools)       echo "CLI tools (eza, fd, ripgrep)" ;;
         tools-extra) echo "Extra CLI tools (delta, dust, procs, bottom)" ;;
         *)           echo "" ;;
     esac
