@@ -36,6 +36,17 @@ install_tmux_package() {
     pkg_install tmux
     track_installed "tmux"
     log_success "tmux installed"
+
+    # Install clipboard utility for Linux (required for copy-paste integration)
+    if [[ "$PLATFORM" == "linux" || "$PLATFORM" == "wsl" ]]; then
+        if ! command_exists xclip; then
+            log_info "Installing xclip for clipboard integration..."
+            pkg_install xclip
+            track_installed "xclip"
+        else
+            track_skipped "xclip"
+        fi
+    fi
 }
 
 install_tpm() {
