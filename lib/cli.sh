@@ -55,6 +55,8 @@ ${BOLD}USAGE:${NC}
 ${BOLD}OPTIONS:${NC}
     -a, --all           Install all components
     -f, --force         Force reinstall (overwrite existing)
+    -c, --copy          Copy config files instead of symlink
+    -l, --link          Create symlinks for config files (default)
     -v, --verbose       Enable verbose output
     -n, --dry-run       Show what would be done without making changes
     -h, --help          Show this help message
@@ -70,11 +72,13 @@ EOF
     cat << EOF
 
 ${BOLD}EXAMPLES:${NC}
-    install.sh --all                    # Install everything
+    install.sh --all                    # Install everything (symlink mode)
+    install.sh --copy --all             # Install everything (copy mode)
     install.sh zsh nvim tmux            # Install specific components
     install.sh -v tools tools-extra     # Install tools with verbose output
     install.sh -n --all                 # Dry-run to see what would happen
     install.sh -f zsh                   # Force reinstall zsh configuration
+    install.sh -c zsh tmux              # Install zsh and tmux with copy mode
 
 ${BOLD}MORE INFO:${NC}
     Repository: https://github.com/jiunbae/settings
@@ -99,6 +103,14 @@ parse_args() {
                 ;;
             -f|--force)
                 FORCE=true
+                shift
+                ;;
+            -c|--copy)
+                LINK_MODE=copy
+                shift
+                ;;
+            -l|--link)
+                LINK_MODE=symlink
                 shift
                 ;;
             -v|--verbose)
@@ -142,7 +154,7 @@ parse_args() {
     done
 
     # Export global flags
-    export VERBOSE DRY_RUN FORCE
+    export VERBOSE DRY_RUN FORCE LINK_MODE
 
     # Check if any component selected
     if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
@@ -186,6 +198,11 @@ print_selected() {
     fi
     if [[ "$FORCE" == "true" ]]; then
         log_warn "FORCE mode: Existing configurations will be overwritten"
+    fi
+    if [[ "$LINK_MODE" == "copy" ]]; then
+        log_info "COPY mode: Config files will be copied (not symlinked)"
+    else
+        log_info "SYMLINK mode: Config files will be symlinked"
     fi
     echo ""
 }
