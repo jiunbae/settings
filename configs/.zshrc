@@ -55,18 +55,6 @@ case `uname` in
     if [[ -f /proc/version ]] && grep -q microsoft /proc/version 2>/dev/null; then
       # wsl settings
       export PATH=/usr/lib/wsl/lib:$PATH
-
-      if command -v docker &> /dev/null; then
-        DOCKER_DISTRO="Ubuntu"
-        DOCKER_DIR="/mnt/wsl/shared-docker"
-        DOCKER_SOCK="$DOCKER_DIR/docker.sock"
-        export DOCKER_HOST="unix://$DOCKER_SOCK"
-        if [ ! -S "$DOCKER_SOCK" ]; then
-          mkdir -pm o=,ug=rwx "$DOCKER_DIR"
-          chgrp docker "$DOCKER_DIR"
-          nohup sudo -b dockerd < /dev/null > $DOCKER_DIR/dockerd.log 2>&1
-        fi
-      fi
     fi
 
     # CUDA settings
