@@ -2,13 +2,18 @@ name: Release
 
 on:
   push:
+    branches:
+      - master
     tags:
       - 'v*'
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v2.0.0)'
-        required: true
+        description: 'Version tag (e.g., v2.0.0) - leave empty for auto CalVer'
+        required: false
 
 permissions:
   contents: write
@@ -16,18 +21,48 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Skip if commit message contains [skip ci] or [no release]
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !contains(github.event.head_commit.message, '[no release]')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Get version
+      - name: Generate CalVer tag
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            # Manual version specified
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push - use existing tag
+            VERSION="${GITHUB_REF#refs/tags/}"
           else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            # Auto CalVer: v2025.01.06 format
+            BASE_VERSION="v$(date -u +'%Y.%m.%d')"
+
+            # Check if tag exists, add suffix if needed
+            SUFFIX=0
+            VERSION="$BASE_VERSION"
+            while git rev-parse "$VERSION" >/dev/null 2>&1; do
+              SUFFIX=$((SUFFIX + 1))
+              VERSION="${BASE_VERSION}.${SUFFIX}"
+            done
           fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Create and push tag
+        if: startsWith(github.ref, 'refs/heads/')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.version }}"
 
       - name: Create bundled installer
         run: |
