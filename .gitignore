@@ -15,6 +15,10 @@ credentials.json
 service-account*.json
 nas-renew-ssl.sh
 
+# SSH config - sensitive host configurations
+.ssh/config.d/20-company.conf
+.ssh/config.d/30-internal.conf
+
 # VS Code ignores
 .vscode/
 
@@ -31,8 +35,9 @@ eggs/
 .ipynb_checkpoints/
 MANIFEST
 
-# C/C++ ignores
+# C/C++ ignores (dependency files only)
 *.d
+!.ssh/config.d/
 *.slo
 *.lo
 *.o
