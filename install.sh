@@ -35,6 +35,7 @@ source "$SCRIPT_DIR/modules/tmux.sh"
 source "$SCRIPT_DIR/modules/rust.sh"
 source "$SCRIPT_DIR/modules/python.sh"
 source "$SCRIPT_DIR/modules/tools.sh"
+source "$SCRIPT_DIR/modules/ssh.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -49,6 +50,7 @@ get_component_name() {
         uv)          echo "uv (Python)" ;;
         tools)       echo "CLI tools" ;;
         tools-extra) echo "Extra CLI tools" ;;
+        ssh)         echo "SSH config" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -109,6 +111,9 @@ main() {
                 ;;
             tools-extra)
                 install_tools_extra
+                ;;
+            ssh)
+                install_ssh
                 ;;
             *)
                 progress_info "Unknown component: $component"
