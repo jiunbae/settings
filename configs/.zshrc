@@ -78,6 +78,7 @@ esac
 alias vim="nvim"
 alias vi="nvim"
 alias vimdiff="nvim -d"
+alias c="claude --dangerously-skip-permissions"
 export EDITOR=nvim
 export GPG_TTY=$(tty)
 
@@ -146,3 +147,6 @@ if command -v uv &> /dev/null; then
 fi
 
 [[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
+
+# opencode
+export PATH=${HOME}/.opencode/bin:$PATH
