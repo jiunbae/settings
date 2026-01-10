@@ -79,6 +79,7 @@ alias vim="nvim"
 alias vi="nvim"
 alias vimdiff="nvim -d"
 alias c="claude --dangerously-skip-permissions"
+alias oc="opencode"
 export EDITOR=nvim
 export GPG_TTY=$(tty)
 
