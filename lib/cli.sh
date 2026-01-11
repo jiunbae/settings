@@ -20,7 +20,7 @@ readonly BASIC_COMPONENTS=(base zsh nvim tmux)
 get_component_desc() {
     case "$1" in
         base)        echo "Basic packages (curl, wget, git, build-essential)" ;;
-        zsh)         echo "Zsh + Oh-My-Zsh + Powerlevel10k" ;;
+        zsh)         echo "Zsh + zinit + Powerlevel10k" ;;
         nvim)        echo "NeoVim + SpaceVim" ;;
         tmux)        echo "tmux + TPM (Tmux Plugin Manager)" ;;
         rust)        echo "Rust toolchain + cargo-binstall" ;;

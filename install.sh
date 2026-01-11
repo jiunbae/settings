@@ -43,7 +43,7 @@ source "$SCRIPT_DIR/modules/ssh.sh"
 get_component_name() {
     case "$1" in
         base)        echo "Base packages" ;;
-        zsh)         echo "Zsh + Oh-My-Zsh + Powerlevel10k" ;;
+        zsh)         echo "Zsh + zinit + Powerlevel10k" ;;
         nvim)        echo "NeoVim + SpaceVim" ;;
         tmux)        echo "tmux + TPM" ;;
         rust)        echo "Rust toolchain" ;;

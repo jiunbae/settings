@@ -1,25 +1,70 @@
 # Jiun Bae
-# ZSH Settings
+# ZSH Settings (zinit + Powerlevel10k)
 # github.com/jiunbae/settings.git
 ################################
-# Default ZSH
-export ZSH=$HOME/.oh-my-zsh
 
-ZSH_THEME="powerlevel10k/powerlevel10k"
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
 
+################################
+# Zinit initialization
+ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
+
+if [[ ! -f "${ZINIT_HOME}/zinit.zsh" ]]; then
+  print -P "%F{red}zinit not found.%f Please run the installer or clone it manually:%F{yellow}\n  git clone https://github.com/zinit-zsh/zinit.git \"$ZINIT_HOME\"%f"
+  return 1
+fi
+
+source "${ZINIT_HOME}/zinit.zsh"
+
+################################
+# Plugins
+
+# Powerlevel10k theme (load immediately)
+zinit ice depth=1
+zinit light romkatv/powerlevel10k
+
+# Completion plugins (must load before compinit)
+zinit light Aloxaf/fzf-tab
+zinit light zsh-users/zsh-completions
+
+# Completions - fast init (skip security check)
+# IMPORTANT: must be after completion plugins
+autoload -Uz compinit
+compinit -i -d "${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
+
+# Other plugins with turbo mode (deferred loading)
+zinit lucid for \
+    atload"_zsh_autosuggest_start" \
+        zsh-users/zsh-autosuggestions \
+    z-shell/fast-syntax-highlighting \
+    OMZP::git \
+    unixorn/git-extra-commands \
+    OMZP::tmux
+
+################################
+# Zsh options
 setopt PROMPT_SUBST
-plugins=(
-  git
-  git-extra-commands
-  zsh-autosuggestions
-  zsh-syntax-highlighting
-  fzf
-  tmux
-)
+setopt AUTO_CD
+setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_SPACE
+setopt SHARE_HISTORY
+
+# History
+HISTFILE=~/.zsh_history
+HISTSIZE=10000
+SAVEHIST=10000
+
+################################
+# Autosuggestions config
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7'
 
-source $ZSH/oh-my-zsh.sh
-
+################################
+# PATH
 export PATH=$HOME/bin:$HOME/.local/bin:$HOME/.scripts:$PATH
 
 ################################
@@ -47,7 +92,6 @@ case `uname` in
     # Homebrew
     if [[ -x /opt/homebrew/bin/brew ]]; then
       eval "$(/opt/homebrew/bin/brew shellenv)"
-      export FZF_BASE=/opt/homebrew/opt/fzf
     fi
     ;;
   Linux)
@@ -74,11 +118,28 @@ case `uname` in
       export LD_LIBRARY_PATH
       export PATH=/usr/local/cuda/bin:$PATH
     fi
-
-    # FZF
-    [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
     ;;
 esac
+
+################################
+# FZF
+if command -v fzf &> /dev/null; then
+  # macOS with Homebrew (Apple Silicon)
+  if [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]]; then
+    source /opt/homebrew/opt/fzf/shell/completion.zsh
+    source /opt/homebrew/opt/fzf/shell/key-bindings.zsh
+  # macOS with Homebrew (Intel)
+  elif [[ -f /usr/local/opt/fzf/shell/completion.zsh ]]; then
+    source /usr/local/opt/fzf/shell/completion.zsh
+    source /usr/local/opt/fzf/shell/key-bindings.zsh
+  # Linux or manual install
+  elif [[ -f ~/.fzf.zsh ]]; then
+    source ~/.fzf.zsh
+  elif [[ -f /usr/share/fzf/completion.zsh ]]; then
+    source /usr/share/fzf/completion.zsh
+    source /usr/share/fzf/key-bindings.zsh
+  fi
+fi
 
 ################################
 # Alias
@@ -90,7 +151,7 @@ alias oc="opencode"
 export EDITOR=nvim
 export GPG_TTY=$(tty)
 
-export LC_ALL=en_US.UTF-8  
+export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
@@ -142,10 +203,28 @@ fi
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
 ################################
-# Node.js (NVM)
+# Node.js (NVM) - Lazy loading for faster shell startup
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+# Lazy load nvm - only load when node/npm/npx/nvm commands are first used
+if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+  # Add node to PATH for immediate availability (uses default version if set via `nvm alias default`)
+  if [[ -f "$NVM_DIR/alias/default" ]]; then
+    nvm_default_version=$(<"$NVM_DIR/alias/default")
+    nvm_default_path="$NVM_DIR/versions/node/$nvm_default_version/bin"
+    [[ -d "$nvm_default_path" ]] && PATH="$nvm_default_path:$PATH"
+  fi
+
+  _nvm_lazy_load() {
+    unfunction _nvm_lazy_load node npm npx nvm 2>/dev/null
+    source "$NVM_DIR/nvm.sh"
+  }
+
+  node() { _nvm_lazy_load; command node "$@" }
+  npm() { _nvm_lazy_load; command npm "$@" }
+  npx() { _nvm_lazy_load; command npx "$@" }
+  nvm() { _nvm_lazy_load; nvm "$@" }
+fi
 
 ################################
 # uv (Python package manager)
