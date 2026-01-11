@@ -14,9 +14,9 @@ fi
 # Zinit initialization
 ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 
-if [[ ! -d "$ZINIT_HOME" ]]; then
-  mkdir -p "$(dirname $ZINIT_HOME)"
-  git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+if [[ ! -f "${ZINIT_HOME}/zinit.zsh" ]]; then
+  print -P "%F{red}zinit not found.%f Please run the installer or clone it manually:%F{yellow}\n  git clone https://github.com/zdharma-continuum/zinit.git \"$ZINIT_HOME\"%f"
+  return 1
 fi
 
 source "${ZINIT_HOME}/zinit.zsh"
@@ -200,8 +200,8 @@ export NVM_DIR="$HOME/.nvm"
 
 # Lazy load nvm - only load when node/npm/npx/nvm commands are first used
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then
-  # Add node to PATH for immediate availability (uses default version)
-  [[ -d "$NVM_DIR/versions/node" ]] && PATH="$NVM_DIR/versions/node/$(ls -1 $NVM_DIR/versions/node | tail -1)/bin:$PATH"
+  # Add node to PATH for immediate availability (uses default version if set via `nvm alias default`)
+  [[ -f "$NVM_DIR/alias/default" ]] && PATH="$NVM_DIR/versions/node/$(cat "$NVM_DIR/alias/default")/bin:$PATH"
 
   _nvm_lazy_load() {
     unfunction node npm npx nvm 2>/dev/null

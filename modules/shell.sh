@@ -17,7 +17,6 @@ fi
 # Configuration
 # ==============================================================================
 readonly ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
-readonly P10K_DIR="$HOME/.local/share/powerlevel10k"
 
 # ==============================================================================
 # Installation Functions
