@@ -15,7 +15,7 @@ fi
 ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 
 if [[ ! -f "${ZINIT_HOME}/zinit.zsh" ]]; then
-  print -P "%F{red}zinit not found.%f Please run the installer or clone it manually:%F{yellow}\n  git clone https://github.com/zdharma-continuum/zinit.git \"$ZINIT_HOME\"%f"
+  print -P "%F{red}zinit not found.%f Please run the installer or clone it manually:%F{yellow}\n  git clone https://github.com/zinit-zsh/zinit.git \"$ZINIT_HOME\"%f"
   return 1
 fi
 
@@ -38,10 +38,12 @@ zinit wait lucid for \
         zsh-users/zsh-autosuggestions \
     blockf atpull'zinit creinstall -q .' \
         zsh-users/zsh-completions \
-    zdharma-continuum/fast-syntax-highlighting \
+    z-shell/F-Sy-H \
     Aloxaf/fzf-tab \
     OMZL::git.zsh \
-    OMZP::git
+    OMZP::git \
+    unixorn/git-extra-commands \
+    OMZP::tmux
 
 ################################
 # Zsh options
@@ -114,10 +116,14 @@ esac
 ################################
 # FZF
 if command -v fzf &> /dev/null; then
-  # macOS with Homebrew
+  # macOS with Homebrew (Apple Silicon)
   if [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]]; then
     source /opt/homebrew/opt/fzf/shell/completion.zsh
     source /opt/homebrew/opt/fzf/shell/key-bindings.zsh
+  # macOS with Homebrew (Intel)
+  elif [[ -f /usr/local/opt/fzf/shell/completion.zsh ]]; then
+    source /usr/local/opt/fzf/shell/completion.zsh
+    source /usr/local/opt/fzf/shell/key-bindings.zsh
   # Linux or manual install
   elif [[ -f ~/.fzf.zsh ]]; then
     source ~/.fzf.zsh
@@ -197,7 +203,7 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   # Add node to PATH for immediate availability (uses default version if set via `nvm alias default`)
   if [[ -f "$NVM_DIR/alias/default" ]]; then
     local nvm_default_version
-    nvm_default_version=$(cat "$NVM_DIR/alias/default")
+    nvm_default_version=$(<"$NVM_DIR/alias/default")
     local nvm_default_path="$NVM_DIR/versions/node/$nvm_default_version/bin"
     [[ -d "$nvm_default_path" ]] && PATH="$nvm_default_path:$PATH"
   fi
