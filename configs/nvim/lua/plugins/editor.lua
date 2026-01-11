@@ -14,10 +14,6 @@ return {
   -- Telescope customization
   {
     "nvim-telescope/telescope.nvim",
-    keys = {
-      -- Add custom keybindings for telescope
-      { "<leader>fp", "<cmd>Telescope projects<cr>", desc = "Projects" },
-    },
     opts = {
       defaults = {
         layout_strategy = "horizontal",
