@@ -131,7 +131,7 @@ cleanup_spacevim() {
             if [[ -L "$HOME/.vim" ]]; then
                 local vim_target
                 vim_target=$(readlink "$HOME/.vim")
-                if [[ "$vim_target" == *"SpaceVim"* ]]; then
+                if [[ "$vim_target" == "$spacevim_dir" ]]; then
                     rm -f "$HOME/.vim"
                 fi
             fi
