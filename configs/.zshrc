@@ -28,18 +28,20 @@ source "${ZINIT_HOME}/zinit.zsh"
 zinit ice depth=1
 zinit light romkatv/powerlevel10k
 
+# Completion plugins (must load before compinit)
+zinit light Aloxaf/fzf-tab
+zinit light zsh-users/zsh-completions
+
 # Completions - fast init (skip security check)
+# IMPORTANT: must be after completion plugins
 autoload -Uz compinit
 compinit -i -d "${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
 
-# Plugins with turbo mode (deferred loading)
+# Other plugins with turbo mode (deferred loading)
 zinit wait lucid for \
     atload"_zsh_autosuggest_start" \
         zsh-users/zsh-autosuggestions \
-    blockf atpull'zinit creinstall -q .' \
-        zsh-users/zsh-completions \
-    zdharma-continuum/fast-syntax-highlighting \
-    Aloxaf/fzf-tab \
+    z-shell/fast-syntax-highlighting \
     OMZP::git \
     unixorn/git-extra-commands \
     OMZP::tmux
@@ -211,9 +213,9 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
     source "$NVM_DIR/nvm.sh"
   }
 
-  node() { _nvm_lazy_load; node "$@" }
-  npm() { _nvm_lazy_load; npm "$@" }
-  npx() { _nvm_lazy_load; npx "$@" }
+  node() { _nvm_lazy_load; command node "$@" }
+  npm() { _nvm_lazy_load; command npm "$@" }
+  npx() { _nvm_lazy_load; command npx "$@" }
   nvm() { _nvm_lazy_load; nvm "$@" }
 fi
 
