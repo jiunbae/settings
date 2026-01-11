@@ -32,20 +32,14 @@ zinit light romkatv/powerlevel10k
 autoload -Uz compinit
 compinit -C -d "${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
 
-# Essential plugins with turbo mode (deferred loading)
+# Plugins with turbo mode (deferred loading)
 zinit wait lucid for \
     atload"_zsh_autosuggest_start" \
         zsh-users/zsh-autosuggestions \
     blockf atpull'zinit creinstall -q .' \
         zsh-users/zsh-completions \
-        zdharma-continuum/fast-syntax-highlighting
-
-# fzf-tab for better completion
-zinit wait lucid for \
-    Aloxaf/fzf-tab
-
-# Git aliases (from oh-my-zsh snippets)
-zinit wait lucid for \
+    zdharma-continuum/fast-syntax-highlighting \
+    Aloxaf/fzf-tab \
     OMZL::git.zsh \
     OMZP::git
 
@@ -201,12 +195,16 @@ export NVM_DIR="$HOME/.nvm"
 # Lazy load nvm - only load when node/npm/npx/nvm commands are first used
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   # Add node to PATH for immediate availability (uses default version if set via `nvm alias default`)
-  [[ -f "$NVM_DIR/alias/default" ]] && PATH="$NVM_DIR/versions/node/$(cat "$NVM_DIR/alias/default")/bin:$PATH"
+  if [[ -f "$NVM_DIR/alias/default" ]]; then
+    local nvm_default_version
+    nvm_default_version=$(cat "$NVM_DIR/alias/default")
+    local nvm_default_path="$NVM_DIR/versions/node/$nvm_default_version/bin"
+    [[ -d "$nvm_default_path" ]] && PATH="$nvm_default_path:$PATH"
+  fi
 
   _nvm_lazy_load() {
     unfunction node npm npx nvm 2>/dev/null
     source "$NVM_DIR/nvm.sh"
-    [[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
   }
 
   node() { _nvm_lazy_load; node "$@" }
