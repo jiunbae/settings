@@ -1,5 +1,5 @@
 #!/bin/bash
-# editor.sh - NeoVim + SpaceVim installation
+# editor.sh - NeoVim + LazyVim installation
 # Can be run standalone or sourced by install.sh
 
 # ==============================================================================
@@ -16,8 +16,9 @@ fi
 # ==============================================================================
 # Configuration
 # ==============================================================================
-readonly SPACEVIM_DIR="$HOME/.SpaceVim"
-readonly SPACEVIM_CONFIG_DIR="$HOME/.SpaceVim.d"
+readonly NVIM_CONFIG_DIR="$HOME/.config/nvim"
+readonly NVIM_DATA_DIR="$HOME/.local/share/nvim"
+readonly NVIM_CACHE_DIR="$HOME/.cache/nvim"
 
 # ==============================================================================
 # Installation Functions
@@ -54,71 +55,91 @@ install_neovim() {
     log_success "NeoVim installed"
 }
 
-install_spacevim() {
-    print_section "Installing SpaceVim"
+install_lazyvim() {
+    print_section "Setting up LazyVim"
 
-    if [[ -d "$SPACEVIM_DIR" ]]; then
+    local root_dir
+    root_dir=$(get_root_dir)
+    local config_source="$root_dir/configs/nvim"
+
+    # Check if our config exists
+    if [[ ! -d "$config_source" ]]; then
+        log_error "LazyVim config not found at: $config_source"
+        return 1
+    fi
+
+    # Handle existing nvim config
+    if [[ -e "$NVIM_CONFIG_DIR" ]]; then
         if [[ "$FORCE" == "true" ]]; then
-            log_info "Removing existing SpaceVim..."
-            rm -rf "$SPACEVIM_DIR"
-            rm -rf "$HOME/.vim"
+            log_info "Cleaning existing nvim configuration..."
+            # Backup existing config if it's not a symlink
+            if [[ ! -L "$NVIM_CONFIG_DIR" ]]; then
+                local backup="${NVIM_CONFIG_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+                log_info "Backing up existing config: $NVIM_CONFIG_DIR -> $backup"
+                mv "$NVIM_CONFIG_DIR" "$backup"
+                track_backup "$NVIM_CONFIG_DIR" "$backup"
+            else
+                rm -f "$NVIM_CONFIG_DIR"
+            fi
+            # Clean nvim data and cache for fresh start
+            rm -rf "$NVIM_DATA_DIR"
+            rm -rf "$NVIM_CACHE_DIR"
         else
-            log_info "SpaceVim is already installed"
-            track_skipped "SpaceVim"
+            if [[ -L "$NVIM_CONFIG_DIR" ]]; then
+                local current_target
+                current_target=$(readlink "$NVIM_CONFIG_DIR")
+                if [[ "$current_target" == "$config_source" ]]; then
+                    log_info "LazyVim is already configured"
+                    track_skipped "LazyVim"
+                    return 0
+                fi
+            fi
+            log_warn "nvim config exists (use --force to overwrite)"
+            track_skipped "LazyVim"
             return 0
         fi
     fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would install SpaceVim"
+        log_info "[DRY-RUN] Would link LazyVim config"
         return 0
     fi
 
-    # Clone SpaceVim from GitHub (manual installation)
-    git_clone "https://github.com/SpaceVim/SpaceVim.git" "$SPACEVIM_DIR"
+    # Ensure parent directory exists
+    mkdir -p "$(dirname "$NVIM_CONFIG_DIR")"
 
-    # Create symlink for vim compatibility
-    backup_and_link "$SPACEVIM_DIR" "$HOME/.vim"
+    # Link our config
+    backup_and_link "$config_source" "$NVIM_CONFIG_DIR"
 
-    # Create symlink for neovim
-    mkdir -p "$HOME/.config"
-    backup_and_link "$SPACEVIM_DIR" "$HOME/.config/nvim"
-
-    track_installed "SpaceVim"
-    log_success "SpaceVim installed"
+    track_installed "LazyVim"
+    log_success "LazyVim configured"
+    log_info "Run 'nvim' to complete plugin installation"
 }
 
-link_spacevim_config() {
-    print_section "Linking SpaceVim Configuration"
+cleanup_spacevim() {
+    # Clean up old SpaceVim installation if exists
+    local spacevim_dir="$HOME/.SpaceVim"
+    local spacevim_config="$HOME/.SpaceVim.d"
 
-    local root_dir
-    root_dir=$(get_root_dir)
-    local config_source
-
-    # Check configs/ first, then root
-    if [[ -d "$root_dir/configs/.SpaceVim.d" ]]; then
-        config_source="$root_dir/configs/.SpaceVim.d"
-    elif [[ -d "$root_dir/.SpaceVim.d" ]]; then
-        config_source="$root_dir/.SpaceVim.d"
-    else
-        log_warn "SpaceVim config directory not found"
-        return 0
-    fi
-
-    # Link entire .SpaceVim.d directory
-    if [[ -d "$SPACEVIM_CONFIG_DIR" && ! -L "$SPACEVIM_CONFIG_DIR" ]]; then
+    if [[ -d "$spacevim_dir" ]] || [[ -d "$spacevim_config" ]]; then
+        log_info "Found old SpaceVim installation"
         if [[ "$FORCE" == "true" ]]; then
-            local backup="${SPACEVIM_CONFIG_DIR}.backup.$(date +%Y%m%d%H%M%S)"
-            log_info "Backing up existing config: $SPACEVIM_CONFIG_DIR -> $backup"
-            mv "$SPACEVIM_CONFIG_DIR" "$backup"
+            log_info "Removing SpaceVim..."
+            rm -rf "$spacevim_dir"
+            rm -rf "$spacevim_config"
+            # Remove vim symlink if it points to SpaceVim
+            if [[ -L "$HOME/.vim" ]]; then
+                local vim_target
+                vim_target=$(readlink "$HOME/.vim")
+                if [[ "$vim_target" == *"SpaceVim"* ]]; then
+                    rm -f "$HOME/.vim"
+                fi
+            fi
+            log_success "SpaceVim removed"
         else
-            log_warn "SpaceVim config directory exists (use --force to overwrite)"
-            return 0
+            log_warn "SpaceVim still exists (use --force to remove)"
         fi
     fi
-
-    backup_and_link "$config_source" "$SPACEVIM_CONFIG_DIR"
-    log_success "SpaceVim configuration linked"
 }
 
 setup_vim_alias() {
@@ -134,8 +155,8 @@ install_editor() {
     log_info "Starting editor installation..."
 
     install_neovim
-    install_spacevim
-    link_spacevim_config
+    cleanup_spacevim
+    install_lazyvim
     setup_vim_alias
 
     log_success "Editor installation complete!"
