@@ -55,6 +55,13 @@ case `uname` in
     if [[ -f /proc/version ]] && grep -q microsoft /proc/version 2>/dev/null; then
       # wsl settings
       export PATH=/usr/lib/wsl/lib:$PATH
+
+      # Docker auto-start for WSL2
+      if command -v docker &> /dev/null; then
+        if ! pgrep -x "dockerd" > /dev/null; then
+          sudo -n service docker start > /dev/null 2>&1 || true
+        fi
+      fi
     fi
 
     # CUDA settings
