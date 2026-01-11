@@ -72,7 +72,7 @@ Options:
 
 Components:
   base          Basic packages (curl, wget, git, build-essential)
-  zsh           Zsh + Oh-My-Zsh + Powerlevel10k
+  zsh           Zsh + zinit + Powerlevel10k
   nvim          NeoVim + SpaceVim
   tmux          tmux + TPM (Tmux Plugin Manager)
   rust          Rust toolchain + cargo-binstall
@@ -87,7 +87,7 @@ Components:
 | Component | Description |
 |-----------|-------------|
 | [Zsh](https://www.zsh.org/) | Modern shell |
-| [Oh-My-Zsh](https://ohmyz.sh/) | Zsh framework |
+| [zinit](https://github.com/zdharma-continuum/zinit) | Fast plugin manager |
 | [Powerlevel10k](https://github.com/romkatv/powerlevel10k) | Fast, customizable prompt |
 | zsh-syntax-highlighting | Fish-like syntax highlighting |
 | zsh-autosuggestions | Fish-like autosuggestions |
@@ -142,7 +142,7 @@ settings/
 │   └── cli.sh             #   CLI argument parsing
 ├── modules/                # Installation modules
 │   ├── base.sh            #   Basic packages
-│   ├── shell.sh           #   Zsh + Oh-My-Zsh + P10k
+│   ├── shell.sh           #   Zsh + zinit + P10k
 │   ├── editor.sh          #   NeoVim + SpaceVim
 │   ├── tmux.sh            #   tmux + TPM
 │   ├── rust.sh            #   Rust + cargo-binstall

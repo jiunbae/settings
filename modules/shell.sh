@@ -1,5 +1,5 @@
 #!/bin/bash
-# shell.sh - Zsh + Oh-My-Zsh + Powerlevel10k installation
+# shell.sh - Zsh + zinit + Powerlevel10k installation
 # Can be run standalone or sourced by install.sh
 
 # ==============================================================================
@@ -16,15 +16,8 @@ fi
 # ==============================================================================
 # Configuration
 # ==============================================================================
-readonly ZSH_CUSTOM_DIR="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-readonly P10K_THEME_DIR="$ZSH_CUSTOM_DIR/themes/powerlevel10k"
-
-# Plugins to install
-readonly ZSH_PLUGINS=(
-    "zsh-syntax-highlighting|https://github.com/zsh-users/zsh-syntax-highlighting.git"
-    "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions.git"
-    "git-extra-commands|https://github.com/unixorn/git-extra-commands.git"
-)
+readonly ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
+readonly P10K_DIR="$HOME/.local/share/powerlevel10k"
 
 # ==============================================================================
 # Installation Functions
@@ -44,77 +37,42 @@ install_zsh_package() {
     log_success "Zsh installed"
 }
 
-install_oh_my_zsh() {
-    print_section "Installing Oh-My-Zsh"
+install_zinit() {
+    print_section "Installing zinit"
 
-    if [[ -d "$HOME/.oh-my-zsh" ]]; then
+    if [[ -d "$ZINIT_HOME" ]]; then
         if [[ "$FORCE" == "true" ]]; then
-            log_info "Removing existing Oh-My-Zsh..."
-            rm -rf "$HOME/.oh-my-zsh"
+            log_info "Removing existing zinit..."
+            rm -rf "$ZINIT_HOME"
         else
-            echo -e "${GREEN}✓${NC} Oh-My-Zsh (already installed)"
-            track_skipped "Oh-My-Zsh"
+            echo -e "${GREEN}✓${NC} zinit (already installed)"
+            track_skipped "zinit"
             return 0
         fi
     fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would install Oh-My-Zsh"
+        log_info "[DRY-RUN] Would install zinit"
         return 0
     fi
 
-    # Install silently
-    run_with_spinner "Installing Oh-My-Zsh" \
-        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    track_installed "Oh-My-Zsh"
+    # Install zinit
+    mkdir -p "$(dirname "$ZINIT_HOME")"
+    run_with_spinner "Installing zinit" \
+        git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+    track_installed "zinit"
+    log_success "zinit installed"
 }
 
 install_powerlevel10k() {
     print_section "Installing Powerlevel10k Theme"
 
-    if [[ -d "$P10K_THEME_DIR" ]]; then
-        if [[ "$FORCE" == "true" ]]; then
-            log_info "Removing existing Powerlevel10k..."
-            rm -rf "$P10K_THEME_DIR"
-        else
-            log_info "Powerlevel10k is already installed"
-            track_skipped "Powerlevel10k"
-            return 0
-        fi
-    fi
+    # Note: Powerlevel10k will be installed by zinit on first shell start
+    # This function just ensures the fonts are available
 
-    git_clone "https://github.com/romkatv/powerlevel10k.git" "$P10K_THEME_DIR"
-    track_installed "Powerlevel10k"
-    log_success "Powerlevel10k installed"
-}
-
-install_zsh_plugins() {
-    print_section "Installing Zsh Plugins"
-
-    local plugins_dir="$ZSH_CUSTOM_DIR/plugins"
-    mkdir -p "$plugins_dir"
-
-    for plugin_entry in "${ZSH_PLUGINS[@]}"; do
-        local name="${plugin_entry%%|*}"
-        local url="${plugin_entry##*|}"
-        local plugin_dir="$plugins_dir/$name"
-
-        if [[ -d "$plugin_dir" ]]; then
-            if [[ "$FORCE" == "true" ]]; then
-                log_info "Removing existing plugin: $name"
-                rm -rf "$plugin_dir"
-            else
-                log_info "Plugin already installed: $name"
-                track_skipped "Zsh plugin: $name"
-                continue
-            fi
-        fi
-
-        git_clone "$url" "$plugin_dir"
-        track_installed "Zsh plugin: $name"
-    done
-
-    log_success "Zsh plugins installed"
+    log_info "Powerlevel10k will be installed automatically by zinit on first shell start"
+    log_info "Make sure you have a Nerd Font installed for the best experience"
+    track_skipped "Powerlevel10k (managed by zinit)"
 }
 
 link_zsh_configs() {
@@ -153,13 +111,13 @@ install_shell() {
     log_info "Starting shell environment installation..."
 
     install_zsh_package
-    install_oh_my_zsh
+    install_zinit
     install_powerlevel10k
-    install_zsh_plugins
     link_zsh_configs
     change_default_shell
 
     log_success "Shell environment installation complete!"
+    log_info "Open a new terminal to initialize zinit and plugins"
 }
 
 # ==============================================================================
