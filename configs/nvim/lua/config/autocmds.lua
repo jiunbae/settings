@@ -12,17 +12,26 @@ autocmd("TextYankPost", {
   end,
 })
 
--- Remove trailing whitespace on save (skip markdown files)
+-- Remove trailing whitespace and auto create dirs on save
 autocmd("BufWritePre", {
-  group = augroup("trim_whitespace", { clear = true }),
+  group = augroup("custom_on_save", { clear = true }),
   pattern = "*",
-  callback = function()
-    if vim.bo.filetype == "markdown" then
-      return
+  callback = function(event)
+    -- Auto create directory when saving a file
+    if not (event.match:match("^%w%w+:[\\/][\\/]")) then
+      local file = (vim.uv and vim.uv.fs_realpath(event.match)) or event.match
+      local dir = vim.fn.fnamemodify(file, ":p:h")
+      if dir ~= "" and vim.fn.isdirectory(dir) == 0 then
+        vim.fn.mkdir(dir, "p")
+      end
     end
-    local save_cursor = vim.fn.getpos(".")
-    vim.cmd([[%s/\s\+$//e]])
-    vim.fn.setpos(".", save_cursor)
+
+    -- Remove trailing whitespace on save (skip markdown)
+    if vim.bo.filetype ~= "markdown" then
+      local save_cursor = vim.fn.getpos(".")
+      vim.cmd([[%s/\s\+$//e]])
+      vim.fn.setpos(".", save_cursor)
+    end
   end,
 })
 
@@ -35,19 +44,6 @@ autocmd("BufReadPost", {
     if mark[1] > 0 and mark[1] <= lcount then
       pcall(vim.api.nvim_win_set_cursor, 0, mark)
     end
-  end,
-})
-
--- Auto create directory when saving a file
-autocmd("BufWritePre", {
-  group = augroup("auto_create_dir", { clear = true }),
-  pattern = "*",
-  callback = function(event)
-    if event.match:match("^%w%w+:[\\/][\\/]") then
-      return
-    end
-    local file = vim.uv.fs_realpath(event.match) or event.match
-    vim.fn.mkdir(vim.fn.fnamemodify(file, ":p:h"), "p")
   end,
 })
 
