@@ -38,7 +38,7 @@ autoload -Uz compinit
 compinit -i -d "${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
 
 # Other plugins with turbo mode (deferred loading)
-zinit wait lucid for \
+zinit lucid for \
     atload"_zsh_autosuggest_start" \
         zsh-users/zsh-autosuggestions \
     z-shell/fast-syntax-highlighting \
