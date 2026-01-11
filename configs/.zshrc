@@ -30,7 +30,7 @@ zinit light romkatv/powerlevel10k
 
 # Completions - fast init (skip security check)
 autoload -Uz compinit
-compinit -C -d "${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
+compinit -i -d "${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
 
 # Plugins with turbo mode (deferred loading)
 zinit wait lucid for \
