@@ -38,9 +38,8 @@ zinit wait lucid for \
         zsh-users/zsh-autosuggestions \
     blockf atpull'zinit creinstall -q .' \
         zsh-users/zsh-completions \
-    z-shell/F-Sy-H \
+    zdharma-continuum/fast-syntax-highlighting \
     Aloxaf/fzf-tab \
-    OMZL::git.zsh \
     OMZP::git \
     unixorn/git-extra-commands \
     OMZP::tmux
@@ -208,7 +207,7 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   fi
 
   _nvm_lazy_load() {
-    unfunction node npm npx nvm 2>/dev/null
+    unfunction _nvm_lazy_load node npm npx nvm 2>/dev/null
     source "$NVM_DIR/nvm.sh"
   }
 
