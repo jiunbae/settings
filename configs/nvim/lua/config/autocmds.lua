@@ -12,11 +12,14 @@ autocmd("TextYankPost", {
   end,
 })
 
--- Remove trailing whitespace on save
+-- Remove trailing whitespace on save (skip markdown files)
 autocmd("BufWritePre", {
   group = augroup("trim_whitespace", { clear = true }),
   pattern = "*",
   callback = function()
+    if vim.bo.filetype == "markdown" then
+      return
+    end
     local save_cursor = vim.fn.getpos(".")
     vim.cmd([[%s/\s\+$//e]])
     vim.fn.setpos(".", save_cursor)
@@ -38,6 +41,7 @@ autocmd("BufReadPost", {
 -- Auto create directory when saving a file
 autocmd("BufWritePre", {
   group = augroup("auto_create_dir", { clear = true }),
+  pattern = "*",
   callback = function(event)
     if event.match:match("^%w%w+:[\\/][\\/]") then
       return
