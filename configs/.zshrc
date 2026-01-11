@@ -202,9 +202,8 @@ export NVM_DIR="$HOME/.nvm"
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   # Add node to PATH for immediate availability (uses default version if set via `nvm alias default`)
   if [[ -f "$NVM_DIR/alias/default" ]]; then
-    local nvm_default_version
     nvm_default_version=$(<"$NVM_DIR/alias/default")
-    local nvm_default_path="$NVM_DIR/versions/node/$nvm_default_version/bin"
+    nvm_default_path="$NVM_DIR/versions/node/$nvm_default_version/bin"
     [[ -d "$nvm_default_path" ]] && PATH="$nvm_default_path:$PATH"
   fi
 
