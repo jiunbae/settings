@@ -58,7 +58,7 @@ install_zinit() {
     # Install zinit
     mkdir -p "$(dirname "$ZINIT_HOME")"
     run_with_spinner "Installing zinit" \
-        git clone --depth 1 https://github.com/zinit-zsh/zinit.git "$ZINIT_HOME"
+        git clone --depth 1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
     track_installed "zinit"
     log_success "zinit installed"
 }
