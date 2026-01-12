@@ -167,14 +167,14 @@ install_fzf() {
 install_basic_tools() {
     print_section "Installing Basic CLI Tools"
 
+    # fzf doesn't require cargo-binstall, install it first
+    install_fzf
+
     ensure_cargo_binstall || return 1
 
     for tool in "${TOOLS_BASIC[@]}"; do
         install_tool_via_binstall "$tool"
     done
-
-    # Also install fzf
-    install_fzf
 
     log_success "Basic CLI tools installed"
 }
