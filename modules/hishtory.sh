@@ -136,16 +136,16 @@ init_hishtory() {
         return 0
     fi
 
-    # Initialize with secret if provided, otherwise generate new
-    if [[ -n "${HISHTORY_SECRET:-}" ]]; then
+    # Only initialize if server and secret are configured
+    # Without server, init hangs waiting for api.hishtory.dev
+    if [[ -n "${HISHTORY_SERVER:-}" && -n "${HISHTORY_SECRET:-}" ]]; then
         log_info "Initializing with provided secret key..."
-        "$hishtory_bin" init "$HISHTORY_SECRET" 2>/dev/null || true
+        timeout 10 "$hishtory_bin" init "$HISHTORY_SECRET" 2>/dev/null || true
+        log_success "hishtory initialized with sync enabled"
     else
-        log_info "Initializing with new secret key..."
-        "$hishtory_bin" init 2>/dev/null || true
+        log_info "Skipping init (configure HISHTORY_SERVER and HISHTORY_SECRET for sync)"
+        log_success "hishtory installed (local-only mode)"
     fi
-
-    log_success "hishtory initialized"
 }
 
 # ==============================================================================
