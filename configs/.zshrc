@@ -299,23 +299,13 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 #   HISHTORY_SERVER="https://hishtory.example.com"
 #   HISHTORY_SECRET="your-secret-key"
 # Without these, hishtory runs in local-only mode
+# Enable Ctrl+R: hishtory config-set enable-control-r true
 if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   [[ -f "$HOME/.hishtory/hishtory" ]] && export PATH="$HOME/.hishtory:$PATH"
   # Auto-init with secret if configured but not yet initialized
   if [[ -n "$HISHTORY_SECRET" && ! -f "$HOME/.hishtory/.hishtory.db" ]]; then
     (hishtory init "$HISHTORY_SECRET" &>/dev/null &)
   fi
-  # Shell hooks for recording history
-  __hishtory_preexec() {
-    (hishtory saveHistoryEntry zsh "${1:-}" &>/dev/null &)
-  }
-  [[ -z "${preexec_functions[(r)__hishtory_preexec]}" ]] && preexec_functions+=(__hishtory_preexec)
-  # Ctrl+R binding for interactive search
-  _hishtory_tquery() {
-    BUFFER=$(hishtory tquery "$BUFFER" 2>/dev/null) || true
-    CURSOR=${#BUFFER}
-    zle redisplay
-  }
-  zle -N _hishtory_tquery
-  bindkey '^R' _hishtory_tquery
+  # Source hishtory shell integration (includes Ctrl+R binding)
+  source <(hishtory config-get shell-integration zsh 2>/dev/null) || true
 fi
