@@ -15,7 +15,7 @@ fi
 ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 
 if [[ ! -f "${ZINIT_HOME}/zinit.zsh" ]]; then
-  print -P "%F{red}zinit not found.%f Please run the installer or clone it manually:%F{yellow}\n  git clone https://github.com/zinit-zsh/zinit.git \"$ZINIT_HOME\"%f"
+  print -P "%F{red}zinit not found.%f Please run the installer or clone it manually:%F{yellow}\n  git clone https://github.com/zdharma-continuum/zinit.git \"$ZINIT_HOME\"%f"
   return 1
 fi
 
