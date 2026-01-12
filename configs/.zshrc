@@ -294,9 +294,16 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 ################################
 # hishtory (better shell history)
-export HISHTORY_SERVER="https://hishtory.example.com"
-if [[ -f "$HOME/.hishtory/hishtory" ]]; then
-  export PATH="$HOME/.hishtory:$PATH"
+# Configure via ~/.envs/hishtory.env:
+#   HISHTORY_SERVER="https://hishtory.example.com"
+#   HISHTORY_SECRET="your-secret-key"
+# Without these, hishtory runs in local-only mode
+if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
+  [[ -f "$HOME/.hishtory/hishtory" ]] && export PATH="$HOME/.hishtory:$PATH"
+  # Auto-init with secret if configured but not yet initialized
+  if [[ -n "$HISHTORY_SECRET" && ! -f "$HOME/.hishtory/.hishtory.db" ]]; then
+    hishtory init "$HISHTORY_SECRET" &>/dev/null &
+  fi
   # Shell hooks for recording history
   __hishtory_preexec() {
     hishtory saveHistoryEntry zsh "${1:-}" &>/dev/null &
