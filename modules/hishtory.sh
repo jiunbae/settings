@@ -139,9 +139,10 @@ init_hishtory() {
     # Only initialize if server and secret are configured
     # Without server, init hangs waiting for api.hishtory.dev
     if [[ -n "${HISHTORY_SERVER:-}" && -n "${HISHTORY_SECRET:-}" ]]; then
-        log_info "Initializing with provided secret key..."
+        log_info "Initializing hishtory (importing shell history in background)..."
         # Use 'yes' to auto-confirm if existing history entries exist
-        yes | timeout 10 "$hishtory_bin" init "$HISHTORY_SECRET" 2>/dev/null || true
+        # Suppress all output to avoid confusing users during background import
+        yes | timeout 30 "$hishtory_bin" init "$HISHTORY_SECRET" >/dev/null 2>&1 || true
         log_success "hishtory initialized with sync enabled"
     else
         log_info "Skipping init (configure HISHTORY_SERVER and HISHTORY_SECRET for sync)"

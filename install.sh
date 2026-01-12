@@ -126,11 +126,11 @@ main() {
         esac
     done
 
-    # Print progress completion
-    progress_finish
-
     # Print detailed installation summary
     print_install_summary
+
+    # Print progress completion (final message at the bottom)
+    progress_finish
 
     # Log completion
     echo "=== Installation completed at $(date) ===" >> "$LOG_FILE"
