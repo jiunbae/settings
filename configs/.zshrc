@@ -299,13 +299,21 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 #   HISHTORY_SERVER="https://hishtory.example.com"
 #   HISHTORY_SECRET="your-secret-key"
 # Without these, hishtory runs in local-only mode
-# Enable Ctrl+R: hishtory config-set enable-control-r true
 if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   [[ -f "$HOME/.hishtory/hishtory" ]] && export PATH="$HOME/.hishtory:$PATH"
   # Auto-init with secret if configured but not yet initialized
   if [[ -n "$HISHTORY_SECRET" && ! -f "$HOME/.hishtory/.hishtory.db" ]]; then
     (hishtory init "$HISHTORY_SECRET" &>/dev/null &)
   fi
-  # Source hishtory shell integration (includes Ctrl+R binding)
-  source <(hishtory config-get shell-integration zsh 2>/dev/null) || true
+  # Ctrl+R binding for interactive search
+  _hishtory_search() {
+    local selected="$(hishtory tquery "$BUFFER" 2>/dev/null)"
+    if [[ -n "$selected" ]]; then
+      BUFFER="$selected"
+      CURSOR=${#BUFFER}
+    fi
+    zle redisplay
+  }
+  zle -N _hishtory_search
+  bindkey '^R' _hishtory_search
 fi
