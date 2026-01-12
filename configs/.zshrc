@@ -302,11 +302,11 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   [[ -f "$HOME/.hishtory/hishtory" ]] && export PATH="$HOME/.hishtory:$PATH"
   # Auto-init with secret if configured but not yet initialized
   if [[ -n "$HISHTORY_SECRET" && ! -f "$HOME/.hishtory/.hishtory.db" ]]; then
-    hishtory init "$HISHTORY_SECRET" &>/dev/null &
+    (hishtory init "$HISHTORY_SECRET" &>/dev/null &)
   fi
   # Shell hooks for recording history
   __hishtory_preexec() {
-    hishtory saveHistoryEntry zsh "${1:-}" &>/dev/null &
+    (hishtory saveHistoryEntry zsh "${1:-}" &>/dev/null &)
   }
   [[ -z "${preexec_functions[(r)__hishtory_preexec]}" ]] && preexec_functions+=(__hishtory_preexec)
   # Ctrl+R binding for interactive search
