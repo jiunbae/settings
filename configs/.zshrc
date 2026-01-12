@@ -28,36 +28,83 @@ source "${ZINIT_HOME}/zinit.zsh"
 zinit ice depth=1
 zinit light romkatv/powerlevel10k
 
-# Completion plugins (must load before compinit)
-zinit light Aloxaf/fzf-tab
-zinit light zsh-users/zsh-completions
+# Completion settings (case-insensitive, partial matching)
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' menu select
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 
-# Completions - fast init (skip security check)
-# IMPORTANT: must be after completion plugins
+# Completions - cached compinit (regenerate once per day)
 autoload -Uz compinit
-compinit -i -d "${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
+_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
+if [[ -f "$_zcompdump" && $(date +'%j') == $(stat -f '%Sm' -t '%j' "$_zcompdump" 2>/dev/null || stat -c '%y' "$_zcompdump" 2>/dev/null | cut -d- -f2) ]]; then
+  compinit -C -d "$_zcompdump"
+else
+  compinit -i -d "$_zcompdump"
+fi
+unset _zcompdump
 
-# Other plugins with turbo mode (deferred loading)
-zinit lucid for \
+# Completion plugins (turbo mode with blockf to track fpath changes)
+zinit wait lucid blockf for \
+    zsh-users/zsh-completions \
+    OMZP::tmux
+
+# fzf-tab must load after compinit, use atload to replay compdefs
+zinit wait lucid atload"zicompinit; zicdreplay" for \
+    Aloxaf/fzf-tab
+
+# Other plugins with turbo mode (deferred loading after prompt)
+zinit wait lucid for \
     atload"_zsh_autosuggest_start" \
         zsh-users/zsh-autosuggestions \
     z-shell/fast-syntax-highlighting \
     OMZP::git \
-    unixorn/git-extra-commands \
-    OMZP::tmux
+    unixorn/git-extra-commands
 
 ################################
 # Zsh options
 setopt PROMPT_SUBST
 setopt AUTO_CD
+setopt EXTENDED_GLOB        # Extended glob patterns (e.g., ^, ~, #)
+setopt NO_CASE_GLOB         # Case-insensitive globbing
+
+# Directory stack (use with cd -<TAB> to see history)
+setopt AUTO_PUSHD           # Push directory to stack on cd
+setopt PUSHD_IGNORE_DUPS    # No duplicates in stack
+setopt PUSHD_SILENT         # Don't print stack after pushd/popd
+
+# History
 setopt HIST_IGNORE_DUPS
 setopt HIST_IGNORE_SPACE
 setopt SHARE_HISTORY
+setopt EXTENDED_HISTORY     # Save timestamp
+setopt HIST_FIND_NO_DUPS    # No duplicates in search
+setopt HIST_REDUCE_BLANKS   # Remove extra blanks
+setopt INC_APPEND_HISTORY   # Add immediately, not on exit
 
-# History
 HISTFILE=~/.zsh_history
-HISTSIZE=10000
-SAVEHIST=10000
+HISTSIZE=500000
+SAVEHIST=500000
+
+################################
+# Key bindings
+bindkey -e                            # Emacs mode (Ctrl+A, Ctrl+E, etc.)
+bindkey '^[[H' beginning-of-line      # Home
+bindkey '^[[F' end-of-line            # End
+bindkey '^[[3~' delete-char           # Delete
+bindkey '^[[1;5C' forward-word        # Ctrl+Right
+bindkey '^[[1;5D' backward-word       # Ctrl+Left
+bindkey '^[[A' history-search-backward # Up arrow (prefix search)
+bindkey '^[[B' history-search-forward  # Down arrow (prefix search)
+
+################################
+# Useful aliases
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias -- -='cd -'
+
+# mkdir + cd
+mkcd() { mkdir -p "$1" && cd "$1" }
 
 ################################
 # Autosuggestions config
@@ -89,10 +136,13 @@ case `uname` in
       export PATH="/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
     fi
     export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
-    # Homebrew
-    if [[ -x /opt/homebrew/bin/brew ]]; then
-      eval "$(/opt/homebrew/bin/brew shellenv)"
-    fi
+    # Homebrew (direct env setup - faster than eval)
+    export HOMEBREW_PREFIX="/opt/homebrew"
+    export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
+    export HOMEBREW_REPOSITORY="/opt/homebrew"
+    fpath=("/opt/homebrew/share/zsh/site-functions" $fpath)
+    [[ -z "${MANPATH-}" ]] || export MANPATH=":${MANPATH#:}"
+    export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
     ;;
   Linux)
     # Linux settings
@@ -123,7 +173,7 @@ esac
 
 ################################
 # FZF
-if command -v fzf &> /dev/null; then
+if (( $+commands[fzf] )); then
   # macOS with Homebrew (Apple Silicon)
   if [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]]; then
     source /opt/homebrew/opt/fzf/shell/completion.zsh
@@ -158,9 +208,9 @@ export LANG=en_US.UTF-8
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 ################################
-# Modern CLI Tools
+# Modern CLI Tools (using $+commands for faster lookup)
 ## eza (ls replacement)
-if command -v eza &> /dev/null; then
+if (( $+commands[eza] )); then
   alias ls='eza --icons'
   alias ll='eza -la --icons --git'
   alias la='eza -a --icons'
@@ -168,32 +218,22 @@ if command -v eza &> /dev/null; then
 fi
 
 ## fd (find replacement)
-if command -v fd &> /dev/null; then
-  alias find='fd'
-fi
+(( $+commands[fd] )) && alias find='fd'
 
 ## ripgrep (grep replacement)
-if command -v rg &> /dev/null; then
-  alias grep='rg'
-fi
+(( $+commands[rg] )) && alias grep='rg'
 
 ## delta (git diff)
-if command -v delta &> /dev/null; then
-  export GIT_PAGER='delta'
-fi
+(( $+commands[delta] )) && export GIT_PAGER='delta'
 
 ## dust (du replacement)
-if command -v dust &> /dev/null; then
-  alias du='dust'
-fi
+(( $+commands[dust] )) && alias du='dust'
 
 ## procs (ps replacement)
-if command -v procs &> /dev/null; then
-  alias ps='procs'
-fi
+(( $+commands[procs] )) && alias ps='procs'
 
 ## bottom (htop replacement)
-if command -v btm &> /dev/null; then
+if (( $+commands[btm] )); then
   alias top='btm'
   alias htop='btm'
 fi
@@ -227,13 +267,47 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
 fi
 
 ################################
-# uv (Python package manager)
-export PATH="$HOME/.local/bin:$PATH"
-if command -v uv &> /dev/null; then
-  eval "$(uv generate-shell-completion zsh 2>/dev/null)" || true
+# uv (Python package manager) - cached completion
+if (( $+commands[uv] )); then
+  _uv_comp="${XDG_CACHE_HOME:-$HOME/.cache}/.uv-completion.zsh"
+  if [[ ! -f "$_uv_comp" || $(date +'%j') != $(stat -f '%Sm' -t '%j' "$_uv_comp" 2>/dev/null) ]]; then
+    uv generate-shell-completion zsh > "$_uv_comp" 2>/dev/null
+  fi
+  [[ -f "$_uv_comp" ]] && source "$_uv_comp"
+  unset _uv_comp
 fi
 
 [[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
 
 # opencode
 export PATH=${HOME}/.opencode/bin:$PATH
+
+# opencode
+export PATH=${HOME}/.opencode/bin:$PATH
+
+# bun completions
+[ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+################################
+# hishtory (better shell history)
+export HISHTORY_SERVER="https://hishtory.example.com"
+if [[ -f "$HOME/.hishtory/hishtory" ]]; then
+  export PATH="$HOME/.hishtory:$PATH"
+  # Shell hooks for recording history
+  __hishtory_preexec() {
+    hishtory saveHistoryEntry zsh "${1:-}" &>/dev/null &
+  }
+  [[ -z "${preexec_functions[(r)__hishtory_preexec]}" ]] && preexec_functions+=(__hishtory_preexec)
+  # Ctrl+R binding for interactive search
+  _hishtory_tquery() {
+    BUFFER=$(hishtory tquery "$BUFFER" 2>/dev/null) || true
+    CURSOR=${#BUFFER}
+    zle redisplay
+  }
+  zle -N _hishtory_tquery
+  bindkey '^R' _hishtory_tquery
+fi

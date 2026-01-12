@@ -79,6 +79,8 @@ Components:
   uv            uv (fast Python package manager)
   tools         CLI tools (eza, fd, bat, ripgrep, fzf)
   tools-extra   Extra CLI tools (delta, dust, procs, bottom)
+  ssh           SSH config (copy only, not symlinked)
+  hishtory      hishtory (better shell history with S3 sync)
 ```
 
 ## Components
@@ -130,6 +132,17 @@ Components:
 | [procs](https://github.com/dalance/procs) | `ps` | Modern process viewer |
 | [bottom](https://github.com/ClementTsang/bottom) | `htop` | System monitor |
 
+### Shell History
+| Component | Description |
+|-----------|-------------|
+| [hishtory](https://github.com/ddworken/hishtory) | Better shell history with context, search, and S3 sync |
+
+**hishtory features:**
+- Context-aware history (directory, exit code, duration)
+- Fuzzy search with `Ctrl+R`
+- E2E encrypted sync across machines
+- Self-hosted S3 backend support (MinIO)
+
 ## Directory Structure
 
 ```
@@ -147,7 +160,9 @@ settings/
 │   ├── tmux.sh            #   tmux + TPM
 │   ├── rust.sh            #   Rust + cargo-binstall
 │   ├── python.sh          #   uv
-│   └── tools.sh           #   CLI tools
+│   ├── tools.sh           #   CLI tools
+│   ├── ssh.sh             #   SSH config
+│   └── hishtory.sh        #   hishtory + S3 backend
 ├── scripts/                # Build scripts
 │   └── bundle.sh          #   Create bundled installer
 ├── configs/                # Configuration files

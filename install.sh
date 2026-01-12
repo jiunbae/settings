@@ -36,6 +36,7 @@ source "$SCRIPT_DIR/modules/rust.sh"
 source "$SCRIPT_DIR/modules/python.sh"
 source "$SCRIPT_DIR/modules/tools.sh"
 source "$SCRIPT_DIR/modules/ssh.sh"
+source "$SCRIPT_DIR/modules/hishtory.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -51,6 +52,7 @@ get_component_name() {
         tools)       echo "CLI tools" ;;
         tools-extra) echo "Extra CLI tools" ;;
         ssh)         echo "SSH config" ;;
+        hishtory)    echo "hishtory (shell history)" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -114,6 +116,9 @@ main() {
                 ;;
             ssh)
                 install_ssh
+                ;;
+            hishtory)
+                install_hishtory
                 ;;
             *)
                 progress_info "Unknown component: $component"
