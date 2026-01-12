@@ -65,6 +65,7 @@ ${BOLD}OPTIONS:${NC}
     -l, --link          Create symlinks for config files (default)
     -v, --verbose       Enable verbose output
     -n, --dry-run       Show what would be done without making changes
+    --no-sudo           Skip commands that require sudo privileges
     -h, --help          Show this help message
     --version           Show version
 
@@ -132,6 +133,10 @@ parse_args() {
                 DRY_RUN=true
                 shift
                 ;;
+            --no-sudo)
+                NO_SUDO=true
+                shift
+                ;;
             -h|--help)
                 print_help
                 exit 0
@@ -165,7 +170,7 @@ parse_args() {
     done
 
     # Export global flags
-    export VERBOSE DRY_RUN FORCE LINK_MODE
+    export VERBOSE DRY_RUN FORCE NO_SUDO LINK_MODE
 
     # Check if any component selected
     if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
@@ -209,6 +214,9 @@ print_selected() {
     fi
     if [[ "$FORCE" == "true" ]]; then
         log_warn "FORCE mode: Existing configurations will be overwritten"
+    fi
+    if [[ "$NO_SUDO" == "true" ]]; then
+        log_warn "NO-SUDO mode: Commands requiring sudo will be skipped"
     fi
     if [[ "$LINK_MODE" == "copy" ]]; then
         log_info "COPY mode: Config files will be copied (not symlinked)"

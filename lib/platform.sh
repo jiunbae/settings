@@ -68,8 +68,9 @@ setup_package_manager() {
     # Determine if we need sudo
     # - Not needed if running as root (EUID == 0)
     # - Not needed if sudo command doesn't exist
+    # - Not needed if NO_SUDO flag is set
     local need_sudo=""
-    if [[ $EUID -ne 0 ]] && command_exists sudo; then
+    if [[ "$NO_SUDO" != "true" ]] && [[ $EUID -ne 0 ]] && command_exists sudo; then
         need_sudo="sudo"
     fi
 
@@ -126,6 +127,11 @@ pkg_update() {
 
     case "$PKG_MANAGER" in
         apt)
+            # Skip apt update if NO_SUDO is set and we're not root
+            if [[ "$NO_SUDO" == "true" ]] && [[ $EUID -ne 0 ]]; then
+                log_warn "Skipping apt update (--no-sudo mode)"
+                return 0
+            fi
             run_with_spinner "Updating package lists" $PKG_SUDO apt-get update -qq
             ;;
         brew)
@@ -140,6 +146,12 @@ pkg_install() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would install: ${packages[*]}"
+        return 0
+    fi
+
+    # Skip apt install if NO_SUDO is set and we're not root
+    if [[ "$PKG_MANAGER" == "apt" ]] && [[ "$NO_SUDO" == "true" ]] && [[ $EUID -ne 0 ]]; then
+        log_warn "Skipping package installation (--no-sudo mode): ${packages[*]}"
         return 0
     fi
 
@@ -221,8 +233,16 @@ change_default_shell() {
 
     # Determine sudo command
     local sudo_cmd=""
-    if [[ $EUID -ne 0 ]] && command_exists sudo; then
+    if [[ "$NO_SUDO" != "true" ]] && [[ $EUID -ne 0 ]] && command_exists sudo; then
         sudo_cmd="sudo"
+    fi
+
+    # Skip if NO_SUDO mode and not root
+    if [[ "$NO_SUDO" == "true" ]] && [[ $EUID -ne 0 ]]; then
+        log_warn "Cannot change default shell without sudo privileges"
+        log_info "To change manually, run: chsh -s $zsh_path"
+        log_info "Or add to your profile: exec $zsh_path -l"
+        return 0
     fi
 
     # Check if chsh command exists

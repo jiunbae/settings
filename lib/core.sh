@@ -31,6 +31,7 @@ readonly CURSOR_SHOW="${ESC}[?25h"
 VERBOSE=${VERBOSE:-false}
 DRY_RUN=${DRY_RUN:-false}
 FORCE=${FORCE:-false}
+NO_SUDO=${NO_SUDO:-false}
 LINK_MODE=${LINK_MODE:-symlink}  # symlink or copy
 LOG_FILE="${LOG_FILE:-$HOME/.install.log}"
 
