@@ -305,6 +305,11 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   if [[ -n "$HISHTORY_SECRET" && ! -f "$HOME/.hishtory/.hishtory.db" ]]; then
     (hishtory init "$HISHTORY_SECRET" &>/dev/null &)
   fi
+  # Record history with CWD (preexec hook)
+  __hishtory_preexec() {
+    (HISHTORY_SHELL_NAME=zsh hishtory saveHistoryEntry zsh "$1" &>/dev/null &)
+  }
+  [[ -z "${preexec_functions[(r)__hishtory_preexec]}" ]] && preexec_functions+=(__hishtory_preexec)
   # Ctrl+R binding for interactive search
   _hishtory_search() {
     BUFFER="$(HISHTORY_TERM_INTEGRATION=1 hishtory tquery "$BUFFER")"
