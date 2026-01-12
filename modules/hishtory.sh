@@ -137,7 +137,7 @@ init_hishtory() {
     fi
 
     # Initialize with secret if provided, otherwise generate new
-    if [[ -n "$HISHTORY_SECRET" ]]; then
+    if [[ -n "${HISHTORY_SECRET:-}" ]]; then
         log_info "Initializing with provided secret key..."
         "$hishtory_bin" init "$HISHTORY_SECRET" 2>/dev/null || true
     else
