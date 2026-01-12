@@ -88,6 +88,7 @@ SAVEHIST=500000
 ################################
 # Key bindings
 bindkey -e                            # Emacs mode (Ctrl+A, Ctrl+E, etc.)
+WORDCHARS=''                          # Word boundary at special chars (ESC+Backspace)
 bindkey '^[[H' beginning-of-line      # Home
 bindkey '^[[F' end-of-line            # End
 bindkey '^[[3~' delete-char           # Delete
