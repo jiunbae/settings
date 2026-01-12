@@ -80,7 +80,7 @@ Components:
   tools         CLI tools (eza, fd, bat, ripgrep, fzf)
   tools-extra   Extra CLI tools (delta, dust, procs, bottom)
   ssh           SSH config (copy only, not symlinked)
-  hishtory      hishtory (better shell history with S3 sync)
+  hishtory      hishtory (better shell history with sync support)
 ```
 
 ## Components
@@ -135,13 +135,25 @@ Components:
 ### Shell History
 | Component | Description |
 |-----------|-------------|
-| [hishtory](https://github.com/ddworken/hishtory) | Better shell history with context, search, and S3 sync |
+| [hishtory](https://github.com/ddworken/hishtory) | Better shell history with context, search, and sync |
 
 **hishtory features:**
 - Context-aware history (directory, exit code, duration)
 - Fuzzy search with `Ctrl+R`
 - E2E encrypted sync across machines
-- Self-hosted S3 backend support (MinIO)
+- Self-hosted server support
+
+**Configuration (`~/.envs/hishtory.env`):**
+```bash
+# Self-hosted server (optional, local-only mode without this)
+export HISHTORY_SERVER="https://hishtory.example.com"
+
+# Secret key for cross-device sync (get from `hishtory status`)
+export HISHTORY_SECRET="your-secret-key-uuid"
+```
+
+Without `HISHTORY_SERVER`, hishtory runs in local-only mode.
+To sync across devices, use the same `HISHTORY_SECRET` on all machines.
 
 ## Directory Structure
 
@@ -162,7 +174,7 @@ settings/
 │   ├── python.sh          #   uv
 │   ├── tools.sh           #   CLI tools
 │   ├── ssh.sh             #   SSH config
-│   └── hishtory.sh        #   hishtory + S3 backend
+│   └── hishtory.sh        #   hishtory + self-hosted sync
 ├── scripts/                # Build scripts
 │   └── bundle.sh          #   Create bundled installer
 ├── configs/                # Configuration files

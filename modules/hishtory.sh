@@ -166,19 +166,33 @@ install_hishtory() {
 print_hishtory_info() {
     cat << EOF
 
+${BOLD}════════════════════════════════════════════════════════════════${NC}
 ${BOLD}hishtory - Better Shell History${NC}
+${BOLD}════════════════════════════════════════════════════════════════${NC}
 
-Commands:
-  ${CYAN}hishtory query${NC}      - Search history (or Ctrl+R)
+${BOLD}Commands:${NC}
+  ${CYAN}Ctrl+R${NC}              - Interactive history search (TUI)
+  ${CYAN}hishtory query${NC}      - Search history
   ${CYAN}hishtory status${NC}     - Show sync status and secret key
   ${CYAN}hishtory export${NC}     - Export history
 
-Configuration (~/.envs/hishtory.env):
-  ${CYAN}HISHTORY_SERVER${NC}     - Self-hosted server URL (optional)
-  ${CYAN}HISHTORY_SECRET${NC}     - Secret key for cross-device sync
+${BOLD}Configuration:${NC}
+  Edit ${CYAN}~/.envs/hishtory.env${NC}:
 
-Without HISHTORY_SERVER, hishtory runs in local-only mode.
-To sync across devices, use the same HISHTORY_SECRET on all machines.
+    # Self-hosted server URL (optional)
+    export HISHTORY_SERVER="https://hishtory.example.com"
+
+    # Secret key for cross-device sync
+    export HISHTORY_SECRET="your-secret-key-uuid"
+
+${BOLD}Sync Setup:${NC}
+  1. Get your secret key:  ${CYAN}hishtory status${NC}
+  2. Add to ~/.envs/hishtory.env on all devices
+  3. Restart shell or run: ${CYAN}source ~/.zshrc${NC}
+
+${BOLD}Note:${NC}
+  - Without HISHTORY_SERVER, runs in local-only mode
+  - Use the same HISHTORY_SECRET on all devices to sync
 
 EOF
 }
