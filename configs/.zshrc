@@ -36,12 +36,20 @@ zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 # Completions - cached compinit (regenerate once per day)
 autoload -Uz compinit
 _zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
-if [[ -f "$_zcompdump" && $(date +'%j') == $(stat -f '%Sm' -t '%j' "$_zcompdump" 2>/dev/null || stat -c '%y' "$_zcompdump" 2>/dev/null | cut -d- -f2) ]]; then
+# Get file modification day-of-year (macOS: stat -f, Linux: stat -c)
+if [[ -f "$_zcompdump" ]]; then
+  if [[ "$OSTYPE" == darwin* ]]; then
+    _zcompdump_day=$(stat -f '%Sm' -t '%j' "$_zcompdump" 2>/dev/null)
+  else
+    _zcompdump_day=$(date -d "$(stat -c '%y' "$_zcompdump" 2>/dev/null | cut -d' ' -f1)" +'%j' 2>/dev/null)
+  fi
+fi
+if [[ -f "$_zcompdump" && $(date +'%j') == "$_zcompdump_day" ]]; then
   compinit -C -d "$_zcompdump"
 else
   compinit -i -d "$_zcompdump"
 fi
-unset _zcompdump
+unset _zcompdump _zcompdump_day
 
 # Completion plugins (turbo mode with blockf to track fpath changes)
 zinit wait lucid blockf for \
@@ -174,22 +182,21 @@ esac
 
 ################################
 # FZF
-if (( $+commands[fzf] )); then
-  # macOS with Homebrew (Apple Silicon)
-  if [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]]; then
-    source /opt/homebrew/opt/fzf/shell/completion.zsh
-    source /opt/homebrew/opt/fzf/shell/key-bindings.zsh
-  # macOS with Homebrew (Intel)
-  elif [[ -f /usr/local/opt/fzf/shell/completion.zsh ]]; then
-    source /usr/local/opt/fzf/shell/completion.zsh
-    source /usr/local/opt/fzf/shell/key-bindings.zsh
-  # Linux or manual install
-  elif [[ -f ~/.fzf.zsh ]]; then
-    source ~/.fzf.zsh
-  elif [[ -f /usr/share/fzf/completion.zsh ]]; then
-    source /usr/share/fzf/completion.zsh
-    source /usr/share/fzf/key-bindings.zsh
-  fi
+# Linux manual install: source ~/.fzf.zsh first (adds ~/.fzf/bin to PATH)
+if [[ -f ~/.fzf.zsh ]]; then
+  source ~/.fzf.zsh
+# macOS with Homebrew (Apple Silicon)
+elif [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]]; then
+  source /opt/homebrew/opt/fzf/shell/completion.zsh
+  source /opt/homebrew/opt/fzf/shell/key-bindings.zsh
+# macOS with Homebrew (Intel)
+elif [[ -f /usr/local/opt/fzf/shell/completion.zsh ]]; then
+  source /usr/local/opt/fzf/shell/completion.zsh
+  source /usr/local/opt/fzf/shell/key-bindings.zsh
+# Linux system package
+elif [[ -f /usr/share/fzf/completion.zsh ]]; then
+  source /usr/share/fzf/completion.zsh
+  source /usr/share/fzf/key-bindings.zsh
 fi
 
 ################################
@@ -271,11 +278,21 @@ fi
 # uv (Python package manager) - cached completion
 if (( $+commands[uv] )); then
   _uv_comp="${XDG_CACHE_HOME:-$HOME/.cache}/.uv-completion.zsh"
-  if [[ ! -f "$_uv_comp" || $(date +'%j') != $(stat -f '%Sm' -t '%j' "$_uv_comp" 2>/dev/null) ]]; then
+  # Check if regeneration needed (once per day)
+  _uv_regen=1
+  if [[ -f "$_uv_comp" ]]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
+      _uv_comp_day=$(stat -f '%Sm' -t '%j' "$_uv_comp" 2>/dev/null)
+    else
+      _uv_comp_day=$(date -d "$(stat -c '%y' "$_uv_comp" 2>/dev/null | cut -d' ' -f1)" +'%j' 2>/dev/null)
+    fi
+    [[ $(date +'%j') == "$_uv_comp_day" ]] && _uv_regen=0
+  fi
+  if (( _uv_regen )); then
     uv generate-shell-completion zsh > "$_uv_comp" 2>/dev/null
   fi
   [[ -f "$_uv_comp" ]] && source "$_uv_comp"
-  unset _uv_comp
+  unset _uv_comp _uv_comp_day _uv_regen
 fi
 
 [[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
