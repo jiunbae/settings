@@ -307,12 +307,9 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   fi
   # Ctrl+R binding for interactive search
   _hishtory_search() {
-    local selected="$(hishtory tquery "$BUFFER" 2>/dev/null)"
-    if [[ -n "$selected" ]]; then
-      BUFFER="$selected"
-      CURSOR=${#BUFFER}
-    fi
-    zle redisplay
+    BUFFER="$(HISHTORY_TERM_INTEGRATION=1 hishtory tquery "$BUFFER")"
+    CURSOR=${#BUFFER}
+    zle reset-prompt
   }
   zle -N _hishtory_search
   bindkey '^R' _hishtory_search
