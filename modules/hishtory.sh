@@ -16,15 +16,12 @@ fi
 # ==============================================================================
 # Configuration
 # ==============================================================================
-HISHTORY_VERSION="${HISHTORY_VERSION:-latest}"
 HISHTORY_CONFIG_DIR="${HOME}/.hishtory"
 
-# S3 backend configuration (for self-hosted MinIO)
+# Self-hosted server configuration (optional)
 # Set these in your environment or ~/.envs/hishtory.env
-HISHTORY_S3_ENDPOINT="${HISHTORY_S3_ENDPOINT:-}"
-HISHTORY_S3_BUCKET="${HISHTORY_S3_BUCKET:-hishtory}"
-HISHTORY_S3_ACCESS_KEY="${HISHTORY_S3_ACCESS_KEY:-}"
-HISHTORY_S3_SECRET_KEY="${HISHTORY_S3_SECRET_KEY:-}"
+# HISHTORY_SERVER - URL of self-hosted hishtory server
+# HISHTORY_SECRET - Secret key for syncing across devices
 
 # ==============================================================================
 # Installation Functions
@@ -34,9 +31,7 @@ install_hishtory_binary() {
     print_section "Installing hishtory"
 
     if command_exists hishtory; then
-        local current_version
-        current_version=$(hishtory version 2>/dev/null || echo "unknown")
-        log_info "hishtory is already installed: $current_version"
+        log_info "hishtory is already installed"
         if [[ "$FORCE" != "true" ]]; then
             track_skipped "hishtory"
             return 0
@@ -48,10 +43,19 @@ install_hishtory_binary() {
         return 0
     fi
 
-    # Install via Go install or download binary
     log_info "Installing hishtory..."
 
-    # Method 1: Try go install if Go is available
+    # Method 1: Try homebrew on macOS
+    if [[ "$PLATFORM" == "macos" ]] && command_exists brew; then
+        log_info "Installing via homebrew..."
+        if brew install hishtory 2>/dev/null; then
+            track_installed "hishtory"
+            log_success "hishtory installed via homebrew"
+            return 0
+        fi
+    fi
+
+    # Method 2: Try go install if Go is available
     if command_exists go; then
         log_info "Installing via go install..."
         if go install github.com/ddworken/hishtory@latest 2>/dev/null; then
@@ -61,7 +65,7 @@ install_hishtory_binary() {
         fi
     fi
 
-    # Method 2: Download pre-built binary
+    # Method 3: Download pre-built binary
     log_info "Downloading pre-built binary..."
     local os arch binary_url
     os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -74,19 +78,12 @@ install_hishtory_binary() {
 
     binary_url="https://github.com/ddworken/hishtory/releases/latest/download/hishtory-${os}-${arch}"
 
-    local install_dir="$HOME/.hishtory"
-    mkdir -p "$install_dir"
+    mkdir -p "$HISHTORY_CONFIG_DIR"
 
-    if curl -fsSL "$binary_url" -o "$install_dir/hishtory"; then
-        chmod +x "$install_dir/hishtory"
-
-        # Add to PATH if not already
-        if [[ ":$PATH:" != *":$install_dir:"* ]]; then
-            export PATH="$install_dir:$PATH"
-        fi
-
+    if curl -fsSL "$binary_url" -o "$HISHTORY_CONFIG_DIR/hishtory"; then
+        chmod +x "$HISHTORY_CONFIG_DIR/hishtory"
         track_installed "hishtory"
-        log_success "hishtory installed to $install_dir/hishtory"
+        log_success "hishtory installed to $HISHTORY_CONFIG_DIR/hishtory"
         return 0
     else
         log_error "Failed to download hishtory binary"
@@ -94,92 +91,61 @@ install_hishtory_binary() {
     fi
 }
 
-configure_hishtory_s3() {
-    print_section "Configuring hishtory S3 backend"
-
-    # Check if S3 configuration is provided
-    if [[ -z "$HISHTORY_S3_ENDPOINT" ]]; then
-        log_info "S3 endpoint not configured, skipping S3 backend setup"
-        log_info "Set HISHTORY_S3_ENDPOINT to configure S3 backend"
-        return 0
-    fi
-
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would configure hishtory S3 backend"
-        return 0
-    fi
-
-    # Create config directory
-    mkdir -p "$HISHTORY_CONFIG_DIR"
-
-    # Create config.json with S3 backend
-    local config_file="$HISHTORY_CONFIG_DIR/config.json"
-
-    # Backup existing config
-    if [[ -f "$config_file" ]]; then
-        cp "$config_file" "${config_file}.backup.$(date +%Y%m%d%H%M%S)"
-    fi
-
-    cat > "$config_file" << EOF
-{
-    "beta_mode": true,
-    "custom_s3_endpoint": "${HISHTORY_S3_ENDPOINT}",
-    "s3_bucket": "${HISHTORY_S3_BUCKET}",
-    "s3_access_key": "${HISHTORY_S3_ACCESS_KEY}",
-    "s3_secret_key": "${HISHTORY_S3_SECRET_KEY}"
-}
-EOF
-
-    chmod 600 "$config_file"
-    log_success "hishtory S3 backend configured"
-}
-
-setup_hishtory_shell_integration() {
-    print_section "Setting up hishtory shell integration"
-
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would setup shell integration"
-        return 0
-    fi
-
-    # hishtory init will add shell integration
-    if command_exists hishtory; then
-        # Initialize hishtory (this adds to .zshrc automatically)
-        hishtory init zsh 2>/dev/null || true
-        log_success "hishtory shell integration configured"
-    else
-        log_warn "hishtory not found, skipping shell integration"
-    fi
-}
-
-link_hishtory_config() {
-    print_section "Linking hishtory configuration"
+setup_hishtory_env() {
+    print_section "Setting up hishtory environment"
 
     local source_config="$SCRIPT_DIR/../configs/hishtory"
-    local target_config="$HISHTORY_CONFIG_DIR"
-
-    if [[ ! -d "$source_config" ]]; then
-        log_info "No hishtory config in dotfiles, skipping"
-        return 0
-    fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would link hishtory config"
+        log_info "[DRY-RUN] Would setup hishtory environment"
         return 0
     fi
 
-    mkdir -p "$target_config"
-
-    # Link env template if exists
+    # Copy env template if not exists
     if [[ -f "$source_config/hishtory.env.example" ]]; then
         if [[ ! -f "$HOME/.envs/hishtory.env" ]]; then
             mkdir -p "$HOME/.envs"
             cp "$source_config/hishtory.env.example" "$HOME/.envs/hishtory.env"
-            log_info "Created ~/.envs/hishtory.env - please configure your S3 credentials"
+            log_info "Created ~/.envs/hishtory.env - configure HISHTORY_SERVER and HISHTORY_SECRET for sync"
+        else
+            log_info "~/.envs/hishtory.env already exists"
         fi
     fi
 
-    log_success "hishtory configuration linked"
+    log_success "hishtory environment configured"
+}
+
+init_hishtory() {
+    print_section "Initializing hishtory"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would initialize hishtory"
+        return 0
+    fi
+
+    # Load env file if exists
+    [[ -f "$HOME/.envs/hishtory.env" ]] && source "$HOME/.envs/hishtory.env"
+
+    local hishtory_bin
+    if [[ -f "$HISHTORY_CONFIG_DIR/hishtory" ]]; then
+        hishtory_bin="$HISHTORY_CONFIG_DIR/hishtory"
+    elif command_exists hishtory; then
+        hishtory_bin="hishtory"
+    else
+        log_warn "hishtory not found, skipping initialization"
+        return 0
+    fi
+
+    # Initialize with secret if provided, otherwise generate new
+    if [[ -n "$HISHTORY_SECRET" ]]; then
+        log_info "Initializing with provided secret key..."
+        "$hishtory_bin" init "$HISHTORY_SECRET" 2>/dev/null || true
+    else
+        log_info "Initializing with new secret key..."
+        "$hishtory_bin" init 2>/dev/null || true
+    fi
+
+    log_success "hishtory initialized"
 }
 
 # ==============================================================================
@@ -190,9 +156,8 @@ install_hishtory() {
     log_info "Starting hishtory installation..."
 
     install_hishtory_binary || return 1
-    link_hishtory_config
-    configure_hishtory_s3
-    setup_hishtory_shell_integration
+    setup_hishtory_env
+    init_hishtory
 
     log_success "hishtory installation complete!"
 }
@@ -204,19 +169,16 @@ print_hishtory_info() {
 ${BOLD}hishtory - Better Shell History${NC}
 
 Commands:
-  ${CYAN}hishtory query${NC}      - Search history (Ctrl+R)
+  ${CYAN}hishtory query${NC}      - Search history (or Ctrl+R)
+  ${CYAN}hishtory status${NC}     - Show sync status and secret key
   ${CYAN}hishtory export${NC}     - Export history
-  ${CYAN}hishtory status${NC}     - Show sync status
-  ${CYAN}hishtory config-get${NC} - View configuration
 
-S3 Backend:
-  Configure in ~/.envs/hishtory.env:
-    HISHTORY_S3_ENDPOINT=https://minio.internal.jiun.dev
-    HISHTORY_S3_BUCKET=hishtory
-    HISHTORY_S3_ACCESS_KEY=your-access-key
-    HISHTORY_S3_SECRET_KEY=your-secret-key
+Configuration (~/.envs/hishtory.env):
+  ${CYAN}HISHTORY_SERVER${NC}     - Self-hosted server URL (optional)
+  ${CYAN}HISHTORY_SECRET${NC}     - Secret key for cross-device sync
 
-  Then run: ./install.sh hishtory
+Without HISHTORY_SERVER, hishtory runs in local-only mode.
+To sync across devices, use the same HISHTORY_SECRET on all machines.
 
 EOF
 }
