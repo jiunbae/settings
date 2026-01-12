@@ -305,11 +305,21 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   if [[ -n "$HISHTORY_SECRET" && ! -f "$HOME/.hishtory/.hishtory.db" ]]; then
     (hishtory init "$HISHTORY_SECRET" &>/dev/null &)
   fi
-  # Record history with CWD (preexec hook)
-  __hishtory_preexec() {
-    (HISHTORY_SHELL_NAME=zsh hishtory saveHistoryEntry zsh "$1" &>/dev/null &)
+  # Record history: two-phase capture
+  # Phase 1: After Enter, before execution (captures command)
+  _hishtory_addhistory() {
+    _hishtory_cmd="$1"
+    _hishtory_start=$(date +%s%N)
+    (hishtory presaveHistoryEntry zsh "$_hishtory_cmd" &>/dev/null &)
   }
-  [[ -z "${preexec_functions[(r)__hishtory_preexec]}" ]] && preexec_functions+=(__hishtory_preexec)
+  [[ -z "${zshaddhistory_functions[(r)_hishtory_addhistory]}" ]] && zshaddhistory_functions+=(_hishtory_addhistory)
+  # Phase 2: After execution (captures exit code)
+  _hishtory_precmd() {
+    local exit_code=$?
+    [[ -n "$_hishtory_cmd" ]] && (hishtory saveHistoryEntry zsh $exit_code "$_hishtory_cmd" "$_hishtory_start" &>/dev/null &)
+    unset _hishtory_cmd _hishtory_start
+  }
+  [[ -z "${precmd_functions[(r)_hishtory_precmd]}" ]] && precmd_functions+=(_hishtory_precmd)
   # Ctrl+R binding for interactive search
   _hishtory_search() {
     BUFFER="$(HISHTORY_TERM_INTEGRATION=1 hishtory tquery "$BUFFER")"
