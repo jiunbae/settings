@@ -297,18 +297,17 @@ fi
 
 [[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
 
-# opencode
-export PATH=/Users/jiun/.opencode/bin:$PATH
-
-# opencode
-export PATH=/Users/june/.opencode/bin:$PATH
-
-# bun completions
-[ -s "/Users/june/.bun/_bun" ] && source "/Users/june/.bun/_bun"
-
-# bun
+################################
+# Bun
 export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
+[[ -d "$BUN_INSTALL" ]] && {
+  export PATH="$BUN_INSTALL/bin:$PATH"
+  [[ -s "$BUN_INSTALL/_bun" ]] && source "$BUN_INSTALL/_bun"
+}
+
+################################
+# OpenCode
+[[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
 
 ################################
 # hishtory (better shell history)
