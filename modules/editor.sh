@@ -39,30 +39,40 @@ get_nvim_version() {
     nvim --version 2>/dev/null | head -1 | sed -n 's/.*v\([0-9.]*\).*/\1/p'
 }
 
-# Install NeoVim via AppImage (Linux)
-install_neovim_appimage() {
-    local bin_dir="$HOME/.local/bin"
-    local dest="$bin_dir/nvim"
-    local appimage_url="https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-linux-x86_64.appimage"
+# Install NeoVim via tarball (Linux)
+# Using tarball instead of AppImage to avoid FUSE dependency
+install_neovim_tarball() {
+    local install_dir="$HOME/.local"
+    local bin_dir="$install_dir/bin"
+    local nvim_dir="$install_dir/nvim-linux-x86_64"
+    local tarball_url="https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-linux-x86_64.tar.gz"
+    local tmp_file="/tmp/nvim-linux-x86_64.tar.gz"
 
     mkdir -p "$bin_dir"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would download NeoVim AppImage to $dest"
+        log_info "[DRY-RUN] Would download NeoVim tarball to $install_dir"
         return 0
     fi
 
-    # Remove existing nvim in local bin if present
-    [[ -f "$dest" ]] && rm -f "$dest"
+    # Remove existing nvim installation
+    [[ -d "$nvim_dir" ]] && rm -rf "$nvim_dir"
+    [[ -L "$bin_dir/nvim" ]] && rm -f "$bin_dir/nvim"
 
-    run_with_spinner "Downloading NeoVim v${NVIM_VERSION} AppImage" \
-        curl -fsSL "$appimage_url" -o "$dest"
+    run_with_spinner "Downloading NeoVim v${NVIM_VERSION}" \
+        curl -fsSL "$tarball_url" -o "$tmp_file"
 
-    chmod +x "$dest"
+    run_with_spinner "Extracting NeoVim" \
+        tar -xzf "$tmp_file" -C "$install_dir"
 
-    track_installed "NeoVim v${NVIM_VERSION} (AppImage)"
-    log_success "NeoVim installed to $dest"
-    log_info "Ensure ~/.local/bin is in your PATH (before /usr/bin)"
+    rm -f "$tmp_file"
+
+    # Create symlink in bin directory
+    ln -sf "$nvim_dir/bin/nvim" "$bin_dir/nvim"
+
+    track_installed "NeoVim v${NVIM_VERSION}"
+    log_success "NeoVim installed to $nvim_dir"
+    log_info "Symlinked to $bin_dir/nvim"
 }
 
 install_neovim() {
@@ -93,7 +103,7 @@ install_neovim() {
             log_success "NeoVim installed via Homebrew"
             ;;
         linux|wsl)
-            install_neovim_appimage
+            install_neovim_tarball
             ;;
     esac
 }
