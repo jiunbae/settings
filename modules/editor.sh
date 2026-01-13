@@ -35,8 +35,9 @@ version_gte() {
 }
 
 # Get current nvim version (e.g., "0.9.5")
+# Returns empty string if nvim fails to run (e.g., broken AppImage)
 get_nvim_version() {
-    nvim --version 2>/dev/null | head -1 | sed -n 's/.*v\([0-9.]*\).*/\1/p'
+    (nvim --version 2>/dev/null | head -1 | sed -n 's/.*v\([0-9.]*\).*/\1/p') || echo ""
 }
 
 # Install NeoVim via tarball (Linux)
@@ -82,15 +83,21 @@ install_neovim() {
     if command_exists nvim; then
         local current_version
         current_version=$(get_nvim_version)
-        log_info "NeoVim is already installed: v${current_version}"
 
-        if version_gte "$current_version" "$NVIM_MIN_VERSION"; then
+        # Handle broken nvim (e.g., AppImage without FUSE)
+        if [[ -z "$current_version" ]]; then
+            log_warn "NeoVim found but cannot determine version (possibly broken installation)"
+            log_info "Installing fresh copy..."
+        elif version_gte "$current_version" "$NVIM_MIN_VERSION"; then
             if [[ "$FORCE" != "true" ]]; then
+                log_info "NeoVim is already installed: v${current_version}"
                 log_info "Version meets LazyVim requirement (>= $NVIM_MIN_VERSION)"
                 track_skipped "NeoVim"
                 return 0
             fi
+            log_info "NeoVim is already installed: v${current_version}"
         else
+            log_info "NeoVim is already installed: v${current_version}"
             log_warn "NeoVim $current_version < $NVIM_MIN_VERSION (required for LazyVim)"
             log_info "Installing newer version..."
         fi
