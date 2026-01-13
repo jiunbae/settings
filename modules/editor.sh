@@ -19,40 +19,83 @@ fi
 readonly NVIM_CONFIG_DIR="$HOME/.config/nvim"
 readonly NVIM_DATA_DIR="$HOME/.local/share/nvim"
 readonly NVIM_CACHE_DIR="$HOME/.cache/nvim"
+readonly NVIM_VERSION="0.11.2"
+readonly NVIM_MIN_VERSION="0.11.0"  # Minimum version for LazyVim
 
 # ==============================================================================
 # Installation Functions
 # ==============================================================================
 
+# Compare version strings (returns 0 if $1 >= $2)
+version_gte() {
+    local v1=$1
+    local v2=$2
+    # Use sort -V for version comparison
+    [[ "$(printf '%s\n%s' "$v1" "$v2" | sort -V | head -n1)" == "$v2" ]]
+}
+
+# Get current nvim version (e.g., "0.9.5")
+get_nvim_version() {
+    nvim --version 2>/dev/null | head -1 | sed -n 's/.*v\([0-9.]*\).*/\1/p'
+}
+
+# Install NeoVim via AppImage (Linux)
+install_neovim_appimage() {
+    local bin_dir="$HOME/.local/bin"
+    local dest="$bin_dir/nvim"
+    local appimage_url="https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-linux-x86_64.appimage"
+
+    mkdir -p "$bin_dir"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would download NeoVim AppImage to $dest"
+        return 0
+    fi
+
+    # Remove existing nvim in local bin if present
+    [[ -f "$dest" ]] && rm -f "$dest"
+
+    run_with_spinner "Downloading NeoVim v${NVIM_VERSION} AppImage" \
+        curl -fsSL "$appimage_url" -o "$dest"
+
+    chmod +x "$dest"
+
+    track_installed "NeoVim v${NVIM_VERSION} (AppImage)"
+    log_success "NeoVim installed to $dest"
+    log_info "Ensure ~/.local/bin is in your PATH (before /usr/bin)"
+}
+
 install_neovim() {
     print_section "Installing NeoVim"
 
+    # Check existing installation
     if command_exists nvim; then
-        log_info "NeoVim is already installed: $(nvim --version | head -1)"
-        if [[ "$FORCE" != "true" ]]; then
-            track_skipped "NeoVim"
-            return 0
+        local current_version
+        current_version=$(get_nvim_version)
+        log_info "NeoVim is already installed: v${current_version}"
+
+        if version_gte "$current_version" "$NVIM_MIN_VERSION"; then
+            if [[ "$FORCE" != "true" ]]; then
+                log_info "Version meets LazyVim requirement (>= $NVIM_MIN_VERSION)"
+                track_skipped "NeoVim"
+                return 0
+            fi
+        else
+            log_warn "NeoVim $current_version < $NVIM_MIN_VERSION (required for LazyVim)"
+            log_info "Installing newer version..."
         fi
     fi
 
     case "$PLATFORM" in
         macos)
             pkg_install neovim
+            track_installed "NeoVim"
+            log_success "NeoVim installed via Homebrew"
             ;;
         linux|wsl)
-            # Try to install from apt, fallback to snap if version is too old
-            if pkg_install neovim; then
-                log_success "NeoVim installed via apt"
-            else
-                log_warn "apt installation failed, trying snap..."
-                run_with_spinner "Installing NeoVim via snap" \
-                    sudo snap install nvim --classic
-            fi
+            install_neovim_appimage
             ;;
     esac
-
-    track_installed "NeoVim"
-    log_success "NeoVim installed"
 }
 
 install_lazyvim() {

@@ -21,7 +21,7 @@ get_component_desc() {
     case "$1" in
         base)        echo "Basic packages (curl, wget, git, build-essential)" ;;
         zsh)         echo "Zsh + zinit + Powerlevel10k" ;;
-        nvim)        echo "NeoVim + SpaceVim" ;;
+        nvim)        echo "NeoVim + LazyVim" ;;
         tmux)        echo "tmux + TPM (Tmux Plugin Manager)" ;;
         rust)        echo "Rust toolchain + cargo-binstall" ;;
         uv)          echo "uv (fast Python package manager)" ;;
