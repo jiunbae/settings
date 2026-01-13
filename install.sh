@@ -45,7 +45,7 @@ get_component_name() {
     case "$1" in
         base)        echo "Base packages" ;;
         zsh)         echo "Zsh + zinit + Powerlevel10k" ;;
-        nvim)        echo "NeoVim + SpaceVim" ;;
+        nvim)        echo "NeoVim + LazyVim" ;;
         tmux)        echo "tmux + TPM" ;;
         rust)        echo "Rust toolchain" ;;
         uv)          echo "uv (Python)" ;;
