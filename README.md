@@ -98,7 +98,7 @@ Components:
 | Component | Description |
 |-----------|-------------|
 | [NeoVim](https://neovim.io/) | Hyperextensible Vim-based editor |
-| [SpaceVim](https://spacevim.org/) | Community-driven modular vim distribution |
+| [LazyVim](https://www.lazyvim.org/) | Fast, modern Neovim setup powered by lazy.nvim |
 
 ### Terminal
 | Component | Description |
@@ -168,7 +168,7 @@ settings/
 ├── modules/                # Installation modules
 │   ├── base.sh            #   Basic packages
 │   ├── shell.sh           #   Zsh + zinit + P10k
-│   ├── editor.sh          #   NeoVim + SpaceVim
+│   ├── editor.sh          #   NeoVim + LazyVim
 │   ├── tmux.sh            #   tmux + TPM
 │   ├── rust.sh            #   Rust + cargo-binstall
 │   ├── python.sh          #   uv
@@ -176,12 +176,14 @@ settings/
 │   ├── ssh.sh             #   SSH config
 │   └── hishtory.sh        #   hishtory + self-hosted sync
 ├── scripts/                # Build scripts
-│   └── bundle.sh          #   Create bundled installer
+│   ├── bundle.sh          #   Create bundled installer
+│   └── wsl2-network.ps1   #   WSL2 network setup script
 ├── configs/                # Configuration files
 │   ├── .zshrc
 │   ├── .p10k.zsh
 │   ├── .tmux.conf
-│   └── .SpaceVim.d/
+│   ├── nvim/              #   NeoVim + LazyVim config
+│   └── hishtory/          #   hishtory config template
 └── .github/workflows/      # CI/CD
     └── release.yml         #   Auto-release on tag
 ```
