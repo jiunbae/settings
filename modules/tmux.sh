@@ -68,6 +68,16 @@ install_tpm() {
     log_success "TPM installed"
 }
 
+setup_resurrect_dir() {
+    local resurrect_dir="$HOME/.tmux/resurrect"
+
+    if [[ ! -d "$resurrect_dir" ]]; then
+        log_info "Creating resurrect directory..."
+        mkdir -p "$resurrect_dir"
+        log_success "Resurrect directory created: $resurrect_dir"
+    fi
+}
+
 link_tmux_config() {
     print_section "Linking tmux Configuration"
 
@@ -87,6 +97,24 @@ link_tmux_config() {
 
     backup_and_link "$config_source" "$HOME/.tmux.conf"
     log_success "tmux configuration linked"
+}
+
+reload_tmux_config() {
+    # Skip if tmux server is not running
+    if ! tmux list-sessions &>/dev/null; then
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would reload tmux configuration"
+        return 0
+    fi
+
+    log_info "Reloading tmux configuration..."
+    # Source config in all active sessions
+    tmux source-file "$HOME/.tmux.conf" 2>/dev/null && \
+        log_success "tmux configuration reloaded" || \
+        log_info "Restart tmux or press 'prefix + R' to reload config"
 }
 
 install_tmux_plugins() {
@@ -125,7 +153,9 @@ install_tmux() {
 
     install_tmux_package
     install_tpm
+    setup_resurrect_dir
     link_tmux_config
+    reload_tmux_config
     install_tmux_plugins
 
     log_success "tmux installation complete!"
