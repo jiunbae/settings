@@ -264,13 +264,14 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   fi
 
   _nvm_lazy_load() {
-    unfunction _nvm_lazy_load node npm npx nvm 2>/dev/null
+    unfunction _nvm_lazy_load node npm npx pnpm nvm 2>/dev/null
     source "$NVM_DIR/nvm.sh"
   }
 
   node() { _nvm_lazy_load; command node "$@" }
   npm() { _nvm_lazy_load; command npm "$@" }
   npx() { _nvm_lazy_load; command npx "$@" }
+  pnpm() { _nvm_lazy_load; command pnpm "$@" }
   nvm() { _nvm_lazy_load; nvm "$@" }
 fi
 
