@@ -1,0 +1,39 @@
+# K3s Agent Configuration Template
+# This file can be placed at /etc/rancher/k3s/config.yaml in the VM
+# for advanced K3s agent configuration
+
+# Node name (optional, auto-detected if not set)
+# node-name: "mac-mini-worker-1"
+
+# Node labels
+node-label:
+  - "env=dev"
+  - "purpose=general"
+  - "kubernetes.io/arch=arm64"
+
+# Node taints (optional)
+# Uncomment to taint this node
+# node-taint:
+#   - "arch=arm64:NoSchedule"
+
+# Kubelet arguments
+kubelet-arg:
+  - "max-pods=110"
+  # Resource reservations for system
+  - "system-reserved=cpu=100m,memory=100Mi"
+  - "kube-reserved=cpu=100m,memory=100Mi"
+
+# Private registry configuration (optional)
+# Uncomment and modify for private registries
+# private-registry: "/etc/rancher/k3s/registries.yaml"
+
+# Disable features (optional)
+# disable:
+#   - servicelb
+#   - traefik
+
+# Logging
+# log: "/var/log/k3s-agent.log"
+
+# Debug mode (verbose logging)
+# debug: true
