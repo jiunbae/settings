@@ -258,9 +258,11 @@ export NVM_DIR="$HOME/.nvm"
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   # Add node to PATH for immediate availability (uses default version if set via `nvm alias default`)
   if [[ -f "$NVM_DIR/alias/default" ]]; then
-    nvm_default_version=$(<"$NVM_DIR/alias/default")
-    nvm_default_path="$NVM_DIR/versions/node/$nvm_default_version/bin"
-    [[ -d "$nvm_default_path" ]] && PATH="$nvm_default_path:$PATH"
+    nvm_default_alias=$(<"$NVM_DIR/alias/default")
+    # Resolve alias to actual version directory (e.g., "22" -> "v22.13.1")
+    _nvm_dirs=("$NVM_DIR"/versions/node/v${nvm_default_alias}*(N))
+    [[ -n "${_nvm_dirs[1]}" ]] && PATH="${_nvm_dirs[1]}/bin:$PATH"
+    unset _nvm_dirs
   fi
 
   _nvm_lazy_load() {
