@@ -277,6 +277,10 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   nvm() { _nvm_lazy_load; nvm "$@" }
 fi
 
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
+  [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"  # This loads nvm bash_completion
+
 ################################
 # uv (Python package manager) - cached completion
 if (( $+commands[uv] )); then
@@ -318,6 +322,7 @@ export BUN_INSTALL="$HOME/.bun"
 #   HISHTORY_SERVER="https://hishtory.example.com"
 #   HISHTORY_SECRET="your-secret-key"
 # Without these, hishtory runs in local-only mode
+[[ -f "$HOME/.envs/hishtory.env" ]] && source "$HOME/.envs/hishtory.env"
 if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   [[ -f "$HOME/.hishtory/hishtory" ]] && export PATH="$HOME/.hishtory:$PATH"
   # Auto-init with secret if configured but not yet initialized
@@ -348,3 +353,17 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   zle -N _hishtory_search
   bindkey '^R' _hishtory_search
 fi
+
+# opencode
+export PATH=${HOME}/.opencode/bin:$PATH
+
+# bun completions
+[ -s "${HOME}/.bun/_bun" ] && source "${HOME}/.bun/_bun"
+
+# pnpm
+export PNPM_HOME="${HOME}/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
