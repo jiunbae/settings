@@ -3,6 +3,7 @@
 .env.*
 .env.local
 .env.production
+scripts/mac-mini-k3s/config.env
 *.pem
 *.key
 *.p12
