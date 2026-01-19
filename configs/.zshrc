@@ -216,6 +216,10 @@ export LANG=en_US.UTF-8
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 ################################
+# Rust/Cargo (must be before Modern CLI Tools for eza, fd, rg, etc.)
+[ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+
+################################
 # Modern CLI Tools (using $+commands for faster lookup)
 ## eza (ls replacement)
 if (( $+commands[eza] )); then
@@ -245,10 +249,6 @@ if (( $+commands[btm] )); then
   alias top='btm'
   alias htop='btm'
 fi
-
-################################
-# Rust/Cargo
-[ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
 ################################
 # Node.js (NVM) - Lazy loading for faster shell startup
