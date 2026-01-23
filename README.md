@@ -105,6 +105,7 @@ Components:
 |-----------|-------------|
 | [tmux](https://github.com/tmux/tmux) | Terminal multiplexer |
 | [TPM](https://github.com/tmux-plugins/tpm) | Tmux Plugin Manager |
+| [Windows Terminal](https://aka.ms/terminal) | Modern terminal for Windows |
 
 ### Development Tools
 | Component | Description |
@@ -183,7 +184,8 @@ settings/
 │   ├── .p10k.zsh
 │   ├── .tmux.conf
 │   ├── nvim/              #   NeoVim + LazyVim config
-│   └── hishtory/          #   hishtory config template
+│   ├── hishtory/          #   hishtory config template
+│   └── windows-terminal/  #   Windows Terminal configuration
 └── .github/workflows/      # CI/CD
     └── release.yml         #   Auto-release on tag
 ```
@@ -249,6 +251,20 @@ alias top='btm'
 alias vim='nvim'
 alias vi='nvim'
 ```
+
+## Windows Terminal Configuration
+
+Configuration for Windows Terminal is available in `configs/windows-terminal/settings.json`.
+
+### How to apply
+
+1. Open Windows Terminal
+2. Press `Ctrl + ,` to open Settings
+3. Click **Open JSON file** at the bottom of the left sidebar
+4. Copy the contents of `configs/windows-terminal/settings.json` and paste them into your `settings.json`
+
+> [!TIP]
+> This configuration uses **JetBrainsMonoNL Nerd Font**. Make sure it's installed on your Windows system for the best experience.
 
 ## Troubleshooting
 
