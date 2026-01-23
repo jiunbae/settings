@@ -34,6 +34,7 @@ FORCE=${FORCE:-false}
 NO_SUDO=${NO_SUDO:-false}
 LINK_MODE=${LINK_MODE:-symlink}  # symlink or copy
 LOG_FILE="${LOG_FILE:-$HOME/.install.log}"
+SUDO_VALIDATED=${SUDO_VALIDATED:-false}
 
 # Progress state (initialized here, used by logging)
 PROGRESS_TOTAL=0
@@ -100,6 +101,49 @@ log_error() {
 log_debug() {
     if [[ "$VERBOSE" == "true" ]]; then
         _log "DEBUG" "$CYAN" "$@"
+    fi
+}
+
+# ==============================================================================
+# Sudo Handling
+# ==============================================================================
+
+# Validate sudo credentials upfront (before any background commands)
+# This prompts for password interactively if needed
+validate_sudo() {
+    # Skip if already validated, no-sudo mode, or running as root
+    if [[ "$SUDO_VALIDATED" == "true" ]] || [[ "$NO_SUDO" == "true" ]] || [[ $EUID -eq 0 ]]; then
+        return 0
+    fi
+
+    # Skip if sudo command doesn't exist
+    if ! command_exists sudo; then
+        return 0
+    fi
+
+    # Check if sudo requires a password
+    if sudo -n true 2>/dev/null; then
+        # Passwordless sudo works
+        SUDO_VALIDATED=true
+        export SUDO_VALIDATED
+        return 0
+    fi
+
+    # Need to prompt for password - do it now while we have TTY
+    echo ""
+    printf "  ${YELLOW}⚠${NC} Administrator privileges required for package installation.\n"
+    printf "  ${CYAN}▸${NC} Please enter your password:\n"
+    echo ""
+
+    if sudo -v; then
+        SUDO_VALIDATED=true
+        export SUDO_VALIDATED
+        # Keep sudo alive in background
+        (while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done) &
+        return 0
+    else
+        log_warn "Failed to obtain sudo privileges"
+        return 1
     fi
 }
 
@@ -285,14 +329,14 @@ progress_draw_header() {
     # Move to top
     printf "${ESC}[H"
 
-    # Draw header
+    # Draw header (box inner width: 62 chars)
     printf "${BOLD}${BLUE}"
     printf "╔══════════════════════════════════════════════════════════════╗\n"
-    printf "║${NC}${BOLD}  Settings Installer                                         ${BLUE}║\n"
+    printf "║${NC}${BOLD}  Settings Installer                                          ${BLUE}║\n"
     printf "╠══════════════════════════════════════════════════════════════╣\n"
     printf "║${NC}"
 
-    # Progress bar
+    # Progress bar: " [" + 50 bar + "] " + "100%" + spaces = 62
     local progress=0
     if [[ $PROGRESS_TOTAL -gt 0 ]]; then
         progress=$((PROGRESS_CURRENT * 100 / PROGRESS_TOTAL))
@@ -306,9 +350,16 @@ progress_draw_header() {
     printf "${NC}"
     for ((i=0; i<empty; i++)); do printf "░"; done
     printf "] %3d%%" "$progress"
-    printf "${BLUE}     ║\n"
+    printf "${BLUE}    ║\n"
 
-    printf "║${NC}  ${CYAN}[%d/%d]${NC} %-52s${BLUE}║\n" "$PROGRESS_CURRENT" "$PROGRESS_TOTAL" "$PROGRESS_COMPONENT"
+    # Component line: "  " + "[n/m]" + " " + component + padding = 62
+    local counter_str="[${PROGRESS_CURRENT}/${PROGRESS_TOTAL}]"
+    local counter_len=${#counter_str}
+    local available_space=$((62 - 2 - counter_len - 1))
+    local component_display="${PROGRESS_COMPONENT:0:$available_space}"
+    local component_len=${#component_display}
+    local padding=$((available_space - component_len))
+    printf "║${NC}  ${CYAN}%s${NC} %s%*s${BLUE}║\n" "$counter_str" "$component_display" "$padding" ""
     printf "╚══════════════════════════════════════════════════════════════╝${NC}\n"
     printf "\n"
 
