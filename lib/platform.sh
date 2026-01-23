@@ -132,6 +132,11 @@ pkg_update() {
                 log_warn "Skipping apt update (--no-sudo mode)"
                 return 0
             fi
+            # Validate sudo credentials before running in background
+            validate_sudo || {
+                log_warn "Skipping apt update (no sudo privileges)"
+                return 0
+            }
             run_with_spinner "Updating package lists" $PKG_SUDO apt-get update -qq
             ;;
         brew)
@@ -153,6 +158,14 @@ pkg_install() {
     if [[ "$PKG_MANAGER" == "apt" ]] && [[ "$NO_SUDO" == "true" ]] && [[ $EUID -ne 0 ]]; then
         log_warn "Skipping package installation (--no-sudo mode): ${packages[*]}"
         return 0
+    fi
+
+    # Validate sudo credentials before running apt commands in background
+    if [[ "$PKG_MANAGER" == "apt" ]] && [[ $EUID -ne 0 ]]; then
+        validate_sudo || {
+            log_warn "Skipping package installation (no sudo privileges)"
+            return 0
+        }
     fi
 
     # Install packages one by one for better progress display

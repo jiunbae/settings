@@ -74,6 +74,14 @@ main() {
     detect_platform >/dev/null 2>&1 || detect_platform
     setup_package_manager >/dev/null 2>&1 || setup_package_manager
 
+    # On Linux/WSL, validate sudo credentials upfront (before UI starts)
+    # This ensures password prompt appears before progress display
+    if [[ "$PLATFORM" == "linux" || "$PLATFORM" == "wsl" ]]; then
+        if [[ "$NO_SUDO" != "true" ]] && [[ "$DRY_RUN" != "true" ]] && [[ $EUID -ne 0 ]]; then
+            validate_sudo || true  # Continue even if sudo fails
+        fi
+    fi
+
     # Initialize progress display
     local total=${#SELECTED_COMPONENTS[@]}
     progress_init "$total" "${SELECTED_COMPONENTS[@]}"
