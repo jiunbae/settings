@@ -52,6 +52,8 @@ fi
 unset _zcompdump _zcompdump_day
 
 # Completion plugins (turbo mode with blockf to track fpath changes)
+# Disable ZSH_TMUX_FIXTERM to avoid tmux.extra.conf error
+export ZSH_TMUX_FIXTERM=false
 zinit wait lucid blockf for \
     zsh-users/zsh-completions \
     OMZP::tmux
