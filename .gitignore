@@ -61,3 +61,4 @@ cmake-build-*/
 .vs/
 
 .claude/
+.DS_Store
