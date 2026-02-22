@@ -21,6 +21,12 @@ Modern dotfiles installer with animated progress display.
 >   git clone https://github.com/jiunbae/settings.git ~/.settings
 >   cd ~/.settings && ./install.sh --all
 >
+> Presets:
+>   ./install.sh              # Interactive selector (pick components in a menu)
+>   ./install.sh --all        # Install everything
+>   ./install.sh --core       # Core dev environment (base, zsh, nvim, tmux, tools)
+>   ./install.sh --basic      # Minimal (base, zsh, nvim, tmux)
+>
 > Available components (pick specific ones instead of --all if needed):
 >   base      - Basic packages (curl, wget, git, build-essential)
 >   zsh       - Zsh + zinit + Powerlevel10k theme
