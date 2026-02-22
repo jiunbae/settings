@@ -32,30 +32,42 @@ import os
 import sys
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
 VAULT_ROOT = Path.home() / "s-lastorder"
+SCRIPT_DIR = Path(__file__).resolve().parent
 
-# CouchDB 설정 (환경변수 또는 기본값)
+def _load_env_file() -> None:
+    """스크립트 디렉토리의 .env 파일에서 환경변수 로드 (기존 값 덮어쓰지 않음)"""
+    env_file = SCRIPT_DIR / ".env"
+    if not env_file.exists():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key not in os.environ:
+            os.environ[key] = value
+
+_load_env_file()
+
+# CouchDB 설정 (환경변수 → .env → 기본값)
 COUCHDB_URI = os.environ.get("COUCHDB_URI", "https://your-couchdb-server")
 COUCHDB_USER = os.environ.get("COUCHDB_USER", "admin")
 COUCHDB_PASSWORD = os.environ.get("COUCHDB_PASSWORD", "")
 COUCHDB_DB = os.environ.get("COUCHDB_DB", "obsidian")
-
-if not COUCHDB_PASSWORD:
-    print("Error: COUCHDB_PASSWORD environment variable is required", file=sys.stderr)
-    print("Set it with: export COUCHDB_PASSWORD='your-password'", file=sys.stderr)
-    sys.exit(1)
-
-# 동시 요청 수
-MAX_WORKERS = 10
 
 # 제외 패턴
 EXCLUDE_PATTERNS = [
@@ -63,10 +75,56 @@ EXCLUDE_PATTERNS = [
     ".git/",
     ".DS_Store",
     "node_modules/",
+    "scripts/",
 ]
 
 
-def couchdb_request(path: str, method: str = "GET", data: dict = None) -> dict:
+def print_env_diagnostics() -> None:
+    """Print env-related diagnostics (never prints secrets)."""
+    print("\n[Env Diagnostics]")
+    print(f"  cwd: {os.getcwd()}")
+    print(f"  python: {sys.executable}")
+    print(f"  platform: {sys.platform}")
+
+    def _mask_len(name: str) -> None:
+        val = os.environ.get(name)
+        present = val is not None
+        length = len(val or "")
+        print(f"  {name}: present={present} len={length}")
+
+    _mask_len("COUCHDB_URI")
+    _mask_len("COUCHDB_USER")
+    _mask_len("COUCHDB_PASSWORD")
+    _mask_len("COUCHDB_DB")
+
+    # Common env vars that affect uv / venvs / dotenv behavior.
+    for name in [
+        "UV_ENV_FILE",
+        "UV_NO_ENV_FILE",
+        "VIRTUAL_ENV",
+        "CONDA_PREFIX",
+        "PYTHONPATH",
+    ]:
+        val = os.environ.get(name)
+        if val:
+            print(f"  {name}: {val}")
+
+
+def validate_config() -> None:
+    if not COUCHDB_PASSWORD:
+        env_path = SCRIPT_DIR / ".env"
+        print("Error: COUCHDB_PASSWORD is required", file=sys.stderr)
+        print(f"\nCreate {env_path} with:", file=sys.stderr)
+        print("  COUCHDB_PASSWORD=your-password", file=sys.stderr)
+        print("\nOr set environment variable:", file=sys.stderr)
+        if os.name == "nt":
+            print("  PowerShell: $env:COUCHDB_PASSWORD='your-password'", file=sys.stderr)
+        else:
+            print("  export COUCHDB_PASSWORD='your-password'", file=sys.stderr)
+        sys.exit(1)
+
+
+def couchdb_request(path: str, method: str = "GET", data: dict = None, timeout: int = 30) -> dict:
     """CouchDB API 요청"""
     url = f"{COUCHDB_URI}/{COUCHDB_DB}/{path}"
 
@@ -85,12 +143,25 @@ def couchdb_request(path: str, method: str = "GET", data: dict = None) -> dict:
     req.add_header('User-Agent', 'vault-pull/1.0')
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None
-        raise
+        body = ""
+        try:
+            raw = e.read()
+            if raw:
+                body = raw.decode("utf-8", errors="replace").strip()
+        except Exception:
+            body = ""
+
+        msg = f"HTTP Error {e.code}: {e.reason} ({url})"
+        if body:
+            if len(body) > 2000:
+                body = body[:2000] + "...<truncated>"
+            msg += f"\nResponse body: {body}"
+        raise RuntimeError(msg) from e
 
 
 def get_all_documents(path_filter: Optional[str] = None) -> list[dict]:
@@ -105,16 +176,18 @@ def get_all_documents(path_filter: Optional[str] = None) -> list[dict]:
 
     if path_filter:
         # 특정 경로로 시작하는 문서만
-        start_key = urllib.request.quote(f'"{path_filter}"')
-        end_key = urllib.request.quote(f'"{path_filter}\ufff0"')
+        start_key = urllib.parse.quote(json.dumps(path_filter), safe='')
+        end_key = urllib.parse.quote(json.dumps(f"{path_filter}\ufff0"), safe='')
         queries = [f"_all_docs?include_docs=true&startkey={start_key}&endkey={end_key}"]
     else:
         # 청크(h:)를 제외하기 위해 두 범위로 나눔:
-        # 1. 처음 ~ h: 이전 (!, ", #, $, ... g, gz 등)
-        # 2. h; 이후 ~ 끝 (i, j, k, ... z, 한글 등)
+        # 1. 처음 ~ "h:" (inclusive)
+        # 2. "h;" ~ 끝 ("h;"는 "h:" 바로 다음 → 모든 h:* 청크를 건너뜀)
+        end_key = urllib.parse.quote(json.dumps("h:"), safe='')
+        start_key = urllib.parse.quote(json.dumps("h;"), safe='')  # ';' sorts right after ':'.
         queries = [
-            '_all_docs?include_docs=true&endkey=%22h:%22',  # 처음 ~ h: 이전
-            '_all_docs?include_docs=true&startkey=%22i%22',  # i 이후 ~ 끝
+            f'_all_docs?include_docs=true&endkey={end_key}',  # 처음 ~ "h:"
+            f'_all_docs?include_docs=true&startkey={start_key}',  # "h;" ~ 끝
         ]
 
     for query in queries:
@@ -133,57 +206,74 @@ def get_all_documents(path_filter: Optional[str] = None) -> list[dict]:
             if doc_id.startswith('_'):
                 continue
 
-            # children이 있는 문서만 (파일 문서)
-            if 'children' in doc:
+            # 파일 문서: children(chunked) 또는 data(plain) 필드가 있는 문서
+            if 'children' in doc or 'data' in doc:
                 documents.append(doc)
 
     return documents
 
 
-def get_chunk(chunk_id: str) -> Optional[str]:
-    """청크 데이터 가져오기"""
+def batch_fetch_chunks(chunk_ids: list[str], batch_size: int = 500) -> dict[str, str]:
+    """Batch fetch chunk data from CouchDB using _all_docs POST with keys."""
+    if not chunk_ids:
+        return {}
+
+    chunk_cache: dict[str, str] = {}
+    total = len(chunk_ids)
+
+    for i in range(0, total, batch_size):
+        batch = chunk_ids[i:i + batch_size]
+        batch_num = i // batch_size + 1
+        total_batches = (total + batch_size - 1) // batch_size
+        print(f"  Batch {batch_num}/{total_batches} ({len(batch)} chunks)...")
+
+        result = couchdb_request(
+            "_all_docs?include_docs=true",
+            method="POST",
+            data={"keys": batch},
+            timeout=120,
+        )
+
+        if not result:
+            print(f"  Warning: Batch {batch_num} returned no result", file=sys.stderr)
+            continue
+
+        for row in result.get('rows', []):
+            if 'error' in row:
+                continue
+            doc = row.get('doc')
+            if doc and '_id' in doc:
+                chunk_cache[doc['_id']] = doc.get('data', '')
+
+    return chunk_cache
+
+
+def try_decode_base64(content: str) -> tuple:
+    """
+    Detect and decode base64-encoded content from LiveSync.
+
+    LiveSync stores non-markdown files (e.g. .py, images) as base64.
+    Base64 content from LiveSync is always a single line (no newlines).
+
+    Returns: (decoded_content, is_binary)
+      - is_binary=False: content is str (text)
+      - is_binary=True: content is bytes (binary)
+    """
+    # Multi-line content is plain text
+    if '\n' in content or len(content) < 4:
+        return content, False
+
+    # Try strict base64 decode
     try:
-        chunk_url = urllib.request.quote(chunk_id, safe='')
-        chunk_doc = couchdb_request(chunk_url)
-        if chunk_doc:
-            return chunk_doc.get('data', '')
-    except Exception as e:
-        print(f"  Warning: Failed to get chunk {chunk_id}: {e}", file=sys.stderr)
-    return None
+        decoded = base64.b64decode(content, validate=True)
+    except Exception:
+        return content, False
 
-
-def get_document_content(doc: dict) -> Optional[str]:
-    """문서의 전체 내용 조합"""
-    children = doc.get('children', [])
-    if not children:
-        return ""
-
-    # 병렬로 청크 가져오기
-    chunks = {}
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_to_idx = {
-            executor.submit(get_chunk, chunk_id): idx
-            for idx, chunk_id in enumerate(children)
-        }
-
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            try:
-                chunk_data = future.result()
-                if chunk_data is not None:
-                    chunks[idx] = chunk_data
-            except Exception as e:
-                print(f"  Warning: Chunk fetch error: {e}", file=sys.stderr)
-
-    # 순서대로 조합
-    content_parts = []
-    for idx in range(len(children)):
-        if idx in chunks:
-            content_parts.append(chunks[idx])
-        else:
-            print(f"  Warning: Missing chunk at index {idx}", file=sys.stderr)
-
-    return ''.join(content_parts)
+    # Try to interpret as UTF-8 text
+    try:
+        return decoded.decode('utf-8'), False
+    except UnicodeDecodeError:
+        return decoded, True
 
 
 def should_exclude(path: str) -> bool:
@@ -328,7 +418,7 @@ def pull_documents(
     dry_run: bool = False,
     verbose: bool = False
 ) -> dict:
-    """CouchDB에서 문서 pull"""
+    """CouchDB에서 문서 pull (batch chunk fetching)"""
 
     stats = {
         'total': 0,
@@ -347,17 +437,15 @@ def pull_documents(
     stats['total'] = len(documents)
     print(f"  Total documents: {len(documents)}")
 
-    print()
-
+    # Phase 1: Filter documents (exclude patterns, mtime check)
+    docs_to_pull = []
     for doc in documents:
         doc_id = doc.get('_id', '')
         doc_path = doc.get('path', doc_id)
 
-        # 경로 정리 (앞의 / 제거)
         if doc_path.startswith('/'):
             doc_path = doc_path[1:]
 
-        # 제외 패턴 확인
         if should_exclude(doc_path):
             if verbose:
                 print(f"  [SKIP] {doc_path} (excluded)")
@@ -366,48 +454,79 @@ def pull_documents(
 
         local_path = VAULT_ROOT / doc_path
 
-        # mtime 확인 (changed_only 모드)
         if changed_only and local_path.exists():
             local_mtime = datetime.fromtimestamp(local_path.stat().st_mtime)
             remote_mtime_str = doc.get('mtime', '')
-
             if remote_mtime_str:
                 try:
-                    # ISO 형식 또는 timestamp
                     if 'T' in str(remote_mtime_str):
                         remote_mtime = datetime.fromisoformat(remote_mtime_str.replace('Z', '+00:00'))
                     else:
                         remote_mtime = datetime.fromtimestamp(int(remote_mtime_str) / 1000)
-
                     if remote_mtime <= local_mtime:
                         if verbose:
                             print(f"  [SKIP] {doc_path} (not changed)")
                         stats['skipped'] += 1
                         continue
                 except:
-                    pass  # mtime 파싱 실패시 무시하고 진행
+                    pass
 
-        # 문서 내용 가져오기
-        try:
-            content = get_document_content(doc)
-            if content is None:
-                print(f"  [ERROR] {doc_path} (failed to get content)")
-                stats['errors'] += 1
-                continue
-        except Exception as e:
-            print(f"  [ERROR] {doc_path}: {e}")
-            stats['errors'] += 1
-            continue
+        docs_to_pull.append((doc, doc_path, local_path))
 
-        # 파일 쓰기
+    print(f"  To pull: {len(docs_to_pull)}  Skipped: {stats['skipped']}")
+
+    # Phase 2: Collect all chunk IDs
+    all_chunk_ids = []
+    seen_ids: set[str] = set()
+    for doc, _, _ in docs_to_pull:
+        for chunk_id in doc.get('children', []):
+            if chunk_id not in seen_ids:
+                all_chunk_ids.append(chunk_id)
+                seen_ids.add(chunk_id)
+
+    # Phase 3: Batch fetch all chunks
+    chunk_cache: dict[str, str] = {}
+    if all_chunk_ids:
+        print(f"\n[Pull] Fetching {len(all_chunk_ids)} unique chunks...")
+        chunk_cache = batch_fetch_chunks(all_chunk_ids)
+        print(f"  Cached: {len(chunk_cache)} chunks")
+
+    # Phase 4: Assemble and write files
+    print(f"\n[Pull] Writing {len(docs_to_pull)} files...")
+    for doc, doc_path, local_path in docs_to_pull:
+        children = doc.get('children', [])
+
+        # Assemble content
+        if not children:
+            content = doc.get('data', '')
+        else:
+            parts = []
+            missing = 0
+            for chunk_id in children:
+                chunk_data = chunk_cache.get(chunk_id)
+                if chunk_data is not None:
+                    parts.append(chunk_data)
+                else:
+                    missing += 1
+            if missing:
+                print(f"  [WARN] {doc_path}: {missing} missing chunks", file=sys.stderr)
+            content = ''.join(parts)
+
+        # Decode base64 if needed (LiveSync stores non-md files as base64)
+        content, is_binary = try_decode_base64(content)
+
         action = "UPDATE" if local_path.exists() else "CREATE"
 
         if dry_run:
-            print(f"  [{action}] {doc_path} ({len(content)} chars)")
+            size = len(content) if isinstance(content, str) else len(content)
+            print(f"  [{action}] {doc_path} ({size} bytes)")
         else:
             try:
                 local_path.parent.mkdir(parents=True, exist_ok=True)
-                local_path.write_text(content, encoding='utf-8')
+                if is_binary:
+                    local_path.write_bytes(content)
+                else:
+                    local_path.write_text(content, encoding='utf-8')
 
                 # mtime 설정
                 mtime_str = doc.get('mtime', '')
@@ -422,7 +541,7 @@ def pull_documents(
                         pass
 
                 if verbose:
-                    print(f"  [{action}] {doc_path} ({len(content)} chars)")
+                    print(f"  [{action}] {doc_path}")
             except Exception as e:
                 print(f"  [ERROR] {doc_path}: {e}")
                 stats['errors'] += 1
@@ -444,12 +563,20 @@ def main():
     parser.add_argument('--delete-orphans', action='store_true',
                         help='Delete local files not in CouchDB (orphan cleanup)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('--print-env', action='store_true',
+                        help='Print env diagnostics (does not print secrets) and exit')
 
     args = parser.parse_args()
 
     print("=" * 60)
     print("Obsidian Vault Pull")
     print("=" * 60)
+
+    if args.print_env:
+        print_env_diagnostics()
+        return
+
+    validate_config()
 
     if args.dry_run:
         print("[DRY RUN] No changes will be made")
