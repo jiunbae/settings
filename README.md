@@ -105,16 +105,22 @@ cd settings
 Usage: install.sh [OPTIONS] [COMPONENTS...]
 
 Options:
+  -i, --interactive   Interactive component selector (default when no args)
   -a, --all           Install all components
+  --core              Install core dev environment (base, zsh, nvim, tmux, tools)
+  -b, --basic         Install basic dev environment (base, zsh, nvim, tmux)
   -f, --force         Force reinstall (overwrite existing)
+  -c, --copy          Copy config files instead of symlink
+  -l, --link          Create symlinks for config files (default)
   -v, --verbose       Enable verbose output
   -n, --dry-run       Show what would be done
+  --no-sudo           Skip commands that require sudo privileges
   -h, --help          Show help message
 
 Components:
   base          Basic packages (curl, wget, git, build-essential)
   zsh           Zsh + zinit + Powerlevel10k
-  nvim          NeoVim + SpaceVim
+  nvim          NeoVim + LazyVim
   tmux          tmux + TPM (Tmux Plugin Manager)
   rust          Rust toolchain + cargo-binstall
   uv            uv (fast Python package manager)
@@ -217,6 +223,9 @@ settings/
 │   ├── tools.sh           #   CLI tools
 │   ├── ssh.sh             #   SSH config
 │   └── hishtory.sh        #   hishtory + self-hosted sync
+├── worker/                 # Cloudflare Worker (settings.jiun.dev)
+│   ├── index.js           #   Proxy raw GitHub content
+│   └── wrangler.toml      #   Wrangler configuration
 ├── scripts/                # Build scripts
 │   ├── bundle.sh          #   Create bundled installer
 │   └── wsl2-network.ps1   #   WSL2 network setup script
