@@ -52,6 +52,83 @@ SELECTED_COMPONENTS=()
 # Interactive Component Selector
 # ==============================================================================
 
+# Try to install gum for a modern TUI experience
+_ensure_gum() {
+    command -v gum &>/dev/null && return 0
+
+    # Auto-install via Homebrew (macOS/Linux)
+    if command -v brew &>/dev/null; then
+        echo -e "${BLUE}[INFO]${NC} Installing gum for interactive UI..."
+        brew install gum &>/dev/null && return 0
+    fi
+
+    # Auto-install via apt (Debian/Ubuntu) — Charm repo
+    if command -v apt-get &>/dev/null && [[ -w /etc/apt/ || $EUID -eq 0 ]]; then
+        echo -e "${BLUE}[INFO]${NC} Installing gum for interactive UI..."
+        (
+            sudo mkdir -p /etc/apt/keyrings 2>/dev/null
+            curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg 2>/dev/null
+            echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
+            sudo apt-get update -qq && sudo apt-get install -y -qq gum
+        ) &>/dev/null && return 0
+    fi
+
+    return 1
+}
+
+# Build items with descriptions for gum display
+_gum_item_label() {
+    printf "%-12s  %s" "$1" "$(get_component_desc "$1")"
+}
+
+# Modern interactive menu using gum
+_show_gum_menu() {
+    local items=()
+    local selected_csv=""
+
+    # Build item labels and selected list
+    for comp in "${COMPONENTS_ORDER[@]}"; do
+        items+=("$(_gum_item_label "$comp")")
+    done
+
+    # Build comma-separated selected items (by label)
+    for comp in "${CORE_COMPONENTS[@]}"; do
+        local label
+        label="$(_gum_item_label "$comp")"
+        if [[ -z "$selected_csv" ]]; then
+            selected_csv="$label"
+        else
+            selected_csv="$selected_csv,$label"
+        fi
+    done
+
+    local result
+    result=$(gum choose --no-limit \
+        --header="Settings Installer v${VERSION} — Select components to install:" \
+        --header.foreground="12" \
+        --cursor-prefix="  [ ] " \
+        --selected-prefix="  [x] " \
+        --unselected-prefix="  [ ] " \
+        --selected="$selected_csv" \
+        "${items[@]}") || { echo "Aborted."; exit 0; }
+
+    # Parse selected component names from labels
+    SELECTED_COMPONENTS=()
+    while IFS= read -r line; do
+        # Extract component name (first word before spaces)
+        local comp_name
+        comp_name=$(echo "$line" | awk '{print $1}')
+        if is_valid_component "$comp_name"; then
+            SELECTED_COMPONENTS+=("$comp_name")
+        fi
+    done <<< "$result"
+
+    if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
+        echo "No components selected."
+        exit 0
+    fi
+}
+
 # Check if a component is in a preset array
 _in_preset() {
     local comp="$1"
@@ -63,7 +140,8 @@ _in_preset() {
     return 1
 }
 
-show_interactive_menu() {
+# Fallback ANSI menu (when gum is not available)
+_show_fallback_menu() {
     local num_components=${#COMPONENTS_ORDER[@]}
 
     # Toggle state array (0=off, 1=on) — default to core preset
@@ -171,6 +249,15 @@ show_interactive_menu() {
 
     # Clear screen before starting installation
     printf "${ESC}[2J${ESC}[H"
+}
+
+# Main interactive menu — tries gum first, falls back to ANSI
+show_interactive_menu() {
+    if _ensure_gum; then
+        _show_gum_menu
+    else
+        _show_fallback_menu
+    fi
 }
 
 # ==============================================================================
