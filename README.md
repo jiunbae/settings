@@ -7,45 +7,8 @@
 Modern dotfiles installer with animated progress display.
 
 > [!NOTE]
-> ## AI Agent Setup Prompt
->
-> Use the following instructions to install this dotfiles repo on a new machine.
->
-> ```
-> Clone and run the dotfiles installer from https://github.com/jiunbae/settings
->
-> Quick install (recommended):
->   curl -LsSf https://settings.jiun.dev | bash -s -- --all
->
-> Or clone manually:
->   git clone https://github.com/jiunbae/settings.git ~/.settings
->   cd ~/.settings && ./install.sh --all
->
-> Presets:
->   ./install.sh              # Interactive selector (pick components in a menu)
->   ./install.sh --all        # Install everything
->   ./install.sh --core       # Core dev environment (base, zsh, nvim, tmux, tools)
->   ./install.sh --basic      # Minimal (base, zsh, nvim, tmux)
->
-> Available components (pick specific ones instead of --all if needed):
->   base      - Basic packages (curl, wget, git, build-essential)
->   zsh       - Zsh + zinit + Powerlevel10k theme
->   nvim      - NeoVim + LazyVim
->   tmux      - tmux + TPM plugin manager
->   rust      - Rust toolchain + cargo-binstall
->   uv        - uv (fast Python package manager)
->   tools     - Modern CLI tools (eza, fd, bat, ripgrep, fzf)
->   tools-extra - Extra CLI tools (delta, dust, procs, bottom)
->   ssh       - SSH config (copy mode, not symlinked)
->   hishtory  - Shell history with search and sync
->
-> Example: ./install.sh zsh nvim tmux tools
->
-> Post-install: run `exec zsh` to reload the shell.
-> The installer is idempotent - safe to run multiple times.
-> Use --dry-run to preview changes before applying.
-> Use --force to overwrite existing configs.
-> ```
+> **AI Agent Setup** — Install dotfiles from this repo: `curl -LsSf https://settings.jiun.dev | bash -s -- --all`
+> See [Usage](#usage) and [Components](#components) for details. Run `./install.sh --help` for all options.
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -65,30 +28,31 @@ Modern dotfiles installer with animated progress display.
 ### One-Line Install (Recommended)
 
 ```bash
-# Install everything with a single command
+# Install everything
 curl -LsSf https://settings.jiun.dev | bash -s -- --all
 
-# Or install specific components
+# Install specific components
 curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim tmux
-```
 
-### Using Release (Bundled Installer)
-
-```bash
-# Download and run the bundled installer (no git required)
-curl -fsSL https://github.com/jiunbae/settings/releases/latest/download/install-bundled.sh | bash -s -- --all
+# Interactive selector
+curl -LsSf https://settings.jiun.dev | bash -s -- --interactive
 ```
 
 ### Manual Clone
 
 ```bash
-# Clone and install everything
 git clone https://github.com/jiunbae/settings.git
 cd settings
 ./install.sh --all
+```
 
-# Or install specific components
-./install.sh zsh nvim tmux rust tools
+### Presets
+
+```bash
+./install.sh              # Interactive selector (pick components in a menu)
+./install.sh --all        # Install everything
+./install.sh --core       # Core dev environment (base, zsh, nvim, tmux, tools)
+./install.sh --basic      # Minimal (base, zsh, nvim, tmux)
 ```
 
 ## Features
