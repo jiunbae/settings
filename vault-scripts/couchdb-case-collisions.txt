@@ -1,0 +1,302 @@
+CouchDB Case-Only Path Collisions
+
+Total remote file docs: 5456
+Collision keys (case-insensitive): 27
+
+================================================================================
+KEY(casefold): workspace/calex/context/always-listen-수익화-전략.md
+Variants: 2
+- workspace/calex/context/Always-Listen-수익화-전략.md
+  _id: workspace/calex/context/Always-Listen-수익화-전략.md
+  mtime: 2026-01-23T16:43:46.461223
+  _rev: 5-fd846a6cd70ec27388222a0d33939e3b
+- workspace/calex/context/always-listen-수익화-전략.md
+  _id: workspace/calex/context/always-listen-수익화-전략.md
+  mtime: 2026-01-23T16:43:46.461223
+  _rev: 5-8fac9c6bd53fec679e2a75d997eddb0c
+================================================================================
+KEY(casefold): workspace/calex/context/calex-bm-분석-통합보고서.md
+Variants: 2
+- workspace/calex/context/Calex-BM-분석-통합보고서.md
+  _id: workspace/calex/context/Calex-BM-분석-통합보고서.md
+  mtime: 2026-01-23T16:43:46.469136
+  _rev: 5-c72436c3b9992fc0f22ac6b4799b0a3a
+- workspace/calex/context/calex-bm-분석-통합보고서.md
+  _id: workspace/calex/context/calex-bm-분석-통합보고서.md
+  mtime: 2026-01-23T16:43:46.469136
+  _rev: 5-18374d055ccc07289edd6627a73839dc
+================================================================================
+KEY(casefold): workspace/calex/context/calex-출시계획-통합-2026-01-03.md
+Variants: 2
+- workspace/calex/context/Calex-출시계획-통합-2026-01-03.md
+  _id: workspace/calex/context/Calex-출시계획-통합-2026-01-03.md
+  mtime: 2026-01-23T16:43:46.463285
+  _rev: 5-acf5daedc2350bd760d18e8b5d23924f
+- workspace/calex/context/calex-출시계획-통합-2026-01-03.md
+  _id: workspace/calex/context/calex-출시계획-통합-2026-01-03.md
+  mtime: 2026-01-23T16:43:46.463285
+  _rev: 5-9d321b56d29dafd9b8af49884dd28144
+================================================================================
+KEY(casefold): workspace/goaltracker/context/goaltracker-개선-기획.md
+Variants: 2
+- workspace/GoalTracker/context/GoalTracker-개선-기획.md
+  _id: workspace/GoalTracker/context/GoalTracker-개선-기획.md
+  mtime: 2026-01-23T16:43:46.323366
+  _rev: 5-6ddfdf1bb8e404b9aedbbfe29f94e190
+- workspace/goaltracker/context/goaltracker-개선-기획.md
+  _id: workspace/goaltracker/context/goaltracker-개선-기획.md
+  mtime: 2026-01-23T16:43:46.323366
+  _rev: 5-a4feb550abd829a8fa70ef9e662bb0b3
+================================================================================
+KEY(casefold): workspace/iac/context/iac-멀티에이전트-종합분석-2026-01-03.md
+Variants: 2
+- workspace/IaC/context/IaC-멀티에이전트-종합분석-2026-01-03.md
+  _id: workspace/IaC/context/IaC-멀티에이전트-종합분석-2026-01-03.md
+  mtime: 2026-01-29T21:25:14.463968
+  _rev: 5-92879281ead2b424c53718d52859f4aa
+- workspace/iac/context/iac-멀티에이전트-종합분석-2026-01-03.md
+  _id: workspace/iac/context/iac-멀티에이전트-종합분석-2026-01-03.md
+  mtime: 2026-01-29T21:25:14.463968
+  _rev: 6-887ce4593e0c4da4e0c512bdfb773227
+================================================================================
+KEY(casefold): workspace/iac/context/마이크로서비스-배포-파이프라인-권장안.md
+Variants: 2
+- workspace/IaC/context/마이크로서비스-배포-파이프라인-권장안.md
+  _id: workspace/IaC/context/마이크로서비스-배포-파이프라인-권장안.md
+  mtime: 2026-01-23T16:43:46.507280
+  _rev: 5-32635e481017587f1989783fa5ec1654
+- workspace/iac/context/마이크로서비스-배포-파이프라인-권장안.md
+  _id: workspace/iac/context/마이크로서비스-배포-파이프라인-권장안.md
+  mtime: 2026-01-23T16:43:46.507280
+  _rev: 5-93355337f8c5a7370b3cec4a0fd15ffc
+================================================================================
+KEY(casefold): workspace/issueboard/context/07_kpi_성과지표.md
+Variants: 2
+- workspace/issueboard/context/07_KPI_성과지표.md
+  _id: workspace/issueboard/context/07_KPI_성과지표.md
+  mtime: 2026-01-23T16:43:46.532042
+  _rev: 5-d65a186932d95da7ed2a22f61d48647e
+- workspace/issueboard/context/07_kpi_성과지표.md
+  _id: workspace/issueboard/context/07_kpi_성과지표.md
+  mtime: 2026-01-23T16:43:46.532042
+  _rev: 5-507fe74159ee6cf7538f5c6bdea1041f
+================================================================================
+KEY(casefold): workspace/kongbu/context/bm-study/agent1-saas-growth-분석.md
+Variants: 2
+- workspace/kongbu/context/bm-study/Agent1-SaaS-Growth-분석.md
+  _id: workspace/kongbu/context/bm-study/Agent1-SaaS-Growth-분석.md
+  mtime: 2026-01-29T21:27:26.623947
+  _rev: 5-3da3065d0e3ab461c3196efbae629b1e
+- workspace/kongbu/context/bm-study/agent1-saas-growth-분석.md
+  _id: workspace/kongbu/context/bm-study/agent1-saas-growth-분석.md
+  mtime: 2026-01-29T21:27:26.623947
+  _rev: 6-8b66873acbce8079596259f9d8fb4ae0
+================================================================================
+KEY(casefold): workspace/kongbu/context/bm-study/agent2-edtech-분석.md
+Variants: 2
+- workspace/kongbu/context/bm-study/Agent2-EdTech-분석.md
+  _id: workspace/kongbu/context/bm-study/Agent2-EdTech-분석.md
+  mtime: 2026-01-23T16:43:46.489169
+  _rev: 5-a03b9f2bd000b946f8505479d20ce2a6
+- workspace/kongbu/context/bm-study/agent2-edtech-분석.md
+  _id: workspace/kongbu/context/bm-study/agent2-edtech-분석.md
+  mtime: 2026-01-23T16:43:46.489169
+  _rev: 5-f854acad6a32656144c999c9a1240f9f
+================================================================================
+KEY(casefold): workspace/kongbu/context/bm-study/agent3-b2b-enterprise-분석.md
+Variants: 2
+- workspace/kongbu/context/bm-study/Agent3-B2B-Enterprise-분석.md
+  _id: workspace/kongbu/context/bm-study/Agent3-B2B-Enterprise-분석.md
+  mtime: 2026-01-23T16:43:46.486097
+  _rev: 5-cf6aed75c6d25ab7db7caac998ce3b2b
+- workspace/kongbu/context/bm-study/agent3-b2b-enterprise-분석.md
+  _id: workspace/kongbu/context/bm-study/agent3-b2b-enterprise-분석.md
+  mtime: 2026-01-23T16:43:46.486097
+  _rev: 5-7258edc89e195d9f574d67024e8b3bd7
+================================================================================
+KEY(casefold): workspace/kongbu/context/bm-study/kongbu-비즈니스모델-종합기획안.md
+Variants: 2
+- workspace/kongbu/context/bm-study/KONGBU-비즈니스모델-종합기획안.md
+  _id: workspace/kongbu/context/bm-study/KONGBU-비즈니스모델-종합기획안.md
+  mtime: 2026-01-23T16:43:46.484405
+  _rev: 5-e07457fd22e4eb1f048248b0e43576c4
+- workspace/kongbu/context/bm-study/kongbu-비즈니스모델-종합기획안.md
+  _id: workspace/kongbu/context/bm-study/kongbu-비즈니스모델-종합기획안.md
+  mtime: 2026-01-23T16:43:46.484405
+  _rev: 5-43c6aa10016e478ad0bac8eb6cffdb9e
+================================================================================
+KEY(casefold): workspace/kongbu/context/kongbu-ux-ui-분석-보고서.md
+Variants: 2
+- workspace/kongbu/context/KONGBU-UX-UI-분석-보고서.md
+  _id: workspace/kongbu/context/KONGBU-UX-UI-분석-보고서.md
+  mtime: 2026-01-29T21:27:26.848667
+  _rev: 5-04ee7a8af8aab7ea018ff5fd524b0695
+- workspace/kongbu/context/kongbu-ux-ui-분석-보고서.md
+  _id: workspace/kongbu/context/kongbu-ux-ui-분석-보고서.md
+  mtime: 2026-01-29T21:27:26.848667
+  _rev: 6-1cf4fcceaec112889edea04f613588e2
+================================================================================
+KEY(casefold): workspace/kongbu/context/kongbu-교육-효과성-분석-보고서.md
+Variants: 2
+- workspace/kongbu/context/KONGBU-교육-효과성-분석-보고서.md
+  _id: workspace/kongbu/context/KONGBU-교육-효과성-분석-보고서.md
+  mtime: 2026-01-29T21:27:27.004742
+  _rev: 5-5e8ca295d37575bdada6859719435e12
+- workspace/kongbu/context/kongbu-교육-효과성-분석-보고서.md
+  _id: workspace/kongbu/context/kongbu-교육-효과성-분석-보고서.md
+  mtime: 2026-01-29T21:27:27.004742
+  _rev: 6-f8e76e50255e051309ff89497b1aa410
+================================================================================
+KEY(casefold): workspace/kongbu/context/kongbu-기술-아키텍처-분석-보고서.md
+Variants: 2
+- workspace/kongbu/context/KONGBU-기술-아키텍처-분석-보고서.md
+  _id: workspace/kongbu/context/KONGBU-기술-아키텍처-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.476143
+  _rev: 5-745a8727aa8bda293ca7cc37a3412260
+- workspace/kongbu/context/kongbu-기술-아키텍처-분석-보고서.md
+  _id: workspace/kongbu/context/kongbu-기술-아키텍처-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.476143
+  _rev: 5-558d700d4e04cd85ae837b54744b8adb
+================================================================================
+KEY(casefold): workspace/kongbu/context/kongbu-비즈니스-분석-보고서.md
+Variants: 2
+- workspace/kongbu/context/KONGBU-비즈니스-분석-보고서.md
+  _id: workspace/kongbu/context/KONGBU-비즈니스-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.482322
+  _rev: 5-d86baa5bf5e5a989df7c0f2c4b149538
+- workspace/kongbu/context/kongbu-비즈니스-분석-보고서.md
+  _id: workspace/kongbu/context/kongbu-비즈니스-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.482322
+  _rev: 5-891b8d1007410fa2c1a6b2daaaed6046
+================================================================================
+KEY(casefold): workspace/kongbu/context/kongbu-서비스-고도화-통합-분석-보고서.md
+Variants: 2
+- workspace/kongbu/context/KONGBU-서비스-고도화-통합-분석-보고서.md
+  _id: workspace/kongbu/context/KONGBU-서비스-고도화-통합-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.474010
+  _rev: 5-417fb15d7ad33fcfb46667b7effc34b2
+- workspace/kongbu/context/kongbu-서비스-고도화-통합-분석-보고서.md
+  _id: workspace/kongbu/context/kongbu-서비스-고도화-통합-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.474010
+  _rev: 5-dcd41b24c2b9f9227cc5ecdea95c9718
+================================================================================
+KEY(casefold): workspace/kurim/context/analysis/2026-01/kurim-ux-ui전문가-분석.md
+Variants: 2
+- workspace/kurim/context/analysis/2026-01/kurim-UX-UI전문가-분석.md
+  _id: workspace/kurim/context/analysis/2026-01/kurim-UX-UI전문가-분석.md
+  mtime: 2026-01-23T16:43:46.744161
+  _rev: 5-5e26aeafee0b1200853a2ce960ea3180
+- workspace/kurim/context/analysis/2026-01/kurim-ux-ui전문가-분석.md
+  _id: workspace/kurim/context/analysis/2026-01/kurim-ux-ui전문가-분석.md
+  mtime: 2026-01-23T16:43:46.744161
+  _rev: 5-5b706835c7dddf1ae9bdc0f4b8c97039
+================================================================================
+KEY(casefold): workspace/kurim/context/bm/kurim-bm-종합-분석-보고서.md
+Variants: 2
+- workspace/kurim/context/bm/Kurim-BM-종합-분석-보고서.md
+  _id: workspace/kurim/context/bm/Kurim-BM-종합-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.720296
+  _rev: 5-29c7ee3591775fc7f65fc08a887ccb5f
+- workspace/kurim/context/bm/kurim-bm-종합-분석-보고서.md
+  _id: workspace/kurim/context/bm/kurim-bm-종합-분석-보고서.md
+  mtime: 2026-01-23T16:43:46.720296
+  _rev: 5-dffdc5329a7c811a0697f026c271e7df
+================================================================================
+KEY(casefold): workspace/kurim/context/bm/kurim-llm-비용-분석-상세-보고서.md
+Variants: 2
+- workspace/kurim/context/bm/Kurim-LLM-비용-분석-상세-보고서.md
+  _id: workspace/kurim/context/bm/Kurim-LLM-비용-분석-상세-보고서.md
+  mtime: 2026-01-29T21:27:39.535912
+  _rev: 5-2433e019b1502c21b20d7b56702bdbb6
+- workspace/kurim/context/bm/kurim-llm-비용-분석-상세-보고서.md
+  _id: workspace/kurim/context/bm/kurim-llm-비용-분석-상세-보고서.md
+  mtime: 2026-01-29T21:27:39.535912
+  _rev: 6-c2aa283e047d429d12b41a9e5707c427
+================================================================================
+KEY(casefold): workspace/kurim/context/bm/kurim-고객-세그먼트-및-ltv-분석.md
+Variants: 2
+- workspace/kurim/context/bm/Kurim-고객-세그먼트-및-LTV-분석.md
+  _id: workspace/kurim/context/bm/Kurim-고객-세그먼트-및-LTV-분석.md
+  mtime: 2026-01-23T16:43:46.713478
+  _rev: 5-08bfa26b8e4a310d1d805a409accd610
+- workspace/kurim/context/bm/kurim-고객-세그먼트-및-ltv-분석.md
+  _id: workspace/kurim/context/bm/kurim-고객-세그먼트-및-ltv-분석.md
+  mtime: 2026-01-23T16:43:46.713478
+  _rev: 5-75a74a4772f940745c7019ff7700c42e
+================================================================================
+KEY(casefold): workspace/kurim/context/bm/kurim-성장-전략-보고서.md
+Variants: 2
+- workspace/kurim/context/bm/Kurim-성장-전략-보고서.md
+  _id: workspace/kurim/context/bm/Kurim-성장-전략-보고서.md
+  mtime: 2026-01-23T16:43:46.728289
+  _rev: 5-6adb735b1c6739ce2500636675e51412
+- workspace/kurim/context/bm/kurim-성장-전략-보고서.md
+  _id: workspace/kurim/context/bm/kurim-성장-전략-보고서.md
+  mtime: 2026-01-23T16:43:46.728289
+  _rev: 5-303a783f533ee550d13c24b2dc2b92e1
+================================================================================
+KEY(casefold): workspace/kurim/context/bm/kurim-수익화-전략-보고서.md
+Variants: 2
+- workspace/kurim/context/bm/Kurim-수익화-전략-보고서.md
+  _id: workspace/kurim/context/bm/Kurim-수익화-전략-보고서.md
+  mtime: 2026-01-23T16:43:46.725210
+  _rev: 5-a673c8bc902d2993de1363ff0c672a45
+- workspace/kurim/context/bm/kurim-수익화-전략-보고서.md
+  _id: workspace/kurim/context/bm/kurim-수익화-전략-보고서.md
+  mtime: 2026-01-23T16:43:46.725210
+  _rev: 5-2c65cf8b6d2a6367025d26b35771a2e1
+================================================================================
+KEY(casefold): workspace/kurim/context/bm/kurim-시장-분석-보고서.md
+Variants: 2
+- workspace/kurim/context/bm/Kurim-시장-분석-보고서.md
+  _id: workspace/kurim/context/bm/Kurim-시장-분석-보고서.md
+  mtime: 2026-01-29T21:27:39.699383
+  _rev: 5-6106d94b1595da4a617599aa7029ee67
+- workspace/kurim/context/bm/kurim-시장-분석-보고서.md
+  _id: workspace/kurim/context/bm/kurim-시장-분석-보고서.md
+  mtime: 2026-01-29T21:27:39.699383
+  _rev: 6-8ee87f878252f8ea81d5290c2ef94be3
+================================================================================
+KEY(casefold): workspace/mind-as-context/context/mac-서비스-종합-분석-및-개선-기획.md
+Variants: 2
+- workspace/mind-as-context/context/MAC-서비스-종합-분석-및-개선-기획.md
+  _id: workspace/mind-as-context/context/MAC-서비스-종합-분석-및-개선-기획.md
+  mtime: 2026-01-23T16:43:46.699224
+  _rev: 5-4182e52fd111504a0bf71b49d9b64f02
+- workspace/mind-as-context/context/mac-서비스-종합-분석-및-개선-기획.md
+  _id: workspace/mind-as-context/context/mac-서비스-종합-분석-및-개선-기획.md
+  mtime: 2026-01-23T16:43:46.699224
+  _rev: 5-f50bc0e3917fb54a0db5657b0a560ff2
+================================================================================
+KEY(casefold): workspace/study/context/it-직장인-영어-학습-로드맵.md
+Variants: 2
+- workspace/study/context/IT-직장인-영어-학습-로드맵.md
+  _id: workspace/study/context/IT-직장인-영어-학습-로드맵.md
+  mtime: 2026-01-29T21:32:01.371375
+  _rev: 5-0983160a1710d57602750b5080379845
+- workspace/study/context/it-직장인-영어-학습-로드맵.md
+  _id: workspace/study/context/it-직장인-영어-학습-로드맵.md
+  mtime: 2026-01-29T21:32:01.371375
+  _rev: 6-b231ecba80e3b18dce8a49bc501c9a17
+================================================================================
+KEY(casefold): workspace/study/context/it직장인_영어학습_루틴.md
+Variants: 2
+- workspace/study/context/IT직장인_영어학습_루틴.md
+  _id: workspace/study/context/IT직장인_영어학습_루틴.md
+  mtime: 2026-01-23T16:43:46.257143
+  _rev: 5-a1d14cc0404758897831a3fdeb4d168b
+- workspace/study/context/it직장인_영어학습_루틴.md
+  _id: workspace/study/context/it직장인_영어학습_루틴.md
+  mtime: 2026-01-23T16:43:46.257143
+  _rev: 5-321337c694b8985dbe23b22bc51695b1
+================================================================================
+KEY(casefold): workspace/writeflow/context/writeflow-개선-기획.md
+Variants: 2
+- workspace/writeflow/context/WriteFlow-개선-기획.md
+  _id: workspace/writeflow/context/WriteFlow-개선-기획.md
+  mtime: 2026-01-29T21:32:25.780864
+  _rev: 5-2a8f5c4454d91ddae59d7e80c66bd277
+- workspace/writeflow/context/writeflow-개선-기획.md
+  _id: workspace/writeflow/context/writeflow-개선-기획.md
+  mtime: 2026-01-29T21:32:25.780864
+  _rev: 6-44e9b7894c501bcec3b77544c0cb4a83

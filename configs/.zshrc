@@ -304,6 +304,26 @@ if (( $+commands[uv] )); then
   unset _uv_comp _uv_comp_day _uv_regen
 fi
 
+################################
+# agt (agent skills CLI) - cached completion
+if (( $+commands[agt] )); then
+  _agt_comp="${XDG_CACHE_HOME:-$HOME/.cache}/.agt-completion.zsh"
+  _agt_regen=1
+  if [[ -f "$_agt_comp" ]]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
+      _agt_comp_day=$(stat -f '%Sm' -t '%j' "$_agt_comp" 2>/dev/null)
+    else
+      _agt_comp_day=$(date -d "$(stat -c '%y' "$_agt_comp" 2>/dev/null | cut -d' ' -f1)" +'%j' 2>/dev/null)
+    fi
+    [[ $(date +'%j') == "$_agt_comp_day" ]] && _agt_regen=0
+  fi
+  if (( _agt_regen )); then
+    agt completions zsh > "$_agt_comp" 2>/dev/null
+  fi
+  [[ -f "$_agt_comp" ]] && source "$_agt_comp"
+  unset _agt_comp _agt_comp_day _agt_regen
+fi
+
 [[ -f "$HOME/.local/bin/env" ]] && . "$HOME/.local/bin/env"
 
 ################################
@@ -356,16 +376,12 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   bindkey '^R' _hishtory_search
 fi
 
-# opencode
-export PATH=/Users/jiun/.opencode/bin:$PATH
-
-# bun completions
-[ -s "/Users/jiun/.bun/_bun" ] && source "/Users/jiun/.bun/_bun"
-
 # pnpm
-export PNPM_HOME="/Users/jiun/Library/pnpm"
+export PNPM_HOME="$HOME/Library/pnpm"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
-# pnpm end
+if (( $+commands[vault-auto-unlock] )); then
+  eval "$(vault-auto-unlock)"
+fi
