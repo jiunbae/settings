@@ -7,8 +7,11 @@
 Modern dotfiles installer with animated progress display.
 
 > [!NOTE]
-> **AI Agent Setup** — Install dotfiles from this repo: `curl -LsSf https://settings.jiun.dev | bash -s -- --all`
-> See [Usage](#usage) and [Components](#components) for details. Run `./install.sh --help` for all options.
+> **AI Agent Setup**
+> ```
+> curl -LsSf https://settings.jiun.dev | bash -s -- --all
+> ```
+> See [Usage](#usage) for options and [Components](#components) for details.
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
