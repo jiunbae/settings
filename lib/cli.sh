@@ -16,6 +16,9 @@ readonly COMPONENTS_ORDER=(base zsh nvim tmux rust uv tools tools-extra ssh hish
 # Basic components for --basic option
 readonly BASIC_COMPONENTS=(base zsh nvim tmux)
 
+# Core components for --core / interactive default
+readonly CORE_COMPONENTS=(base zsh nvim tmux tools)
+
 # Get component description (bash 3.2 compatible alternative to associative array)
 get_component_desc() {
     case "$1" in
@@ -46,6 +49,131 @@ is_valid_component() {
 SELECTED_COMPONENTS=()
 
 # ==============================================================================
+# Interactive Component Selector
+# ==============================================================================
+
+# Check if a component is in a preset array
+_in_preset() {
+    local comp="$1"
+    shift
+    local preset=("$@")
+    for p in "${preset[@]}"; do
+        [[ "$p" == "$comp" ]] && return 0
+    done
+    return 1
+}
+
+show_interactive_menu() {
+    local num_components=${#COMPONENTS_ORDER[@]}
+
+    # Toggle state array (0=off, 1=on) — default to core preset
+    local selected=()
+    for ((i=0; i<num_components; i++)); do
+        if _in_preset "${COMPONENTS_ORDER[$i]}" "${CORE_COMPONENTS[@]}"; then
+            selected+=("1")
+        else
+            selected+=("0")
+        fi
+    done
+
+    # Read input from /dev/tty to work even when stdin is redirected
+    local input=""
+    while true; do
+        # Clear screen and draw menu
+        printf "${ESC}[2J${ESC}[H"
+        printf "${BOLD}${BLUE}Settings Installer v${VERSION}${NC}\n"
+        printf "\n"
+        printf "${BOLD}Select components to install:${NC}\n"
+        printf "\n"
+        printf "  Presets: ${CYAN}[a]${NC} all  ${CYAN}[c]${NC} core  ${CYAN}[n]${NC} none\n"
+        printf "\n"
+
+        for ((i=0; i<num_components; i++)); do
+            local comp="${COMPONENTS_ORDER[$i]}"
+            local desc
+            desc="$(get_component_desc "$comp")"
+            local mark=" "
+            if [[ "${selected[$i]}" == "1" ]]; then
+                mark="${GREEN}x${NC}"
+            fi
+            printf "  %2d) [%b] ${CYAN}%-12s${NC} %s\n" "$((i+1))" "$mark" "$comp" "$desc"
+        done
+
+        # Count selected
+        local count=0
+        for ((i=0; i<num_components; i++)); do
+            [[ "${selected[$i]}" == "1" ]] && count=$((count+1))
+        done
+
+        printf "\n"
+        printf "  Toggle: ${BOLD}1-%d${NC} | Presets: ${BOLD}a${NC}=all ${BOLD}c${NC}=core ${BOLD}n${NC}=none\n" "$num_components"
+        printf "  Press ${BOLD}Enter${NC} to confirm (%d selected), ${BOLD}q${NC} to quit\n" "$count"
+        printf "\n"
+        printf "  > "
+
+        # Read single line from terminal
+        read -r input < /dev/tty || { echo ""; exit 1; }
+
+        # Handle input
+        case "$input" in
+            q|Q)
+                echo "Aborted."
+                exit 0
+                ;;
+            a|A)
+                for ((i=0; i<num_components; i++)); do selected[$i]="1"; done
+                ;;
+            c|C)
+                for ((i=0; i<num_components; i++)); do
+                    if _in_preset "${COMPONENTS_ORDER[$i]}" "${CORE_COMPONENTS[@]}"; then
+                        selected[$i]="1"
+                    else
+                        selected[$i]="0"
+                    fi
+                done
+                ;;
+            n|N)
+                for ((i=0; i<num_components; i++)); do selected[$i]="0"; done
+                ;;
+            "")
+                # Enter pressed — confirm selection
+                if [[ $count -eq 0 ]]; then
+                    # No selection, loop again
+                    continue
+                fi
+                break
+                ;;
+            *)
+                # Try to parse as number(s) — support "1 3 5" or "1,3,5" or single "3"
+                local nums
+                nums=$(echo "$input" | tr ',' ' ')
+                for num in $nums; do
+                    if [[ "$num" =~ ^[0-9]+$ ]] && [[ "$num" -ge 1 ]] && [[ "$num" -le "$num_components" ]]; then
+                        local idx=$((num - 1))
+                        if [[ "${selected[$idx]}" == "1" ]]; then
+                            selected[$idx]="0"
+                        else
+                            selected[$idx]="1"
+                        fi
+                    fi
+                done
+                ;;
+        esac
+    done
+
+    # Build SELECTED_COMPONENTS from toggle state
+    SELECTED_COMPONENTS=()
+    for ((i=0; i<num_components; i++)); do
+        if [[ "${selected[$i]}" == "1" ]]; then
+            SELECTED_COMPONENTS+=("${COMPONENTS_ORDER[$i]}")
+        fi
+    done
+
+    # Clear screen before starting installation
+    printf "${ESC}[2J${ESC}[H"
+}
+
+# ==============================================================================
 # Help
 # ==============================================================================
 print_help() {
@@ -58,7 +186,9 @@ ${BOLD}USAGE:${NC}
     install.sh [OPTIONS] [COMPONENTS...]
 
 ${BOLD}OPTIONS:${NC}
+    -i, --interactive   Interactive component selector (default when no args)
     -a, --all           Install all components
+    --core              Install core dev environment (base, zsh, nvim, tmux, tools)
     -b, --basic         Install basic dev environment (base, zsh, nvim, tmux)
     -f, --force         Force reinstall (overwrite existing)
     -c, --copy          Copy config files instead of symlink
@@ -79,7 +209,9 @@ EOF
     cat << EOF
 
 ${BOLD}EXAMPLES:${NC}
+    install.sh                          # Interactive component selector
     install.sh --all                    # Install everything (symlink mode)
+    install.sh --core                   # Install core dev environment
     install.sh --basic                  # Install basic dev environment
     install.sh --copy --all             # Install everything (copy mode)
     install.sh zsh nvim tmux            # Install specific components
@@ -111,6 +243,14 @@ parse_args() {
                 ;;
             -b|--basic)
                 SELECTED_COMPONENTS=("${BASIC_COMPONENTS[@]}")
+                shift
+                ;;
+            --core)
+                SELECTED_COMPONENTS=("${CORE_COMPONENTS[@]}")
+                shift
+                ;;
+            -i|--interactive)
+                show_interactive_menu
                 shift
                 ;;
             -f|--force)
@@ -172,16 +312,21 @@ parse_args() {
     # Export global flags
     export VERBOSE DRY_RUN FORCE NO_SUDO LINK_MODE
 
-    # Check if any component selected
+    # No components selected — launch interactive menu if TTY, otherwise error
     if [[ ${#SELECTED_COMPONENTS[@]} -eq 0 ]]; then
-        log_error "No components specified."
-        echo ""
-        echo "Use --all to install everything, or specify components:"
-        echo "  install.sh --all"
-        echo "  install.sh zsh nvim tmux"
-        echo ""
-        echo "Run 'install.sh --help' for more information."
-        exit 1
+        if is_tty; then
+            show_interactive_menu
+        else
+            log_error "No components specified."
+            echo ""
+            echo "Use --all to install everything, or specify components:"
+            echo "  install.sh --all"
+            echo "  install.sh --core"
+            echo "  install.sh zsh nvim tmux"
+            echo ""
+            echo "Run 'install.sh --help' for more information."
+            exit 1
+        fi
     fi
 }
 
