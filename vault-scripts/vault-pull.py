@@ -64,7 +64,7 @@ def _load_env_file() -> None:
 _load_env_file()
 
 # CouchDB 설정 (환경변수 → .env → 기본값)
-COUCHDB_URI = os.environ.get("COUCHDB_URI", "https://your-couchdb-server")
+COUCHDB_URI = os.environ.get("COUCHDB_URI", "")
 COUCHDB_USER = os.environ.get("COUCHDB_USER", "admin")
 COUCHDB_PASSWORD = os.environ.get("COUCHDB_PASSWORD", "")
 COUCHDB_DB = os.environ.get("COUCHDB_DB", "obsidian")
@@ -111,16 +111,17 @@ def print_env_diagnostics() -> None:
 
 
 def validate_config() -> None:
+    missing = []
+    if not COUCHDB_URI:
+        missing.append("COUCHDB_URI")
     if not COUCHDB_PASSWORD:
+        missing.append("COUCHDB_PASSWORD")
+    if missing:
         env_path = SCRIPT_DIR / ".env"
-        print("Error: COUCHDB_PASSWORD is required", file=sys.stderr)
+        print(f"Error: {', '.join(missing)} required", file=sys.stderr)
         print(f"\nCreate {env_path} with:", file=sys.stderr)
+        print("  COUCHDB_URI=https://your-couchdb-server", file=sys.stderr)
         print("  COUCHDB_PASSWORD=your-password", file=sys.stderr)
-        print("\nOr set environment variable:", file=sys.stderr)
-        if os.name == "nt":
-            print("  PowerShell: $env:COUCHDB_PASSWORD='your-password'", file=sys.stderr)
-        else:
-            print("  export COUCHDB_PASSWORD='your-password'", file=sys.stderr)
         sys.exit(1)
 
 

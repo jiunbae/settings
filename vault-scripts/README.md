@@ -119,7 +119,7 @@ rsync를 사용하여 SSH로 다른 Mac에 vault 동기화.
 
 ```bash
 COUCHDB_PASSWORD=your-password   # 필수
-COUCHDB_URI=https://your-couchdb-server  # 기본값
+COUCHDB_URI=https://your-couchdb-server  # 필수
 COUCHDB_USER=admin               # 기본값
 COUCHDB_DB=obsidian              # 기본값
 ```
