@@ -15,7 +15,7 @@ Modern dotfiles installer with animated progress display.
 > Clone and run the dotfiles installer from https://github.com/jiunbae/settings
 >
 > Quick install (recommended):
->   curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- --all
+>   curl -LsSf https://settings.jiun.dev | bash -s -- --all
 >
 > Or clone manually:
 >   git clone https://github.com/jiunbae/settings.git ~/.settings
@@ -66,10 +66,10 @@ Modern dotfiles installer with animated progress display.
 
 ```bash
 # Install everything with a single command
-curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- --all
+curl -LsSf https://settings.jiun.dev | bash -s -- --all
 
 # Or install specific components
-curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- zsh nvim tmux
+curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim tmux
 ```
 
 ### Using Release (Bundled Installer)
