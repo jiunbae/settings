@@ -6,6 +6,41 @@
 
 Modern dotfiles installer with animated progress display.
 
+> [!NOTE]
+> ## AI Agent Setup Prompt
+>
+> Use the following instructions to install this dotfiles repo on a new machine.
+>
+> ```
+> Clone and run the dotfiles installer from https://github.com/jiunbae/settings
+>
+> Quick install (recommended):
+>   curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- --all
+>
+> Or clone manually:
+>   git clone https://github.com/jiunbae/settings.git ~/.settings
+>   cd ~/.settings && ./install.sh --all
+>
+> Available components (pick specific ones instead of --all if needed):
+>   base      - Basic packages (curl, wget, git, build-essential)
+>   zsh       - Zsh + zinit + Powerlevel10k theme
+>   nvim      - NeoVim + LazyVim
+>   tmux      - tmux + TPM plugin manager
+>   rust      - Rust toolchain + cargo-binstall
+>   uv        - uv (fast Python package manager)
+>   tools     - Modern CLI tools (eza, fd, bat, ripgrep, fzf)
+>   tools-extra - Extra CLI tools (delta, dust, procs, bottom)
+>   ssh       - SSH config (copy mode, not symlinked)
+>   hishtory  - Shell history with search and sync
+>
+> Example: ./install.sh zsh nvim tmux tools
+>
+> Post-install: run `exec zsh` to reload the shell.
+> The installer is idempotent - safe to run multiple times.
+> Use --dry-run to preview changes before applying.
+> Use --force to overwrite existing configs.
+> ```
+
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║  Settings Installer                                          ║
