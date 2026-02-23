@@ -6,12 +6,15 @@
 
 Modern dotfiles installer with animated progress display.
 
-> [!NOTE]
-> **AI Agent Setup** — Copy and paste to install:
-> ```
-> Install dotfiles from https://github.com/jiunbae/settings
-> curl -LsSf https://settings.jiun.dev | bash -s -- --all
-> ```
+<div align="center">
+<div><img src="https://quickstart-for-agents.vercel.app/api/header.svg?theme=claude-code&title=Install+dotfiles+from+jiunbae/settings&mascot=hat" width="100%" /></div>
+
+```
+Install dotfiles from https://github.com/jiunbae/settings
+curl -LsSf https://settings.jiun.dev | bash -s -- --all
+```
+<div><img src="https://quickstart-for-agents.vercel.app/api/footer.svg?theme=claude-code&project=jiunbae/settings" width="100%" /></div>
+</div>
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
