@@ -7,11 +7,16 @@
 Modern dotfiles installer with animated progress display.
 
 <div align="center">
-<div><img src="https://quickstart-for-agents.vercel.app/api/header.svg?theme=claude-code&title=Install+dotfiles+from+jiunbae/settings&mascot=hat" width="100%" /></div>
+<div><img src="https://quickstart-for-agents.vercel.app/api/header.svg?theme=claude-code&title=Install+dotfiles+from+jiunbae/settings&mascot=wave" width="100%" /></div>
 
 ```
-Install dotfiles from https://github.com/jiunbae/settings
-curl -LsSf https://settings.jiun.dev | bash -s -- --all
+Clone and run the dotfiles installer from https://github.com/jiunbae/settings
+
+Quick install:  curl -LsSf https://settings.jiun.dev | bash -s -- --all
+Core only:      curl -LsSf https://settings.jiun.dev | bash -s -- --core
+Pick & choose:  curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim tmux tools
+
+Post-install: exec zsh
 ```
 <div><img src="https://quickstart-for-agents.vercel.app/api/footer.svg?theme=claude-code&project=jiunbae/settings" width="100%" /></div>
 </div>
