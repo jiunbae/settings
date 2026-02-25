@@ -23,8 +23,9 @@ echo "COUCHDB_PASSWORD=your-password" > .env
 |---------|------|
 | `vault-pull.py` | CouchDB에서 문서 가져오기 (pull) |
 | `vault-push.py` | 로컬 파일을 CouchDB에 업로드 (push) |
+| `claude-context-push.py` | Claude Code 세션/메모리를 CouchDB로 푸시 |
 | `livesync_compat.py` | LiveSync 호환 청킹 라이브러리 (xxhash64 + Rabin-Karp) |
-| `vault-service.sh` | launchd 서비스 관리 (pull/push 자동 실행) |
+| `vault-service.sh` | launchd 서비스 관리 (pull/push/context 자동 실행) |
 | `vault-sync-machines.sh` | rsync로 머신 간 vault 동기화 |
 
 ## 동기화 아키텍처
@@ -42,13 +43,13 @@ echo "COUCHDB_PASSWORD=your-password" > .env
 │  Obsidian GUI Apps   │◄────────►│   Local Vault Files  │
 │  (LiveSync Plugin)   │          │  ~/s-lastorder/      │
 └──────────────────────┘          └──────────────────────┘
-                                            │
-                                  vault-sync-machines.sh
-                                            │
-                                    ┌───────┴───────┐
-                                    │  Other Macs   │
-                                    │  (via rsync)  │
-                                    └───────────────┘
+         ▲                                    │
+         │ claude-context-push.py             │ vault-sync-machines.sh
+         │                                    │
+┌──────────────────────┐              ┌───────┴───────┐
+│  ~/.claude/projects/ │              │  Other Macs   │
+│  (sessions, memory)  │              │  (via rsync)  │
+└──────────────────────┘              └───────────────┘
 ```
 
 **Headless 환경 (Mac mini 등):**
@@ -87,21 +88,43 @@ python3 vault-push.py -v                   # 상세 출력
 
 ---
 
-## 3. vault-service.sh (서비스 관리)
+## 3. claude-context-push.py (Claude Context Push)
 
-macOS launchd 서비스 관리. Pull/push를 10분마다 자동 실행.
+`~/.claude/projects/`의 세션 메타데이터와 메모리 파일을 Obsidian CouchDB로 푸시합니다.
+
+**푸시 대상:**
+- `sessions-index.json` → 세션별 마크다운 요약 (`claude-context/sessions/`)
+- `memory/` → 메모리 파일 그대로 (`claude-context/memory/`)
+- `CLAUDE.md` → 프로젝트 설정 파일 (`claude-context/CLAUDE.md`)
+- 프로젝트 인덱스 (`claude-context/INDEX.md`)
+
+**스캔 대상:** `~/workspace/*/`, `~/workspace-ext/*/`, `~/workspace-vibe/*/` 등 모든 workspace 변형
 
 ```bash
-./vault-service.sh install                 # launchd plist 설치 및 서비스 시작
-./vault-service.sh status                  # 서비스 상태 확인
-./vault-service.sh restart [pull|push]     # 서비스 재시작
-./vault-service.sh stop [pull|push]        # 서비스 중지
-./vault-service.sh logs [pull|push]        # 최근 로그 확인
+python3 claude-context-push.py                    # 변경된 파일만 push
+python3 claude-context-push.py --force            # 모든 파일 강제 push
+python3 claude-context-push.py --project settings # 특정 프로젝트만
+python3 claude-context-push.py --dry-run          # 미리보기
+python3 claude-context-push.py -v                 # 상세 출력
 ```
 
 ---
 
-## 4. vault-sync-machines.sh (머신 간 동기화)
+## 4. vault-service.sh (서비스 관리)
+
+macOS launchd 서비스 관리. Pull/push를 10분마다, context push를 30분마다 자동 실행.
+
+```bash
+./vault-service.sh install                        # launchd plist 설치 및 서비스 시작
+./vault-service.sh status                         # 서비스 상태 확인
+./vault-service.sh restart [pull|push|context]    # 서비스 재시작
+./vault-service.sh stop [pull|push|context]       # 서비스 중지
+./vault-service.sh logs [pull|push|context]       # 최근 로그 확인
+```
+
+---
+
+## 5. vault-sync-machines.sh (머신 간 동기화)
 
 rsync를 사용하여 SSH로 다른 Mac에 vault 동기화.
 

@@ -14,8 +14,10 @@
 
 PULL_PLIST="$HOME/Library/LaunchAgents/com.jiun.vault-pull.plist"
 PUSH_PLIST="$HOME/Library/LaunchAgents/com.jiun.vault-push.plist"
+CONTEXT_PLIST="$HOME/Library/LaunchAgents/com.jiun.claude-context-push.plist"
 PULL_LABEL="com.jiun.vault-pull"
 PUSH_LABEL="com.jiun.vault-push"
+CONTEXT_LABEL="com.jiun.claude-context-push"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 show_service_status() {
@@ -127,11 +129,54 @@ EOF
 EOF
     echo "  Created: $PUSH_PLIST"
 
+    # Claude context push plist (runs every 30 min)
+    cat > "$CONTEXT_PLIST" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$CONTEXT_LABEL</string>
+    <key>Comment</key>
+    <string>Push Claude session context to CouchDB (every 30 minutes)</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>$python_bin</string>
+        <string>-u</string>
+        <string>$SCRIPT_DIR/claude-context-push.py</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>1800</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/claude-context-push.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/claude-context-push.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+</dict>
+</plist>
+EOF
+    echo "  Created: $CONTEXT_PLIST"
+
     # Load services
     launchctl unload "$PULL_PLIST" 2>/dev/null
     launchctl unload "$PUSH_PLIST" 2>/dev/null
+    launchctl unload "$CONTEXT_PLIST" 2>/dev/null
     launchctl load "$PULL_PLIST"
     launchctl load "$PUSH_PLIST"
+    launchctl load "$CONTEXT_PLIST"
     echo ""
     echo "Services loaded. Check: $0 status"
 }
@@ -140,6 +185,7 @@ case "${1:-status}" in
     status)
         show_service_status "$PULL_LABEL" "Vault Pull" /tmp/vault-pull.log /tmp/vault-pull.err
         show_service_status "$PUSH_LABEL" "Vault Push" /tmp/vault-push.log /tmp/vault-push.err
+        show_service_status "$CONTEXT_LABEL" "Claude Context Push" /tmp/claude-context-push.log /tmp/claude-context-push.err
 
         # .env check
         if [ -f "$SCRIPT_DIR/.env" ]; then
@@ -161,12 +207,19 @@ case "${1:-status}" in
                 launchctl unload "$PUSH_PLIST" 2>/dev/null
                 launchctl load "$PUSH_PLIST"
                 ;;
+            context)
+                echo "Restarting claude-context-push..."
+                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
+                launchctl load "$CONTEXT_PLIST"
+                ;;
             all|*)
-                echo "Restarting both services..."
+                echo "Restarting all services..."
                 launchctl unload "$PULL_PLIST" 2>/dev/null
                 launchctl unload "$PUSH_PLIST" 2>/dev/null
+                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
                 launchctl load "$PULL_PLIST"
                 launchctl load "$PUSH_PLIST"
+                launchctl load "$CONTEXT_PLIST"
                 ;;
         esac
         echo "Done. Check: $0 status"
@@ -182,10 +235,15 @@ case "${1:-status}" in
                 echo "Stopping vault-push..."
                 launchctl unload "$PUSH_PLIST" 2>/dev/null
                 ;;
+            context)
+                echo "Stopping claude-context-push..."
+                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
+                ;;
             all|*)
-                echo "Stopping both services..."
+                echo "Stopping all services..."
                 launchctl unload "$PULL_PLIST" 2>/dev/null
                 launchctl unload "$PUSH_PLIST" 2>/dev/null
+                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
                 ;;
         esac
         echo "Stopped."
@@ -207,6 +265,13 @@ case "${1:-status}" in
                 echo "=== Push stderr ==="
                 tail -10 /tmp/vault-push.err 2>/dev/null || echo "No errors"
                 ;;
+            context)
+                echo "=== Claude Context Push stdout ==="
+                tail -30 /tmp/claude-context-push.log 2>/dev/null || echo "No logs"
+                echo ""
+                echo "=== Claude Context Push stderr ==="
+                tail -10 /tmp/claude-context-push.err 2>/dev/null || echo "No errors"
+                ;;
             all|*)
                 echo "=== Pull stdout ==="
                 tail -15 /tmp/vault-pull.log 2>/dev/null || echo "No logs"
@@ -214,10 +279,15 @@ case "${1:-status}" in
                 echo "=== Push stdout ==="
                 tail -15 /tmp/vault-push.log 2>/dev/null || echo "No logs"
                 echo ""
+                echo "=== Claude Context Push stdout ==="
+                tail -15 /tmp/claude-context-push.log 2>/dev/null || echo "No logs"
+                echo ""
                 echo "=== Errors (pull) ==="
                 tail -5 /tmp/vault-pull.err 2>/dev/null || echo "No errors"
                 echo "=== Errors (push) ==="
                 tail -5 /tmp/vault-push.err 2>/dev/null || echo "No errors"
+                echo "=== Errors (context) ==="
+                tail -5 /tmp/claude-context-push.err 2>/dev/null || echo "No errors"
                 ;;
         esac
         ;;
@@ -227,13 +297,13 @@ case "${1:-status}" in
         ;;
 
     *)
-        echo "Usage: $0 {status|restart|stop|logs|install} [pull|push]"
+        echo "Usage: $0 {status|restart|stop|logs|install} [pull|push|context]"
         echo ""
-        echo "  status              Check both services"
-        echo "  restart [pull|push] Restart service(s)"
-        echo "  stop [pull|push]    Stop service(s)"
-        echo "  logs [pull|push]    View recent logs"
-        echo "  install             Install/reinstall launchd plists"
+        echo "  status                       Check all services"
+        echo "  restart [pull|push|context]  Restart service(s)"
+        echo "  stop [pull|push|context]     Stop service(s)"
+        echo "  logs [pull|push|context]     View recent logs"
+        echo "  install                      Install/reinstall launchd plists"
         exit 1
         ;;
 esac
