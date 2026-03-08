@@ -210,6 +210,7 @@ alias oc="opencode"
 alias zs='zellij -s'
 alias za='zellij attach'
 alias zl='zellij list-sessions'
+alias zr='bash ~/.config/zellij/migrate-tmux.sh'
 export EDITOR=nvim
 export GPG_TTY=$(tty)
 
