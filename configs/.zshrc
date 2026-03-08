@@ -211,6 +211,8 @@ alias zs='zellij -s'
 alias za='zellij attach'
 alias zl='zellij list-sessions'
 alias zr='bash ~/.config/zellij/migrate-tmux.sh'
+_zellij_sessions() { compadd $(zellij list-sessions 2>/dev/null | command grep -oE '^\S+') }
+compdef _zellij_sessions za zs
 export EDITOR=nvim
 export GPG_TTY=$(tty)
 
