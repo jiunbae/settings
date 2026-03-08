@@ -52,11 +52,8 @@ fi
 unset _zcompdump _zcompdump_day
 
 # Completion plugins (turbo mode with blockf to track fpath changes)
-# Disable ZSH_TMUX_FIXTERM to avoid tmux.extra.conf error
-export ZSH_TMUX_FIXTERM=false
 zinit wait lucid blockf for \
-    zsh-users/zsh-completions \
-    OMZP::tmux
+    zsh-users/zsh-completions
 
 # fzf-tab must load after compinit, use atload to replay compdefs
 zinit wait lucid atload"zicompinit; zicdreplay" for \
@@ -139,7 +136,7 @@ fi
 case `uname` in
   Darwin)
     # macos settings
-    alias za="arch -arch arm64e /bin/zsh"
+    alias zaa="arch -arch arm64e /bin/zsh"
     alias zx="arch -arch x86_64 /bin/zsh"
     if [[ $(arch) == "arm64" ]]; then
       export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
@@ -208,6 +205,11 @@ alias vi="nvim"
 alias vimdiff="nvim -d"
 alias c="claude --dangerously-skip-permissions"
 alias oc="opencode"
+
+# Zellij (terminal multiplexer)
+alias zs='zellij -s'
+alias za='zellij attach'
+alias zl='zellij list-sessions'
 export EDITOR=nvim
 export GPG_TTY=$(tty)
 
@@ -382,6 +384,3 @@ case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
-if (( $+commands[vault-auto-unlock] )); then
-  eval "$(vault-auto-unlock)"
-fi

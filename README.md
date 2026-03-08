@@ -125,8 +125,8 @@ Components:
 ### Terminal
 | Component | Description |
 |-----------|-------------|
-| [tmux](https://github.com/tmux/tmux) | Terminal multiplexer |
-| [TPM](https://github.com/tmux-plugins/tpm) | Tmux Plugin Manager |
+| [zellij](https://zellij.dev/) | Terminal multiplexer (modern tmux alternative) |
+| [tmux](https://github.com/tmux/tmux) | Terminal multiplexer (legacy, config included) |
 | [Windows Terminal](https://aka.ms/terminal) | Modern terminal for Windows |
 
 ### Development Tools
@@ -271,6 +271,11 @@ alias grep='rg'
 alias du='dust'
 alias ps='procs'
 alias top='btm'
+
+# Zellij (terminal multiplexer)
+alias zs='zellij -s'        # new session
+alias za='zellij attach'    # attach
+alias zl='zellij list-sessions'  # list
 
 # Editor
 alias vim='nvim'
