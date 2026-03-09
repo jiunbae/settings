@@ -1,0 +1,54 @@
+# Homumu Configuration File
+# https://github.com/company/homumu
+#
+# Project config: .homumu.toml       (commit to git — shared with team)
+# Personal config: .homumu.local.toml (add to .gitignore — your overrides)
+
+# Disable entire check modules by ID.
+# Pattern providers: api-keys, tokens, passwords, crypto-keys, database-urls, internal-ips, pii, oauth
+# Security checks: config-check-claude, config-check-copilot, protect-gitignore, protect-tracked
+# Provider audits: provider-audit-opencode, provider-audit-cursor, provider-audit-windsurf,
+#   provider-audit-cline, provider-audit-continue, provider-audit-aider
+# Reminder providers: reminders-builtin
+# Reminder categories: reminder-account, reminder-llm-usage, reminder-compliance
+# disabled_checks = ["config-check-copilot", "internal-ips", "reminder-llm-usage"]
+
+[scan]
+# Additional directories/files to exclude from scanning (beyond .gitignore)
+exclude = []
+
+# Disable specific built-in pattern categories
+# Options: api_keys, tokens, passwords, crypto_keys, database_urls, internal_ips, pii, oauth
+disabled_categories = []
+
+# Severity overrides for specific pattern IDs
+# [scan.severity_overrides]
+# "api-key-stripe-test" = "info"
+
+# Custom patterns to detect
+# [[scan.custom_patterns]]
+# name = "Internal Service URL"
+# pattern = '(?i)https?://[a-z]+\.internal\.company\.com'
+# severity = "warning"
+
+# Allowlist entries (false positive suppression)
+# [[scan.allowlist]]
+# file = "docs/examples/**"
+# reason = "Example files contain dummy credentials"
+
+[config_check]
+# Additional directories that must be excluded in AI tool configs
+required_excludes = []
+
+[protect]
+# Additional patterns that should be in .gitignore
+required_gitignore = []
+
+# Custom reminder categories (appended to built-in reminders)
+# [[reminders]]
+# id = "team-security"
+# title = "Team Security Policy"
+# items = [
+#   { text = "Did you review the PR for secrets?", required = true },
+#   { text = "Have you updated the security changelog?", required = false },
+# ]

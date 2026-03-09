@@ -62,11 +62,24 @@ for file in "$SCRIPT_DIR"/modules/*.sh; do
 done
 
 # Embed config files
-for file in "$SCRIPT_DIR"/configs/.zshrc "$SCRIPT_DIR"/configs/.p10k.zsh "$SCRIPT_DIR"/configs/.tmux.conf; do
+for file in "$SCRIPT_DIR"/configs/.zshrc "$SCRIPT_DIR"/configs/.p10k.zsh; do
     if [[ -f "$file" ]]; then
         embed_file "$file"
     fi
 done
+
+# Embed zellij config
+if [[ -f "$SCRIPT_DIR/configs/zellij/config.kdl" ]]; then
+    embed_file "$SCRIPT_DIR/configs/zellij/config.kdl"
+fi
+if [[ -d "$SCRIPT_DIR/configs/zellij/layouts" ]]; then
+    for file in "$SCRIPT_DIR"/configs/zellij/layouts/*.kdl; do
+        if [[ -f "$file" ]]; then
+            embed_file "$file"
+        fi
+    done
+fi
+
 
 # Embed SpaceVim config if exists
 if [[ -d "$SCRIPT_DIR/configs/.SpaceVim.d" ]]; then

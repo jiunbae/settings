@@ -62,3 +62,6 @@ cmake-build-*/
 
 .claude/
 .DS_Store
+
+# Cloudflare Wrangler
+worker/.wrangler/

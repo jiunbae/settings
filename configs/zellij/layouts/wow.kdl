@@ -1,0 +1,7 @@
+layout {
+    pane split_direction="horizontal" {
+        pane cwd="/Users/jiun/workspace-game/wow-3d"
+        pane cwd="/Users/jiun/workspace-game/wow-3d"
+        pane cwd="/Users/jiun/workspace-game/wow-3d"
+    }
+}

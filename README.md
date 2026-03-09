@@ -6,6 +6,21 @@
 
 Modern dotfiles installer with animated progress display.
 
+<div align="center">
+<div><img src="https://quickstart-for-agents.vercel.app/api/header.svg?theme=claude-code&title=Install+dotfiles+from+jiunbae/settings&mascot=wave" width="100%" /></div>
+
+```
+Clone and run the dotfiles installer from https://github.com/jiunbae/settings
+
+Quick install:  curl -LsSf https://settings.jiun.dev | bash -s -- --all
+Core only:      curl -LsSf https://settings.jiun.dev | bash -s -- --core
+Pick & choose:  curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim zellij tools
+
+Post-install: exec zsh
+```
+<div><img src="https://quickstart-for-agents.vercel.app/api/footer.svg?theme=claude-code&project=jiunbae/settings" width="100%" /></div>
+</div>
+
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║  Settings Installer                                          ║
@@ -24,30 +39,31 @@ Modern dotfiles installer with animated progress display.
 ### One-Line Install (Recommended)
 
 ```bash
-# Install everything with a single command
-curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- --all
+# Install everything
+curl -LsSf https://settings.jiun.dev | bash -s -- --all
 
-# Or install specific components
-curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- zsh nvim tmux
-```
+# Install specific components
+curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim zellij
 
-### Using Release (Bundled Installer)
-
-```bash
-# Download and run the bundled installer (no git required)
-curl -fsSL https://github.com/jiunbae/settings/releases/latest/download/install-bundled.sh | bash -s -- --all
+# Interactive selector
+curl -LsSf https://settings.jiun.dev | bash -s -- --interactive
 ```
 
 ### Manual Clone
 
 ```bash
-# Clone and install everything
 git clone https://github.com/jiunbae/settings.git
 cd settings
 ./install.sh --all
+```
 
-# Or install specific components
-./install.sh zsh nvim tmux rust tools
+### Presets
+
+```bash
+./install.sh              # Interactive selector (pick components in a menu)
+./install.sh --all        # Install everything
+./install.sh --core       # Core dev environment (base, zsh, nvim, zellij, tools)
+./install.sh --basic      # Minimal (base, zsh, nvim, zellij)
 ```
 
 ## Features
@@ -64,17 +80,23 @@ cd settings
 Usage: install.sh [OPTIONS] [COMPONENTS...]
 
 Options:
+  -i, --interactive   Interactive component selector (default when no args)
   -a, --all           Install all components
+  --core              Install core dev environment (base, zsh, nvim, zellij, tools)
+  -b, --basic         Install basic dev environment (base, zsh, nvim, zellij)
   -f, --force         Force reinstall (overwrite existing)
+  -c, --copy          Copy config files instead of symlink
+  -l, --link          Create symlinks for config files (default)
   -v, --verbose       Enable verbose output
   -n, --dry-run       Show what would be done
+  --no-sudo           Skip commands that require sudo privileges
   -h, --help          Show help message
 
 Components:
   base          Basic packages (curl, wget, git, build-essential)
   zsh           Zsh + zinit + Powerlevel10k
-  nvim          NeoVim + SpaceVim
-  tmux          tmux + TPM (Tmux Plugin Manager)
+  nvim          NeoVim + LazyVim
+  zellij        zellij (modern terminal multiplexer)
   rust          Rust toolchain + cargo-binstall
   uv            uv (fast Python package manager)
   tools         CLI tools (eza, fd, bat, ripgrep, fzf)
@@ -103,8 +125,7 @@ Components:
 ### Terminal
 | Component | Description |
 |-----------|-------------|
-| [tmux](https://github.com/tmux/tmux) | Terminal multiplexer |
-| [TPM](https://github.com/tmux-plugins/tpm) | Tmux Plugin Manager |
+| [zellij](https://zellij.dev/) | Terminal multiplexer |
 | [Windows Terminal](https://aka.ms/terminal) | Modern terminal for Windows |
 
 ### Development Tools
@@ -170,19 +191,22 @@ settings/
 │   ├── base.sh            #   Basic packages
 │   ├── shell.sh           #   Zsh + zinit + P10k
 │   ├── editor.sh          #   NeoVim + LazyVim
-│   ├── tmux.sh            #   tmux + TPM
+│   ├── zellij.sh          #   zellij
 │   ├── rust.sh            #   Rust + cargo-binstall
 │   ├── python.sh          #   uv
 │   ├── tools.sh           #   CLI tools
 │   ├── ssh.sh             #   SSH config
 │   └── hishtory.sh        #   hishtory + self-hosted sync
+├── worker/                 # Cloudflare Worker (settings.jiun.dev)
+│   ├── index.js           #   Proxy raw GitHub content
+│   └── wrangler.toml      #   Wrangler configuration
 ├── scripts/                # Build scripts
 │   ├── bundle.sh          #   Create bundled installer
 │   └── wsl2-network.ps1   #   WSL2 network setup script
 ├── configs/                # Configuration files
 │   ├── .zshrc
 │   ├── .p10k.zsh
-│   ├── .tmux.conf
+│   ├── zellij/            #   zellij config + layouts
 │   ├── nvim/              #   NeoVim + LazyVim config
 │   ├── hishtory/          #   hishtory config template
 │   └── windows-terminal/  #   Windows Terminal configuration
@@ -208,7 +232,7 @@ settings/
 ./install.sh zsh
 
 # Install with verbose output
-./install.sh -v zsh nvim tmux
+./install.sh -v zsh nvim zellij
 
 # Force reinstall everything
 ./install.sh --force --all
@@ -246,6 +270,12 @@ alias grep='rg'
 alias du='dust'
 alias ps='procs'
 alias top='btm'
+
+# Zellij (terminal multiplexer)
+alias zs='zellij -s'        # new session
+alias za='zellij attach'    # attach
+alias zl='zellij list-sessions'  # list
+
 
 # Editor
 alias vim='nvim'

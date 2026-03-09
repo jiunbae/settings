@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./install.sh --all           Install all components
-#   ./install.sh zsh nvim tmux   Install specific components
+#   ./install.sh zsh nvim zellij  Install specific components
 #   ./install.sh --help          Show help
 #
 
@@ -31,7 +31,7 @@ source "$SCRIPT_DIR/lib/cli.sh"
 source "$SCRIPT_DIR/modules/base.sh"
 source "$SCRIPT_DIR/modules/shell.sh"
 source "$SCRIPT_DIR/modules/editor.sh"
-source "$SCRIPT_DIR/modules/tmux.sh"
+source "$SCRIPT_DIR/modules/zellij.sh"
 source "$SCRIPT_DIR/modules/rust.sh"
 source "$SCRIPT_DIR/modules/python.sh"
 source "$SCRIPT_DIR/modules/tools.sh"
@@ -46,7 +46,7 @@ get_component_name() {
         base)        echo "Base packages" ;;
         zsh)         echo "Zsh + zinit + Powerlevel10k" ;;
         nvim)        echo "NeoVim + LazyVim" ;;
-        tmux)        echo "tmux + TPM" ;;
+        zellij)      echo "zellij (terminal multiplexer)" ;;
         rust)        echo "Rust toolchain" ;;
         uv)          echo "uv (Python)" ;;
         tools)       echo "CLI tools" ;;
@@ -107,8 +107,8 @@ main() {
             nvim)
                 install_editor
                 ;;
-            tmux)
-                install_tmux
+            zellij)
+                install_zellij
                 ;;
             rust)
                 install_rust

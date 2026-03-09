@@ -1,0 +1,7 @@
+name = "settings-installer"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+routes = [
+  { pattern = "settings.jiun.dev", custom_domain = true }
+]

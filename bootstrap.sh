@@ -4,9 +4,9 @@
 # https://github.com/jiunbae/settings
 #
 # One-line installation:
-#   curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- --all
-#   curl -fsSL https://raw.githubusercontent.com/jiunbae/settings/master/bootstrap.sh | bash -s -- zsh nvim
+#   curl -LsSf https://settings.jiun.dev | sh
+#   curl -LsSf https://settings.jiun.dev | bash -s -- --all
+#   curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim
 #
 
 set -euo pipefail
@@ -117,7 +117,7 @@ run_installer() {
         echo ""
         log_info "Run with arguments to install components:"
         echo "  cd $INSTALL_DIR && ./install.sh --all"
-        echo "  cd $INSTALL_DIR && ./install.sh zsh nvim tmux"
+        echo "  cd $INSTALL_DIR && ./install.sh zsh nvim zellij"
     else
         # Pass arguments to installer
         ./install.sh "$@"
