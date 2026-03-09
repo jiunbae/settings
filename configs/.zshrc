@@ -210,9 +210,12 @@ alias oc="opencode"
 alias zs='zellij -s'
 alias za='zellij attach'
 alias zl='zellij list-sessions'
-alias zr='bash ~/.config/zellij/migrate-tmux.sh'
+unalias zx 2>/dev/null
+zx() { zellij kill-session "$1" 2>/dev/null; zellij delete-session "$1" 2>/dev/null; }
+alias zda='zellij delete-all-sessions'
+alias zq='zellij kill-all-sessions'
 _zellij_sessions() { compadd $(zellij list-sessions 2>/dev/null | command grep -oE '^\S+') }
-compdef _zellij_sessions za zs
+compdef _zellij_sessions za zs zx zd
 export EDITOR=nvim
 export GPG_TTY=$(tty)
 
