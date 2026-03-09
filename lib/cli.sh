@@ -11,13 +11,13 @@ readonly VERSION="2.0.0"
 # Available Components
 # ==============================================================================
 # Component list (bash 3.2 compatible - no associative arrays)
-readonly COMPONENTS_ORDER=(base zsh nvim tmux rust uv tools tools-extra ssh hishtory)
+readonly COMPONENTS_ORDER=(base zsh nvim zellij rust uv tools tools-extra ssh hishtory)
 
 # Basic components for --basic option
-readonly BASIC_COMPONENTS=(base zsh nvim tmux)
+readonly BASIC_COMPONENTS=(base zsh nvim zellij)
 
 # Core components for --core / interactive default
-readonly CORE_COMPONENTS=(base zsh nvim tmux tools)
+readonly CORE_COMPONENTS=(base zsh nvim zellij tools)
 
 # Get component description (bash 3.2 compatible alternative to associative array)
 get_component_desc() {
@@ -25,7 +25,7 @@ get_component_desc() {
         base)        echo "Basic packages (curl, wget, git, build-essential)" ;;
         zsh)         echo "Zsh + zinit + Powerlevel10k" ;;
         nvim)        echo "NeoVim + LazyVim" ;;
-        tmux)        echo "tmux + TPM (Tmux Plugin Manager)" ;;
+        zellij)      echo "zellij (modern terminal multiplexer)" ;;
         rust)        echo "Rust toolchain + cargo-binstall" ;;
         uv)          echo "uv (fast Python package manager)" ;;
         tools)       echo "CLI tools (eza, fd, ripgrep)" ;;
@@ -275,8 +275,8 @@ ${BOLD}USAGE:${NC}
 ${BOLD}OPTIONS:${NC}
     -i, --interactive   Interactive component selector (default when no args)
     -a, --all           Install all components
-    --core              Install core dev environment (base, zsh, nvim, tmux, tools)
-    -b, --basic         Install basic dev environment (base, zsh, nvim, tmux)
+    --core              Install core dev environment (base, zsh, nvim, zellij, tools)
+    -b, --basic         Install basic dev environment (base, zsh, nvim, zellij)
     -f, --force         Force reinstall (overwrite existing)
     -c, --copy          Copy config files instead of symlink
     -l, --link          Create symlinks for config files (default)
@@ -301,11 +301,11 @@ ${BOLD}EXAMPLES:${NC}
     install.sh --core                   # Install core dev environment
     install.sh --basic                  # Install basic dev environment
     install.sh --copy --all             # Install everything (copy mode)
-    install.sh zsh nvim tmux            # Install specific components
+    install.sh zsh nvim zellij          # Install specific components
     install.sh -v tools tools-extra     # Install tools with verbose output
     install.sh -n --all                 # Dry-run to see what would happen
     install.sh -f zsh                   # Force reinstall zsh configuration
-    install.sh -c zsh tmux              # Install zsh and tmux with copy mode
+    install.sh -c zsh zellij            # Install zsh and zellij with copy mode
 
 ${BOLD}MORE INFO:${NC}
     Repository: https://github.com/jiunbae/settings
@@ -409,7 +409,7 @@ parse_args() {
             echo "Use --all to install everything, or specify components:"
             echo "  install.sh --all"
             echo "  install.sh --core"
-            echo "  install.sh zsh nvim tmux"
+            echo "  install.sh zsh nvim zellij"
             echo ""
             echo "Run 'install.sh --help' for more information."
             exit 1

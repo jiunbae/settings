@@ -14,7 +14,7 @@ Clone and run the dotfiles installer from https://github.com/jiunbae/settings
 
 Quick install:  curl -LsSf https://settings.jiun.dev | bash -s -- --all
 Core only:      curl -LsSf https://settings.jiun.dev | bash -s -- --core
-Pick & choose:  curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim tmux tools
+Pick & choose:  curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim zellij tools
 
 Post-install: exec zsh
 ```
@@ -43,7 +43,7 @@ Post-install: exec zsh
 curl -LsSf https://settings.jiun.dev | bash -s -- --all
 
 # Install specific components
-curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim tmux
+curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim zellij
 
 # Interactive selector
 curl -LsSf https://settings.jiun.dev | bash -s -- --interactive
@@ -62,8 +62,8 @@ cd settings
 ```bash
 ./install.sh              # Interactive selector (pick components in a menu)
 ./install.sh --all        # Install everything
-./install.sh --core       # Core dev environment (base, zsh, nvim, tmux, tools)
-./install.sh --basic      # Minimal (base, zsh, nvim, tmux)
+./install.sh --core       # Core dev environment (base, zsh, nvim, zellij, tools)
+./install.sh --basic      # Minimal (base, zsh, nvim, zellij)
 ```
 
 ## Features
@@ -82,8 +82,8 @@ Usage: install.sh [OPTIONS] [COMPONENTS...]
 Options:
   -i, --interactive   Interactive component selector (default when no args)
   -a, --all           Install all components
-  --core              Install core dev environment (base, zsh, nvim, tmux, tools)
-  -b, --basic         Install basic dev environment (base, zsh, nvim, tmux)
+  --core              Install core dev environment (base, zsh, nvim, zellij, tools)
+  -b, --basic         Install basic dev environment (base, zsh, nvim, zellij)
   -f, --force         Force reinstall (overwrite existing)
   -c, --copy          Copy config files instead of symlink
   -l, --link          Create symlinks for config files (default)
@@ -96,7 +96,7 @@ Components:
   base          Basic packages (curl, wget, git, build-essential)
   zsh           Zsh + zinit + Powerlevel10k
   nvim          NeoVim + LazyVim
-  tmux          tmux + TPM (Tmux Plugin Manager)
+  zellij        zellij (modern terminal multiplexer)
   rust          Rust toolchain + cargo-binstall
   uv            uv (fast Python package manager)
   tools         CLI tools (eza, fd, bat, ripgrep, fzf)
@@ -125,8 +125,7 @@ Components:
 ### Terminal
 | Component | Description |
 |-----------|-------------|
-| [zellij](https://zellij.dev/) | Terminal multiplexer (modern tmux alternative) |
-| [tmux](https://github.com/tmux/tmux) | Terminal multiplexer (legacy, config included) |
+| [zellij](https://zellij.dev/) | Terminal multiplexer |
 | [Windows Terminal](https://aka.ms/terminal) | Modern terminal for Windows |
 
 ### Development Tools
@@ -192,7 +191,7 @@ settings/
 │   ├── base.sh            #   Basic packages
 │   ├── shell.sh           #   Zsh + zinit + P10k
 │   ├── editor.sh          #   NeoVim + LazyVim
-│   ├── tmux.sh            #   tmux + TPM
+│   ├── zellij.sh          #   zellij
 │   ├── rust.sh            #   Rust + cargo-binstall
 │   ├── python.sh          #   uv
 │   ├── tools.sh           #   CLI tools
@@ -207,7 +206,7 @@ settings/
 ├── configs/                # Configuration files
 │   ├── .zshrc
 │   ├── .p10k.zsh
-│   ├── .tmux.conf
+│   ├── zellij/            #   zellij config + layouts
 │   ├── nvim/              #   NeoVim + LazyVim config
 │   ├── hishtory/          #   hishtory config template
 │   └── windows-terminal/  #   Windows Terminal configuration
@@ -233,7 +232,7 @@ settings/
 ./install.sh zsh
 
 # Install with verbose output
-./install.sh -v zsh nvim tmux
+./install.sh -v zsh nvim zellij
 
 # Force reinstall everything
 ./install.sh --force --all

@@ -1,0 +1,7 @@
+layout {
+    pane split_direction="horizontal" {
+        pane cwd="/Users/jiun/workspace/twee-do"
+        pane cwd="/Users/jiun/workspace/twee-do"
+        pane cwd="/Users/jiun/workspace/twee-do"
+    }
+}

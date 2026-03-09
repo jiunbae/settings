@@ -6,7 +6,7 @@
  * Usage:
  *   curl -LsSf https://settings.jiun.dev | sh
  *   curl -LsSf https://settings.jiun.dev | bash -s -- --all
- *   curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim tmux
+ *   curl -LsSf https://settings.jiun.dev | bash -s -- zsh nvim zellij
  *
  * Routes:
  *   GET /              → bootstrap.sh (installer script)

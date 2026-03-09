@@ -1,0 +1,6 @@
+layout {
+    pane split_direction="horizontal" {
+        pane cwd="/Users/jiun/workspace-open330/burstpick-oc"
+        pane cwd="/Users/jiun/workspace-open330/burstpick-oc"
+    }
+}

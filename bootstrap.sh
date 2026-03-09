@@ -117,7 +117,7 @@ run_installer() {
         echo ""
         log_info "Run with arguments to install components:"
         echo "  cd $INSTALL_DIR && ./install.sh --all"
-        echo "  cd $INSTALL_DIR && ./install.sh zsh nvim tmux"
+        echo "  cd $INSTALL_DIR && ./install.sh zsh nvim zellij"
     else
         # Pass arguments to installer
         ./install.sh "$@"
