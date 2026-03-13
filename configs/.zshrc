@@ -219,8 +219,8 @@ zx() {
     return 1
   fi
   zellij kill-session "$1" 2>/dev/null
-  # Kill the server process directly (kill-session alone may not stop it)
-  pkill -f "zellij --server.*/$1\$" 2>/dev/null
+  # Force kill the server process (zellij ignores SIGTERM)
+  pkill -9 -f "zellij --server.*/$1\$" 2>/dev/null
   # Remove resurrection data
   local _zj_cache
   if [[ "$OSTYPE" == darwin* ]]; then
