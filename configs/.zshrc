@@ -219,7 +219,9 @@ zx() {
     return 1
   fi
   zellij kill-session "$1" 2>/dev/null
-  # Remove resurrection data directly (delete-session re-creates session_info, so skip it)
+  # Kill the server process directly (kill-session alone may not stop it)
+  pkill -f "zellij --server.*/$1\$" 2>/dev/null
+  # Remove resurrection data
   local _zj_cache
   if [[ "$OSTYPE" == darwin* ]]; then
     _zj_cache="${HOME}/Library/Caches/org.Zellij-Contributors.Zellij"
