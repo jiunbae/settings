@@ -219,15 +219,13 @@ zx() {
     return 1
   fi
   zellij kill-session "$1" 2>/dev/null
-  zellij delete-session "$1" 2>/dev/null
-  # Remove resurrection data from all known cache locations
+  # Remove resurrection data directly (delete-session re-creates session_info, so skip it)
   local _zj_cache
   if [[ "$OSTYPE" == darwin* ]]; then
     _zj_cache="${HOME}/Library/Caches/org.Zellij-Contributors.Zellij"
   else
     _zj_cache="${HOME}/.cache/zellij"
   fi
-  # Remove session info and layout data (use find to avoid zsh glob nomatch errors)
   find "$_zj_cache" -path "*/session_info/$1" -type d -exec rm -rf {} + 2>/dev/null
   find "$_zj_cache" -path "*/sessions/$1" -type d -exec rm -rf {} + 2>/dev/null
   echo "Session '$1' killed and purged."
