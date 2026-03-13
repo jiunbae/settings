@@ -211,7 +211,20 @@ alias zs='zellij -s'
 alias za='zellij attach'
 alias zl='zellij list-sessions'
 unalias zx 2>/dev/null
-zx() { zellij kill-session "$1" 2>/dev/null; zellij delete-session "$1" 2>/dev/null; }
+zx() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: zx <session-name>"
+    echo "Active sessions:"
+    zellij list-sessions 2>/dev/null
+    return 1
+  fi
+  zellij kill-session "$1" 2>/dev/null
+  zellij delete-session "$1" 2>/dev/null
+  # Remove resurrection layout to prevent session from coming back
+  rm -f "${HOME}/.cache/zellij/sessions/$1/"*.{kdl,yaml} 2>/dev/null
+  rm -rf "${HOME}/.cache/zellij/sessions/$1" 2>/dev/null
+  echo "Session '$1' killed and purged."
+}
 alias zda='zellij delete-all-sessions'
 alias zq='zellij kill-all-sessions'
 _zellij_sessions() { compadd $(zellij list-sessions 2>/dev/null | command grep -oE '^\S+') }
