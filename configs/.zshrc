@@ -220,9 +220,16 @@ zx() {
   fi
   zellij kill-session "$1" 2>/dev/null
   zellij delete-session "$1" 2>/dev/null
-  # Remove resurrection layout to prevent session from coming back
-  rm -f "${HOME}/.cache/zellij/sessions/$1/"*.{kdl,yaml} 2>/dev/null
-  rm -rf "${HOME}/.cache/zellij/sessions/$1" 2>/dev/null
+  # Remove resurrection data from all known cache locations
+  local _zj_cache
+  if [[ "$OSTYPE" == darwin* ]]; then
+    _zj_cache="${HOME}/Library/Caches/org.Zellij-Contributors.Zellij"
+  else
+    _zj_cache="${HOME}/.cache/zellij"
+  fi
+  # Remove session info and layout data
+  rm -rf "${_zj_cache}/"*"/session_info/$1" 2>/dev/null
+  rm -rf "${_zj_cache}/sessions/$1" 2>/dev/null
   echo "Session '$1' killed and purged."
 }
 alias zda='zellij delete-all-sessions'
