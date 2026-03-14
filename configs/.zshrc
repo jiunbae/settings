@@ -219,18 +219,8 @@ zx() {
     return 1
   fi
   zellij kill-session "$1" 2>/dev/null
-  # Force kill the server process (zellij ignores SIGTERM)
-  pkill -9 -f "zellij --server.*/$1\$" 2>/dev/null
-  # Remove resurrection data
-  local _zj_cache
-  if [[ "$OSTYPE" == darwin* ]]; then
-    _zj_cache="${HOME}/Library/Caches/org.Zellij-Contributors.Zellij"
-  else
-    _zj_cache="${HOME}/.cache/zellij"
-  fi
-  find "$_zj_cache" -path "*/session_info/$1" -type d -exec rm -rf {} + 2>/dev/null
-  find "$_zj_cache" -path "*/sessions/$1" -type d -exec rm -rf {} + 2>/dev/null
-  echo "Session '$1' killed and purged."
+  zellij delete-session "$1" 2>/dev/null
+  echo "Session '$1' removed."
 }
 alias zda='zellij delete-all-sessions'
 alias zq='zellij kill-all-sessions'
