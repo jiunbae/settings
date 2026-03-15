@@ -214,13 +214,18 @@ unalias zx 2>/dev/null
 zx() {
   if [[ -z "$1" ]]; then
     echo "Usage: zx <session-name>"
-    echo "Active sessions:"
     zellij list-sessions 2>/dev/null
     return 1
   fi
-  zellij kill-session "$1" 2>/dev/null
-  zellij delete-session "$1" 2>/dev/null
-  echo "Session '$1' removed."
+  local removed=0
+  zellij kill-session "$1" 2>/dev/null && removed=1
+  zellij delete-session "$1" 2>/dev/null && removed=1
+  if (( removed )); then
+    echo "Session '$1' removed."
+  else
+    echo "Session '$1' not found."
+    return 1
+  fi
 }
 alias zda='zellij delete-all-sessions'
 alias zq='zellij kill-all-sessions'
