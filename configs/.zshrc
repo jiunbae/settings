@@ -220,6 +220,12 @@ zx() {
   local removed=0
   zellij kill-session "$1" 2>/dev/null && removed=1
   zellij delete-session "$1" 2>/dev/null && removed=1
+  # Kill orphaned server process that ignores kill-session
+  local pid
+  pid=$(command ps ax -o pid=,args= | command grep "[z]ellij --server.*/$1\$" | awk '{print $1}')
+  if [[ -n "$pid" ]]; then
+    kill -9 "$pid" 2>/dev/null && removed=1
+  fi
   if (( removed )); then
     echo "Session '$1' removed."
   else
