@@ -146,7 +146,7 @@ def rsync_files(files: list[Path], dry_run: bool = False) -> int:
             shutil.copy2(f, os.path.join(tmpdir, f.name))
 
         cmd = [
-            "rsync", "-az", "--checksum",
+            "rsync", "-rltz", "--checksum",
             "--include=*.md",
             "--include=*.png", "--include=*.jpg",
             "--include=*.jpeg", "--include=*.gif", "--include=*.svg",
@@ -170,6 +170,19 @@ def rsync_files(files: list[Path], dry_run: bool = False) -> int:
             for line in result.stdout.strip().splitlines():
                 if line.endswith(".md"):
                     print(f"  [SYNC] {line}")
+
+    # Fix permissions after rsync (macOS openrsync doesn't support --chmod/--chown)
+    if not dry_run:
+        try:
+            subprocess.run(
+                ["ssh", f"{DOCS_USER}@{DOCS_HOST}",
+                 f"chmod 755 {DOCS_ROOT} && "
+                 f"find {DOCS_ROOT} -maxdepth 1 -type f -exec chmod 644 {{}} + && "
+                 f"chown -R www-data:www-data {DOCS_ROOT}"],
+                capture_output=True, timeout=15,
+            )
+        except Exception:
+            pass
 
     return len(files)
 
