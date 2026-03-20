@@ -12,269 +12,80 @@ Codex Context Push - OpenAI Codex CLI 세션을 Obsidian CouchDB로 푸시
 """
 
 import argparse
-import base64
 import json
-import os
 import sys
-import urllib.request
-import urllib.error
-import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
-import livesync_compat
+from couchdb_client import create_client, WORKSPACE_VARIANTS
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-VAULT_ROOT = Path.home() / "s-lastorder"
 CODEX_DIR = Path.home() / ".codex"
 HISTORY_FILE = CODEX_DIR / "history.jsonl"
-CONFIG_FILE = CODEX_DIR / "config.toml"
-SCRIPT_DIR = Path(__file__).resolve().parent
-
 CONTEXT_PREFIX = "codex-context"
-
-
-def _load_env_file() -> None:
-    env_file = SCRIPT_DIR / ".env"
-    if not env_file.exists():
-        return
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip("'\"")
-        if key not in os.environ:
-            os.environ[key] = value
-
-
-_load_env_file()
-
-COUCHDB_URI = os.environ.get("COUCHDB_URI", "")
-COUCHDB_USER = os.environ.get("COUCHDB_USER", "admin")
-COUCHDB_PASSWORD = os.environ.get("COUCHDB_PASSWORD", "")
-COUCHDB_DB = os.environ.get("COUCHDB_DB", "obsidian")
-
-MAX_WORKERS = 10
-
-# Workspace 변형
-WORKSPACE_VARIANTS = {
-    "workspace-ext": "workspace-ext",
-    "workspace-vibe": "workspace-vibe",
-    "workspace-game": "workspace-game",
-    "workspace-open330": "workspace-open330",
-    "workspace": "workspace",
-}
-
-
-def validate_config() -> None:
-    missing = []
-    if not COUCHDB_URI:
-        missing.append("COUCHDB_URI")
-    if not COUCHDB_PASSWORD:
-        missing.append("COUCHDB_PASSWORD")
-    if missing:
-        env_path = SCRIPT_DIR / ".env"
-        print(f"Error: {', '.join(missing)} required", file=sys.stderr)
-        sys.exit(1)
-
-
-# ============================================================================
-# CouchDB API (reused from vault-push.py)
-# ============================================================================
-
-def couchdb_request(path, method="GET", data=None, timeout=30):
-    url = f"{COUCHDB_URI}/{COUCHDB_DB}/{path}"
-    body = json.dumps(data).encode('utf-8') if data is not None else None
-    req = urllib.request.Request(url, data=body, method=method)
-    credentials = base64.b64encode(f"{COUCHDB_USER}:{COUCHDB_PASSWORD}".encode()).decode()
-    req.add_header('Authorization', f'Basic {credentials}')
-    req.add_header('Content-Type', 'application/json')
-    req.add_header('User-Agent', 'codex-context-push/1.0')
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        if e.code == 409:
-            return {"error": "conflict", "reason": "Document update conflict"}
-        raw = ""
-        try:
-            raw = e.read().decode("utf-8", errors="replace").strip()
-        except Exception:
-            pass
-        raise RuntimeError(f"HTTP {e.code}: {e.reason} ({url})\n{raw[:500]}") from e
-
-
-def couchdb_head(path):
-    url = f"{COUCHDB_URI}/{COUCHDB_DB}/{path}"
-    req = urllib.request.Request(url, method="HEAD")
-    credentials = base64.b64encode(f"{COUCHDB_USER}:{COUCHDB_PASSWORD}".encode()).decode()
-    req.add_header('Authorization', f'Basic {credentials}')
-    try:
-        with urllib.request.urlopen(req, timeout=10):
-            return True
-    except urllib.error.HTTPError:
-        return False
-
-
-def get_document_rev(doc_id):
-    encoded_id = urllib.parse.quote(doc_id, safe='')
-    doc = couchdb_request(encoded_id)
-    if doc and '_rev' in doc:
-        return doc['_rev']
-    return None
-
-
-def put_document(doc):
-    doc_id = doc['_id']
-    encoded_id = urllib.parse.quote(doc_id, safe='')
-    return couchdb_request(encoded_id, method="PUT", data=doc)
-
-
-def upload_chunk(chunk_id, chunk_data):
-    encoded_id = urllib.parse.quote(chunk_id, safe='')
-    if couchdb_head(encoded_id):
-        return True
-    doc = {"_id": chunk_id, "data": chunk_data, "type": "leaf"}
-    result = put_document(doc)
-    if result and result.get("error") == "conflict":
-        return True
-    return result is not None and result.get("ok", False)
-
-
-def push_content(vault_rel_path, content, mtime_ms, dry_run=False, verbose=False):
-    chunk_ids, chunks = livesync_compat.process_document(content)
-
-    if dry_run:
-        existing = get_document_rev(vault_rel_path)
-        action = "UPDATE" if existing else "CREATE"
-        print(f"  [{action}] {vault_rel_path} ({len(chunks)} chunks, {len(content)} bytes)")
-        return "created" if not existing else "updated"
-
-    failed_chunks = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_to_idx = {
-            executor.submit(upload_chunk, cid, cdata): cid
-            for cid, cdata in zip(chunk_ids, chunks)
-        }
-        for future in as_completed(future_to_idx):
-            cid = future_to_idx[future]
-            try:
-                if not future.result():
-                    failed_chunks.append(cid)
-            except Exception as e:
-                if verbose:
-                    print(f"  [WARN] Chunk upload failed {cid}: {e}")
-                failed_chunks.append(cid)
-
-    if failed_chunks:
-        print(f"  [ERROR] {vault_rel_path}: {len(failed_chunks)} chunks failed")
-        return "error"
-
-    file_doc = {
-        "_id": vault_rel_path,
-        "path": vault_rel_path,
-        "children": chunk_ids,
-        "ctime": mtime_ms,
-        "mtime": mtime_ms,
-        "size": len(content.encode("utf-8")),
-        "type": "plain",
-    }
-
-    existing_rev = get_document_rev(vault_rel_path)
-    if existing_rev:
-        file_doc["_rev"] = existing_rev
-
-    result = put_document(file_doc)
-    if result and result.get("error") == "conflict":
-        rev = get_document_rev(vault_rel_path)
-        if rev:
-            file_doc["_rev"] = rev
-            result = put_document(file_doc)
-
-    if result is None or result.get("error"):
-        err = result.get("reason", "unknown") if result else "no response"
-        print(f"  [ERROR] {vault_rel_path}: {err}")
-        return "error"
-
-    action = "UPDATE" if existing_rev else "CREATE"
-    if verbose:
-        print(f"  [{action}] {vault_rel_path} ({len(chunks)} chunks)")
-    return "created" if not existing_rev else "updated"
+STATE_FILE = Path(__file__).resolve().parent / ".codex-push-state.json"
 
 
 # ============================================================================
 # Session Discovery
 # ============================================================================
 
-def resolve_vault_path_from_config() -> dict[str, str]:
-    """config.toml의 trusted projects에서 vault path 매핑 생성"""
-    mapping = {}
-    if not CONFIG_FILE.exists():
-        return mapping
-
-    content = CONFIG_FILE.read_text(encoding="utf-8")
-    home = str(Path.home())
-
-    for line in content.splitlines():
-        line = line.strip()
-        if line.startswith('[projects."') and line.endswith('"]'):
-            path = line[len('[projects."'):-len('"]')]
-            if path.startswith(home + "/"):
-                rel = path[len(home) + 1:]
-                # workspace 하위인지 확인
-                for prefix in WORKSPACE_VARIANTS:
-                    if rel.startswith(prefix + "/") or rel == prefix:
-                        mapping[path] = rel
-                        break
-    return mapping
-
-
 def load_codex_sessions() -> dict[str, dict]:
-    """history.jsonl에서 세션 데이터 로드"""
+    """history.jsonl에서 세션 데이터를 스트리밍으로 로드"""
     sessions = {}
     if not HISTORY_FILE.exists():
         return sessions
 
-    for line in HISTORY_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    with open(HISTORY_FILE, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
 
-        sid = entry.get("session_id", "")
-        if not sid:
-            continue
+            sid = entry.get("session_id", "")
+            if not sid:
+                continue
 
-        if sid not in sessions:
-            sessions[sid] = {
-                "id": sid,
-                "ts": entry.get("ts", 0),
-                "prompts": [],
-                "last_ts": entry.get("ts", 0),
-            }
+            if sid not in sessions:
+                sessions[sid] = {
+                    "id": sid,
+                    "ts": entry.get("ts", 0),
+                    "prompts": [],
+                    "last_ts": entry.get("ts", 0),
+                }
 
-        sessions[sid]["prompts"].append(entry.get("text", ""))
-        ts = entry.get("ts", 0)
-        if ts > sessions[sid]["last_ts"]:
-            sessions[sid]["last_ts"] = ts
-        if ts < sessions[sid]["ts"]:
-            sessions[sid]["ts"] = ts
+            sessions[sid]["prompts"].append(entry.get("text", ""))
+            ts = entry.get("ts", 0)
+            if ts > sessions[sid]["last_ts"]:
+                sessions[sid]["last_ts"] = ts
+            if ts < sessions[sid]["ts"]:
+                sessions[sid]["ts"] = ts
 
     return sessions
+
+
+def load_push_state() -> dict[str, int]:
+    """이전 푸시 상태 로드 (session_id → last_ts)"""
+    if not STATE_FILE.exists():
+        return {}
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_push_state(sessions: dict[str, dict]) -> None:
+    """푸시 상태 저장"""
+    state = {sid: s["last_ts"] for sid, s in sessions.items()}
+    STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
 
 
 # ============================================================================
@@ -283,14 +94,14 @@ def load_codex_sessions() -> dict[str, dict]:
 
 def _ts_to_date(ts: int) -> str:
     try:
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
     except (ValueError, OSError):
         return "unknown"
 
 
 def _ts_to_datetime(ts: int) -> str:
     try:
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
     except (ValueError, OSError):
         return "unknown"
 
@@ -304,22 +115,22 @@ def _compute_duration(start_ts: int, end_ts: int) -> str:
     return f"{hours}h {mins}m"
 
 
-def generate_session_md(session: dict) -> str:
-    sid = session["id"]
-    prompts = session["prompts"]
-    ts = session["ts"]
-    last_ts = session["last_ts"]
+def _sanitize_table_cell(text: str) -> str:
+    return text.replace("|", "\\|").replace("\n", " ")
 
+
+def generate_session_md(session: dict) -> str:
+    prompts = session["prompts"]
     first_prompt = prompts[0] if prompts else ""
-    summary = first_prompt[:80] if first_prompt else "Untitled session"
-    duration = _compute_duration(ts, last_ts)
+    summary = _sanitize_table_cell(first_prompt[:80]) if first_prompt else "Untitled session"
+    duration = _compute_duration(session["ts"], session["last_ts"])
 
     lines = [
         "---",
-        f"sessionId: {sid}",
-        f"tool: codex",
-        f"created: {_ts_to_datetime(ts)}",
-        f"modified: {_ts_to_datetime(last_ts)}",
+        f"sessionId: {session['id']}",
+        "tool: codex",
+        f"created: {_ts_to_datetime(session['ts'])}",
+        f"modified: {_ts_to_datetime(session['last_ts'])}",
         f"messageCount: {len(prompts)}",
         "tags: [codex-session, auto-generated]",
         "---",
@@ -329,11 +140,10 @@ def generate_session_md(session: dict) -> str:
     ]
 
     if first_prompt:
-        prompt_preview = first_prompt[:500]
+        preview = first_prompt[:500].replace("\n", "\n> ")
         if len(first_prompt) > 500:
-            prompt_preview += "..."
-        lines.append(f"> {prompt_preview}")
-        lines.append("")
+            preview += "..."
+        lines.extend([f"> {preview}", ""])
 
     lines.extend([
         f"- **Messages**: {len(prompts)}",
@@ -341,10 +151,8 @@ def generate_session_md(session: dict) -> str:
         "",
     ])
 
-    # Show first few prompts
     if len(prompts) > 1:
-        lines.append("## Prompts")
-        lines.append("")
+        lines.extend(["## Prompts", ""])
         for i, p in enumerate(prompts[:10]):
             preview = p[:120].replace("\n", " ")
             if len(p) > 120:
@@ -361,7 +169,7 @@ def generate_index_md(sessions: list[dict]) -> str:
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     lines = [
         "---",
-        f"tool: codex",
+        "tool: codex",
         f"updated: {now}",
         "tags: [codex-context, index, auto-generated]",
         "---",
@@ -376,11 +184,11 @@ def generate_index_md(sessions: list[dict]) -> str:
 
     for s in sorted(sessions, key=lambda x: x["last_ts"], reverse=True):
         date = _ts_to_date(s["ts"])
-        summary = (s["prompts"][0][:50] if s["prompts"] else "Untitled").replace("\n", " ")
+        summary = _sanitize_table_cell(
+            s["prompts"][0][:50] if s["prompts"] else "Untitled"
+        )
         msgs = len(s["prompts"])
         duration = _compute_duration(s["ts"], s["last_ts"])
-        short_id = s["id"][:8]
-        session_date = _ts_to_date(s["ts"])
         lines.append(f"| {date} | {summary} | {msgs} | {duration} |")
 
     lines.append("")
@@ -402,29 +210,55 @@ def push_all(force=False, dry_run=False, verbose=False):
         print("  No sessions to push.")
         return stats
 
+    # Change detection
+    prev_state = {} if force else load_push_state()
+    changed = {}
+    for sid, s in sessions.items():
+        if sid not in prev_state or prev_state[sid] != s["last_ts"]:
+            changed[sid] = s
+        else:
+            stats["skipped"] += 1
+
+    if not changed and not force:
+        print(f"  No changes detected ({stats['skipped']} skipped)")
+        return stats
+
+    print(f"  Changed: {len(changed)}, Skipped: {stats['skipped']}")
+
+    client = create_client(user_agent="codex-context-push/1.0")
     now_ms = int(datetime.now().timestamp() * 1000)
-    vault_prefix = CONTEXT_PREFIX
 
-    # Push index
-    all_sessions = sorted(sessions.values(), key=lambda x: x["last_ts"], reverse=True)
-    index_content = generate_index_md(all_sessions)
-    index_path = f"{vault_prefix}/INDEX.md"
-    print(f"\n[Push] Index ({len(all_sessions)} sessions)")
-    result = push_content(index_path, index_content, now_ms, dry_run=dry_run, verbose=verbose)
-    stats[result if result in stats else "errors"] += 1
-
-    # Push individual session files
-    print(f"[Push] Session files...")
-    for sid, session in sessions.items():
-        date_str = _ts_to_date(session["ts"])
-        short_id = sid[:8]
-        session_path = f"{vault_prefix}/sessions/{date_str}-{short_id}.md"
-
-        mtime_ms = session["last_ts"] * 1000
-
-        content = generate_session_md(session)
-        result = push_content(session_path, content, mtime_ms, dry_run=dry_run, verbose=verbose)
+    # Shared thread pool for all uploads
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        # Push index (always when there are changes)
+        all_sessions = sorted(sessions.values(), key=lambda x: x["last_ts"], reverse=True)
+        index_content = generate_index_md(all_sessions)
+        index_path = f"{CONTEXT_PREFIX}/INDEX.md"
+        print(f"\n[Push] Index ({len(all_sessions)} sessions)")
+        result = client.push_content(
+            index_path, index_content, now_ms,
+            executor=executor, dry_run=dry_run, verbose=verbose,
+        )
         stats[result if result in stats else "errors"] += 1
+
+        # Push changed session files
+        print(f"[Push] Session files ({len(changed)} changed)...")
+        for sid, session in changed.items():
+            date_str = _ts_to_date(session["ts"])
+            short_id = sid[:8]
+            session_path = f"{CONTEXT_PREFIX}/sessions/{date_str}-{short_id}.md"
+            mtime_ms = session["last_ts"] * 1000
+
+            content = generate_session_md(session)
+            result = client.push_content(
+                session_path, content, mtime_ms,
+                executor=executor, dry_run=dry_run, verbose=verbose,
+            )
+            stats[result if result in stats else "errors"] += 1
+
+    # Save state after successful push
+    if not dry_run and stats["errors"] == 0:
+        save_push_state(sessions)
 
     return stats
 
@@ -442,8 +276,6 @@ def main():
     print("=" * 60)
     print("Codex Context Push → Obsidian CouchDB")
     print("=" * 60)
-
-    validate_config()
 
     if args.dry_run:
         print("[DRY RUN] No changes will be made")

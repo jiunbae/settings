@@ -8,10 +8,12 @@
 #   docs-push --open article         # Open in browser
 set -euo pipefail
 
-DOCS_HOST="192.168.32.70"
-DOCS_USER="root"
-DOCS_ROOT="/var/www/docs"
-DOCS_URL="https://docs.jiun.dev"
+# Load config from env file, with defaults
+[ -f ~/.envs/docs-publish.env ] && source ~/.envs/docs-publish.env
+DOCS_HOST="${DOCS_HOST:-192.168.32.70}"
+DOCS_USER="${DOCS_USER:-root}"
+DOCS_ROOT="${DOCS_ROOT:-/var/www/docs}"
+DOCS_URL="${DOCS_URL:-https://docs.jiun.dev}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,8 +47,13 @@ delete_doc() {
     local target="$1"
     # Add .md if not present
     [[ "$target" != *.md ]] && target="${target}.md"
+    # Sanitize: only allow safe filenames
+    if [[ ! "$target" =~ ^[a-zA-Z0-9가-힣._\ -]+\.md$ ]]; then
+        echo -e "${RED}Error:${NC} Invalid filename: ${target}"
+        exit 1
+    fi
     echo -e "${RED}Deleting${NC} ${target}..."
-    ssh "${DOCS_USER}@${DOCS_HOST}" "rm -f '${DOCS_ROOT}/${target}'"
+    ssh "${DOCS_USER}@${DOCS_HOST}" "rm -f $(printf '%q' "${DOCS_ROOT}/${target}")"
     echo -e "${GREEN}Deleted.${NC} Sidebar will auto-regenerate."
 }
 
@@ -64,13 +71,13 @@ push_files() {
         # Single file
         local basename=$(basename "$src")
         echo -e "${CYAN}Pushing${NC} ${basename}..."
-        rsync -az --progress "$src" "${DOCS_USER}@${DOCS_HOST}:${DOCS_ROOT}/${basename}"
+        rsync -rltz --progress "$src" "${DOCS_USER}@${DOCS_HOST}:${DOCS_ROOT}/${basename}"
         local name="${basename%.md}"
         echo -e "${GREEN}Published:${NC} ${DOCS_URL}/#/${name}"
     elif [ -d "$src" ]; then
         # Directory - preserve structure
         echo -e "${CYAN}Pushing${NC} ${src}..."
-        rsync -az --progress \
+        rsync -rltz --progress \
             --include='*/' \
             --include='*.md' \
             --include='*.png' \
@@ -86,8 +93,9 @@ push_files() {
         exit 1
     fi
 
-    # Trigger sidebar regeneration
-    ssh "${DOCS_USER}@${DOCS_HOST}" "/usr/local/bin/update-sidebar" 2>/dev/null || true
+    # Fix permissions and trigger sidebar regeneration
+    ssh "${DOCS_USER}@${DOCS_HOST}" \
+        "chmod 755 ${DOCS_ROOT} && find ${DOCS_ROOT} -maxdepth 1 -type f -exec chmod 644 {} + && chown -R www-data:www-data ${DOCS_ROOT} && /usr/local/bin/update-sidebar" 2>/dev/null || true
 }
 
 # Parse arguments

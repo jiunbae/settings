@@ -14,200 +14,23 @@ OpenCode Context Push - OpenCode 세션을 Obsidian CouchDB로 푸시
 """
 
 import argparse
-import base64
 import json
-import os
 import sqlite3
 import sys
-import urllib.request
-import urllib.error
-import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
-import livesync_compat
+from couchdb_client import create_client, WORKSPACE_VARIANTS
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-VAULT_ROOT = Path.home() / "s-lastorder"
 OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
-SCRIPT_DIR = Path(__file__).resolve().parent
-
 CONTEXT_PREFIX = "opencode-context"
-
-WORKSPACE_VARIANTS = ["workspace", "workspace-ext", "workspace-vibe",
-                      "workspace-game", "workspace-open330"]
-
-
-def _load_env_file() -> None:
-    env_file = SCRIPT_DIR / ".env"
-    if not env_file.exists():
-        return
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip("'\"")
-        if key not in os.environ:
-            os.environ[key] = value
-
-
-_load_env_file()
-
-COUCHDB_URI = os.environ.get("COUCHDB_URI", "")
-COUCHDB_USER = os.environ.get("COUCHDB_USER", "admin")
-COUCHDB_PASSWORD = os.environ.get("COUCHDB_PASSWORD", "")
-COUCHDB_DB = os.environ.get("COUCHDB_DB", "obsidian")
-
-MAX_WORKERS = 10
-
-
-def validate_config() -> None:
-    missing = []
-    if not COUCHDB_URI:
-        missing.append("COUCHDB_URI")
-    if not COUCHDB_PASSWORD:
-        missing.append("COUCHDB_PASSWORD")
-    if missing:
-        print(f"Error: {', '.join(missing)} required", file=sys.stderr)
-        sys.exit(1)
-    if not OPENCODE_DB.exists():
-        print(f"Error: OpenCode database not found: {OPENCODE_DB}", file=sys.stderr)
-        sys.exit(1)
-
-
-# ============================================================================
-# CouchDB API
-# ============================================================================
-
-def couchdb_request(path, method="GET", data=None, timeout=30):
-    url = f"{COUCHDB_URI}/{COUCHDB_DB}/{path}"
-    body = json.dumps(data).encode('utf-8') if data is not None else None
-    req = urllib.request.Request(url, data=body, method=method)
-    credentials = base64.b64encode(f"{COUCHDB_USER}:{COUCHDB_PASSWORD}".encode()).decode()
-    req.add_header('Authorization', f'Basic {credentials}')
-    req.add_header('Content-Type', 'application/json')
-    req.add_header('User-Agent', 'opencode-context-push/1.0')
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        if e.code == 409:
-            return {"error": "conflict", "reason": "Document update conflict"}
-        raw = ""
-        try:
-            raw = e.read().decode("utf-8", errors="replace").strip()
-        except Exception:
-            pass
-        raise RuntimeError(f"HTTP {e.code}: {e.reason} ({url})\n{raw[:500]}") from e
-
-
-def couchdb_head(path):
-    url = f"{COUCHDB_URI}/{COUCHDB_DB}/{path}"
-    req = urllib.request.Request(url, method="HEAD")
-    credentials = base64.b64encode(f"{COUCHDB_USER}:{COUCHDB_PASSWORD}".encode()).decode()
-    req.add_header('Authorization', f'Basic {credentials}')
-    try:
-        with urllib.request.urlopen(req, timeout=10):
-            return True
-    except urllib.error.HTTPError:
-        return False
-
-
-def get_document_rev(doc_id):
-    encoded_id = urllib.parse.quote(doc_id, safe='')
-    doc = couchdb_request(encoded_id)
-    if doc and '_rev' in doc:
-        return doc['_rev']
-    return None
-
-
-def put_document(doc):
-    doc_id = doc['_id']
-    encoded_id = urllib.parse.quote(doc_id, safe='')
-    return couchdb_request(encoded_id, method="PUT", data=doc)
-
-
-def upload_chunk(chunk_id, chunk_data):
-    encoded_id = urllib.parse.quote(chunk_id, safe='')
-    if couchdb_head(encoded_id):
-        return True
-    doc = {"_id": chunk_id, "data": chunk_data, "type": "leaf"}
-    result = put_document(doc)
-    if result and result.get("error") == "conflict":
-        return True
-    return result is not None and result.get("ok", False)
-
-
-def push_content(vault_rel_path, content, mtime_ms, dry_run=False, verbose=False):
-    chunk_ids, chunks = livesync_compat.process_document(content)
-
-    if dry_run:
-        existing = get_document_rev(vault_rel_path)
-        action = "UPDATE" if existing else "CREATE"
-        print(f"  [{action}] {vault_rel_path} ({len(chunks)} chunks, {len(content)} bytes)")
-        return "created" if not existing else "updated"
-
-    failed_chunks = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_to_idx = {
-            executor.submit(upload_chunk, cid, cdata): cid
-            for cid, cdata in zip(chunk_ids, chunks)
-        }
-        for future in as_completed(future_to_idx):
-            cid = future_to_idx[future]
-            try:
-                if not future.result():
-                    failed_chunks.append(cid)
-            except Exception as e:
-                if verbose:
-                    print(f"  [WARN] Chunk upload failed {cid}: {e}")
-                failed_chunks.append(cid)
-
-    if failed_chunks:
-        print(f"  [ERROR] {vault_rel_path}: {len(failed_chunks)} chunks failed")
-        return "error"
-
-    file_doc = {
-        "_id": vault_rel_path,
-        "path": vault_rel_path,
-        "children": chunk_ids,
-        "ctime": mtime_ms,
-        "mtime": mtime_ms,
-        "size": len(content.encode("utf-8")),
-        "type": "plain",
-    }
-
-    existing_rev = get_document_rev(vault_rel_path)
-    if existing_rev:
-        file_doc["_rev"] = existing_rev
-
-    result = put_document(file_doc)
-    if result and result.get("error") == "conflict":
-        rev = get_document_rev(vault_rel_path)
-        if rev:
-            file_doc["_rev"] = rev
-            result = put_document(file_doc)
-
-    if result is None or result.get("error"):
-        err = result.get("reason", "unknown") if result else "no response"
-        print(f"  [ERROR] {vault_rel_path}: {err}")
-        return "error"
-
-    action = "UPDATE" if existing_rev else "CREATE"
-    if verbose:
-        print(f"  [{action}] {vault_rel_path} ({len(chunks)} chunks)")
-    return "created" if not existing_rev else "updated"
+STATE_FILE = Path(__file__).resolve().parent / ".opencode-push-state.json"
 
 
 # ============================================================================
@@ -219,7 +42,11 @@ def resolve_vault_path(directory: str) -> Optional[str]:
     home = str(Path.home())
     if not directory or not directory.startswith(home):
         return None
-    rel = directory[len(home) + 1:]
+    # Resolve to prevent path traversal
+    resolved = str(Path(directory).resolve())
+    if not resolved.startswith(home + "/"):
+        return None
+    rel = resolved[len(home) + 1:]
     for variant in WORKSPACE_VARIANTS:
         if rel.startswith(variant + "/") or rel == variant:
             return rel
@@ -228,93 +55,118 @@ def resolve_vault_path(directory: str) -> Optional[str]:
 
 def load_projects_and_sessions(project_filter: Optional[str] = None) -> list[dict]:
     """OpenCode DB에서 프로젝트와 세션 로드"""
-    db = sqlite3.connect(str(OPENCODE_DB))
-    db.row_factory = sqlite3.Row
-    cursor = db.cursor()
+    with sqlite3.connect(str(OPENCODE_DB), timeout=10) as db:
+        db.row_factory = sqlite3.Row
+        cursor = db.cursor()
 
-    # 프로젝트 로드
-    cursor.execute("SELECT id, worktree, name FROM project")
-    projects = {}
-    for row in cursor.fetchall():
-        vault_path = resolve_vault_path(row["worktree"])
-        if not vault_path:
-            continue
-        if project_filter and project_filter not in vault_path:
-            continue
-        projects[row["id"]] = {
-            "id": row["id"],
-            "worktree": row["worktree"],
-            "vault_path": vault_path,
-            "name": row["name"] or vault_path.split("/")[-1],
-            "sessions": [],
-        }
+        # 프로젝트 로드
+        cursor.execute("SELECT id, worktree, name FROM project")
+        projects = {}
+        for row in cursor.fetchall():
+            vault_path = resolve_vault_path(row["worktree"])
+            if not vault_path:
+                continue
+            if project_filter and project_filter not in vault_path:
+                continue
+            projects[row["id"]] = {
+                "id": row["id"],
+                "worktree": row["worktree"],
+                "vault_path": vault_path,
+                "name": row["name"] or vault_path.split("/")[-1],
+                "sessions": [],
+            }
 
-    if not projects:
-        db.close()
-        return []
+        if not projects:
+            return []
 
-    # 세션 로드
-    placeholders = ",".join("?" for _ in projects)
-    cursor.execute(f"""
-        SELECT id, project_id, title, slug, directory,
-               summary_additions, summary_deletions, summary_files,
-               time_created, time_updated
-        FROM session
-        WHERE project_id IN ({placeholders})
-        ORDER BY time_updated DESC
-    """, list(projects.keys()))
+        # 세션 로드
+        placeholders = ",".join("?" for _ in projects)
+        cursor.execute(f"""
+            SELECT id, project_id, title, slug, directory,
+                   summary_additions, summary_deletions, summary_files,
+                   time_created, time_updated
+            FROM session
+            WHERE project_id IN ({placeholders})
+            ORDER BY time_updated DESC
+        """, list(projects.keys()))
 
-    session_ids = []
-    sessions_map = {}
-    for row in cursor.fetchall():
-        pid = row["project_id"]
-        if pid not in projects:
-            continue
-        session = {
-            "id": row["id"],
-            "title": row["title"] or "Untitled",
-            "slug": row["slug"] or "",
-            "directory": row["directory"] or "",
-            "additions": row["summary_additions"] or 0,
-            "deletions": row["summary_deletions"] or 0,
-            "files": row["summary_files"] or 0,
-            "created": row["time_created"],
-            "updated": row["time_updated"],
-            "first_prompt": "",
-            "message_count": 0,
-        }
-        projects[pid]["sessions"].append(session)
-        session_ids.append(row["id"])
-        sessions_map[row["id"]] = session
+        session_ids = []
+        sessions_map = {}
+        for row in cursor.fetchall():
+            pid = row["project_id"]
+            if pid not in projects:
+                continue
+            session = {
+                "id": row["id"],
+                "title": row["title"] or "Untitled",
+                "slug": row["slug"] or "",
+                "directory": row["directory"] or "",
+                "additions": row["summary_additions"] or 0,
+                "deletions": row["summary_deletions"] or 0,
+                "files": row["summary_files"] or 0,
+                "created": row["time_created"],
+                "updated": row["time_updated"],
+                "first_prompt": "",
+                "message_count": 0,
+            }
+            projects[pid]["sessions"].append(session)
+            session_ids.append(row["id"])
+            sessions_map[row["id"]] = session
 
-    # 각 세션의 메시지 수와 첫 프롬프트 가져오기
-    if session_ids:
-        for sid in session_ids:
-            cursor.execute(
-                "SELECT COUNT(*) FROM message WHERE session_id = ?", (sid,)
-            )
-            sessions_map[sid]["message_count"] = cursor.fetchone()[0]
+        # Batch: 메시지 수 조회
+        if session_ids:
+            cursor.execute(f"""
+                SELECT session_id, COUNT(*) as cnt
+                FROM message
+                WHERE session_id IN ({",".join("?" for _ in session_ids)})
+                GROUP BY session_id
+            """, session_ids)
+            for row in cursor.fetchall():
+                if row["session_id"] in sessions_map:
+                    sessions_map[row["session_id"]]["message_count"] = row["cnt"]
 
-            # 첫 유저 메시지의 텍스트 파트 가져오기
-            cursor.execute("""
-                SELECT p.data FROM part p
+            # Batch: 첫 텍스트 프롬프트 조회
+            cursor.execute(f"""
+                SELECT m.session_id, p.data
+                FROM part p
                 JOIN message m ON p.message_id = m.id
-                WHERE m.session_id = ?
-                ORDER BY p.time_created ASC LIMIT 5
-            """, (sid,))
-            for prow in cursor.fetchall():
+                WHERE m.session_id IN ({",".join("?" for _ in session_ids)})
+                ORDER BY p.time_created ASC
+            """, session_ids)
+
+            seen_sessions = set()
+            for row in cursor.fetchall():
+                sid = row["session_id"]
+                if sid in seen_sessions:
+                    continue
                 try:
-                    pdata = json.loads(prow[0])
+                    pdata = json.loads(row["data"])
                     if pdata.get("type") == "text" and pdata.get("text"):
                         sessions_map[sid]["first_prompt"] = pdata["text"]
-                        break
+                        seen_sessions.add(sid)
                 except (json.JSONDecodeError, KeyError):
                     pass
 
-    db.close()
-
-    # 세션이 있는 프로젝트만 반환
     return [p for p in projects.values() if p["sessions"]]
+
+
+def load_push_state() -> dict[str, int]:
+    """이전 푸시 상태 로드 (session_id → updated_ts)"""
+    if not STATE_FILE.exists():
+        return {}
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_push_state(projects: list[dict]) -> None:
+    """푸시 상태 저장"""
+    state = {}
+    for p in projects:
+        for s in p["sessions"]:
+            state[s["id"]] = s["updated"]
+    STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
 
 
 # ============================================================================
@@ -323,14 +175,14 @@ def load_projects_and_sessions(project_filter: Optional[str] = None) -> list[dic
 
 def _ms_to_date(ms: int) -> str:
     try:
-        return datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
     except (ValueError, OSError):
         return "unknown"
 
 
 def _ms_to_datetime(ms: int) -> str:
     try:
-        return datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d %H:%M")
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
     except (ValueError, OSError):
         return "unknown"
 
@@ -344,20 +196,21 @@ def _compute_duration(start_ms: int, end_ms: int) -> str:
     return f"{hours}h {mins}m"
 
 
+def _sanitize_table_cell(text: str) -> str:
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
 def generate_session_md(session: dict, project_name: str) -> str:
-    title = session["title"]
-    sid = session["id"]
-    created = session["created"]
-    updated = session["updated"]
-    duration = _compute_duration(created, updated)
+    title = _sanitize_table_cell(session["title"])
+    duration = _compute_duration(session["created"], session["updated"])
 
     lines = [
         "---",
-        f"sessionId: {sid}",
-        f"tool: opencode",
+        f"sessionId: {session['id']}",
+        "tool: opencode",
         f"project: {project_name}",
-        f"created: {_ms_to_datetime(created)}",
-        f"modified: {_ms_to_datetime(updated)}",
+        f"created: {_ms_to_datetime(session['created'])}",
+        f"modified: {_ms_to_datetime(session['updated'])}",
         f"messageCount: {session['message_count']}",
     ]
     if session["slug"]:
@@ -371,11 +224,10 @@ def generate_session_md(session: dict, project_name: str) -> str:
     ])
 
     if session["first_prompt"]:
-        prompt_preview = session["first_prompt"][:500]
+        preview = session["first_prompt"][:500].replace("\n", "\n> ")
         if len(session["first_prompt"]) > 500:
-            prompt_preview += "..."
-        lines.append(f"> {prompt_preview}")
-        lines.append("")
+            preview += "..."
+        lines.extend([f"> {preview}", ""])
 
     lines.extend([
         f"- **Messages**: {session['message_count']}",
@@ -397,7 +249,7 @@ def generate_project_index(project: dict) -> str:
     lines = [
         "---",
         f"project: {project_name}",
-        f"tool: opencode",
+        "tool: opencode",
         f"updated: {now}",
         "tags: [opencode-context, index, auto-generated]",
         "---",
@@ -412,7 +264,7 @@ def generate_project_index(project: dict) -> str:
 
     for s in sorted(sessions, key=lambda x: x["created"], reverse=True):
         date = _ms_to_date(s["created"])
-        title = s["title"][:50]
+        title = _sanitize_table_cell(s["title"][:50])
         msgs = s["message_count"]
         changes = f"+{s['additions']}/-{s['deletions']}"
         duration = _compute_duration(s["created"], s["updated"])
@@ -447,32 +299,56 @@ def push_all(project_filter=None, force=False, dry_run=False, verbose=False):
         for p in projects:
             print(f"  - {p['vault_path']}: {len(p['sessions'])} sessions")
 
+    # Change detection
+    prev_state = {} if force else load_push_state()
+
+    client = create_client(user_agent="opencode-context-push/1.0")
     now_ms = int(datetime.now().timestamp() * 1000)
 
-    for project in projects:
-        vault_path = project["vault_path"]
-        sessions = project["sessions"]
-        project_name = project["name"]
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for project in projects:
+            vault_path = project["vault_path"]
+            sessions = project["sessions"]
+            project_name = project["name"]
 
-        print(f"\n[Push] {vault_path} ({len(sessions) + 1} files)")
+            # Filter changed sessions
+            changed_sessions = []
+            for s in sessions:
+                if s["id"] not in prev_state or prev_state[s["id"]] != s["updated"]:
+                    changed_sessions.append(s)
+                else:
+                    stats["skipped"] += 1
 
-        # Project index
-        index_content = generate_project_index(project)
-        index_path = f"{vault_path}/{CONTEXT_PREFIX}/INDEX.md"
-        result = push_content(index_path, index_content, now_ms, dry_run=dry_run, verbose=verbose)
-        stats[result if result in stats else "errors"] += 1
+            if not changed_sessions and not force:
+                continue
 
-        # Session files
-        for session in sessions:
-            date_str = _ms_to_date(session["created"])
-            short_id = session["id"][-8:]
-            session_path = f"{vault_path}/{CONTEXT_PREFIX}/sessions/{date_str}-{short_id}.md"
+            print(f"\n[Push] {vault_path} ({len(changed_sessions)} changed / {len(sessions)} total)")
 
-            mtime_ms = session["updated"]
-
-            content = generate_session_md(session, project_name)
-            result = push_content(session_path, content, mtime_ms, dry_run=dry_run, verbose=verbose)
+            # Project index (always when there are changes)
+            index_content = generate_project_index(project)
+            index_path = f"{vault_path}/{CONTEXT_PREFIX}/INDEX.md"
+            result = client.push_content(
+                index_path, index_content, now_ms,
+                executor=executor, dry_run=dry_run, verbose=verbose,
+            )
             stats[result if result in stats else "errors"] += 1
+
+            # Session files
+            for session in changed_sessions:
+                date_str = _ms_to_date(session["created"])
+                short_id = session["id"][-8:]
+                session_path = f"{vault_path}/{CONTEXT_PREFIX}/sessions/{date_str}-{short_id}.md"
+
+                content = generate_session_md(session, project_name)
+                result = client.push_content(
+                    session_path, content, session["updated"],
+                    executor=executor, dry_run=dry_run, verbose=verbose,
+                )
+                stats[result if result in stats else "errors"] += 1
+
+    # Save state after successful push
+    if not dry_run and stats["errors"] == 0:
+        save_push_state(projects)
 
     return stats
 
@@ -492,7 +368,9 @@ def main():
     print("OpenCode Context Push → Obsidian CouchDB")
     print("=" * 60)
 
-    validate_config()
+    if not OPENCODE_DB.exists():
+        print(f"Error: OpenCode database not found: {OPENCODE_DB}", file=sys.stderr)
+        sys.exit(1)
 
     if args.dry_run:
         print("[DRY RUN] No changes will be made")

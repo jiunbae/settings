@@ -12,15 +12,20 @@
 #   ./vault-service.sh logs push       # View push logs only
 #   ./vault-service.sh install         # Install/reinstall launchd plists
 
-PULL_PLIST="$HOME/Library/LaunchAgents/com.jiun.vault-pull.plist"
-PUSH_PLIST="$HOME/Library/LaunchAgents/com.jiun.vault-push.plist"
-CONTEXT_PLIST="$HOME/Library/LaunchAgents/com.jiun.claude-context-push.plist"
-DOCS_PLIST="$HOME/Library/LaunchAgents/com.jiun.vault-docs-sync.plist"
-PULL_LABEL="com.jiun.vault-pull"
-PUSH_LABEL="com.jiun.vault-push"
-CONTEXT_LABEL="com.jiun.claude-context-push"
-DOCS_LABEL="com.jiun.vault-docs-sync"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Service registry: name:label:script:interval:logprefix
+SERVICES=(
+    "pull:com.jiun.vault-pull:vault-pull.py --changed-only:600:vault-pull"
+    "push:com.jiun.vault-push:vault-push.py:600:vault-push"
+    "context:com.jiun.claude-context-push:claude-context-push.py:1800:claude-context-push"
+    "codex:com.jiun.codex-context-push:codex-context-push.py:1800:codex-context-push"
+    "opencode:com.jiun.opencode-context-push:opencode-context-push.py:1800:opencode-context-push"
+    "docs:com.jiun.vault-docs-sync:vault-docs-sync.py:600:vault-docs-sync"
+)
+
+_get_field() { echo "$1" | cut -d: -f"$2"; }
+_plist_path() { echo "$HOME/Library/LaunchAgents/$(_get_field "$1" 2).plist"; }
 
 show_service_status() {
     local label="$1" name="$2" logfile="$3" errfile="$4"
@@ -38,6 +43,18 @@ show_service_status() {
     echo ""
 }
 
+_find_service() {
+    local target="$1"
+    for svc in "${SERVICES[@]}"; do
+        name=$(_get_field "$svc" 1)
+        if [ "$name" = "$target" ]; then
+            echo "$svc"
+            return 0
+        fi
+    done
+    return 1
+}
+
 install_plists() {
     local python_bin="/opt/homebrew/bin/python3"
     if [ ! -f "$python_bin" ]; then
@@ -48,35 +65,50 @@ install_plists() {
     echo "  Python: $python_bin"
     echo "  Scripts: $SCRIPT_DIR"
 
-    # Pull plist
-    cat > "$PULL_PLIST" << EOF
+    for svc in "${SERVICES[@]}"; do
+        name=$(_get_field "$svc" 1)
+        label=$(_get_field "$svc" 2)
+        script=$(_get_field "$svc" 3)
+        interval=$(_get_field "$svc" 4)
+        logprefix=$(_get_field "$svc" 5)
+        plist=$(_plist_path "$svc")
+
+        # Build ProgramArguments: split script field by spaces for args
+        script_name="${script%% *}"
+        script_args="${script#* }"
+        [ "$script_args" = "$script" ] && script_args=""
+
+        args_xml="        <string>$python_bin</string>
+        <string>-u</string>
+        <string>$SCRIPT_DIR/$script_name</string>"
+        if [ -n "$script_args" ]; then
+            args_xml="$args_xml
+        <string>$script_args</string>"
+        fi
+
+        cat > "$plist" << PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>$PULL_LABEL</string>
-    <key>Comment</key>
-    <string>Pull vault changes from CouchDB (every 10 minutes)</string>
+    <string>$label</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>$python_bin</string>
-        <string>-u</string>
-        <string>$SCRIPT_DIR/vault-pull.py</string>
-        <string>--changed-only</string>
+$args_xml
     </array>
 
     <key>StartInterval</key>
-    <integer>600</integer>
+    <integer>$interval</integer>
 
     <key>RunAtLoad</key>
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/vault-pull.log</string>
+    <string>/tmp/${logprefix}.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/vault-pull.err</string>
+    <string>/tmp/${logprefix}.err</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -87,153 +119,34 @@ install_plists() {
     </dict>
 </dict>
 </plist>
-EOF
-    echo "  Created: $PULL_PLIST"
+PLISTEOF
+        echo "  Created: $plist ($name, every ${interval}s)"
+    done
 
-    # Push plist (runs 5 min after pull)
-    cat > "$PUSH_PLIST" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$PUSH_LABEL</string>
-    <key>Comment</key>
-    <string>Push vault changes to CouchDB (every 10 minutes)</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>$python_bin</string>
-        <string>-u</string>
-        <string>$SCRIPT_DIR/vault-push.py</string>
-    </array>
-
-    <key>StartInterval</key>
-    <integer>600</integer>
-
-    <key>RunAtLoad</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/tmp/vault-push.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/vault-push.err</string>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>PYTHONUNBUFFERED</key>
-        <string>1</string>
-    </dict>
-</dict>
-</plist>
-EOF
-    echo "  Created: $PUSH_PLIST"
-
-    # Claude context push plist (runs every 30 min)
-    cat > "$CONTEXT_PLIST" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$CONTEXT_LABEL</string>
-    <key>Comment</key>
-    <string>Push Claude session context to CouchDB (every 30 minutes)</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>$python_bin</string>
-        <string>-u</string>
-        <string>$SCRIPT_DIR/claude-context-push.py</string>
-    </array>
-
-    <key>StartInterval</key>
-    <integer>1800</integer>
-
-    <key>RunAtLoad</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/tmp/claude-context-push.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/claude-context-push.err</string>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>PYTHONUNBUFFERED</key>
-        <string>1</string>
-    </dict>
-</dict>
-</plist>
-EOF
-    echo "  Created: $CONTEXT_PLIST"
-
-    # Docs sync plist (runs every 10 min, after vault-push)
-    cat > "$DOCS_PLIST" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$DOCS_LABEL</string>
-    <key>Comment</key>
-    <string>Sync publish:true articles to docs server (every 10 minutes)</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>$python_bin</string>
-        <string>-u</string>
-        <string>$SCRIPT_DIR/vault-docs-sync.py</string>
-    </array>
-
-    <key>StartInterval</key>
-    <integer>600</integer>
-
-    <key>RunAtLoad</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/tmp/vault-docs-sync.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/vault-docs-sync.err</string>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>PYTHONUNBUFFERED</key>
-        <string>1</string>
-    </dict>
-</dict>
-</plist>
-EOF
-    echo "  Created: $DOCS_PLIST"
-
-    # Load services
-    launchctl unload "$PULL_PLIST" 2>/dev/null
-    launchctl unload "$PUSH_PLIST" 2>/dev/null
-    launchctl unload "$CONTEXT_PLIST" 2>/dev/null
-    launchctl unload "$DOCS_PLIST" 2>/dev/null
-    launchctl load "$PULL_PLIST"
-    launchctl load "$PUSH_PLIST"
-    launchctl load "$CONTEXT_PLIST"
-    launchctl load "$DOCS_PLIST"
+    # Reload all services
+    for svc in "${SERVICES[@]}"; do
+        plist=$(_plist_path "$svc")
+        launchctl unload "$plist" 2>/dev/null
+        launchctl load "$plist"
+    done
     echo ""
     echo "Services loaded. Check: $0 status"
 }
 
+_svc_names() {
+    for svc in "${SERVICES[@]}"; do
+        echo -n "$(_get_field "$svc" 1) "
+    done
+}
+
 case "${1:-status}" in
     status)
-        show_service_status "$PULL_LABEL" "Vault Pull" /tmp/vault-pull.log /tmp/vault-pull.err
-        show_service_status "$PUSH_LABEL" "Vault Push" /tmp/vault-push.log /tmp/vault-push.err
-        show_service_status "$CONTEXT_LABEL" "Claude Context Push" /tmp/claude-context-push.log /tmp/claude-context-push.err
-        show_service_status "$DOCS_LABEL" "Vault Docs Sync" /tmp/vault-docs-sync.log /tmp/vault-docs-sync.err
-
-        # .env check
+        for svc in "${SERVICES[@]}"; do
+            _name=$(_get_field "$svc" 1)
+            _label=$(_get_field "$svc" 2)
+            _logprefix=$(_get_field "$svc" 5)
+            show_service_status "$_label" "$_name" "/tmp/${_logprefix}.log" "/tmp/${_logprefix}.err"
+        done
         if [ -f "$SCRIPT_DIR/.env" ]; then
             echo "Credentials: .env found"
         else
@@ -242,124 +155,64 @@ case "${1:-status}" in
         ;;
 
     restart)
-        case "${2:-all}" in
-            pull)
-                echo "Restarting vault-pull..."
-                launchctl unload "$PULL_PLIST" 2>/dev/null
-                launchctl load "$PULL_PLIST"
-                ;;
-            push)
-                echo "Restarting vault-push..."
-                launchctl unload "$PUSH_PLIST" 2>/dev/null
-                launchctl load "$PUSH_PLIST"
-                ;;
-            context)
-                echo "Restarting claude-context-push..."
-                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
-                launchctl load "$CONTEXT_PLIST"
-                ;;
-            docs)
-                echo "Restarting vault-docs-sync..."
-                launchctl unload "$DOCS_PLIST" 2>/dev/null
-                launchctl load "$DOCS_PLIST"
-                ;;
-            all|*)
-                echo "Restarting all services..."
-                launchctl unload "$PULL_PLIST" 2>/dev/null
-                launchctl unload "$PUSH_PLIST" 2>/dev/null
-                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
-                launchctl unload "$DOCS_PLIST" 2>/dev/null
-                launchctl load "$PULL_PLIST"
-                launchctl load "$PUSH_PLIST"
-                launchctl load "$CONTEXT_PLIST"
-                launchctl load "$DOCS_PLIST"
-                ;;
-        esac
+        target="${2:-all}"
+        if [ "$target" = "all" ]; then
+            echo "Restarting all services..."
+            for svc in "${SERVICES[@]}"; do
+                plist=$(_plist_path "$svc")
+                launchctl unload "$plist" 2>/dev/null
+                launchctl load "$plist"
+            done
+        else
+            svc=$(_find_service "$target") || { echo "Unknown service: $target"; echo "Available: $(_svc_names)"; exit 1; }
+            plist=$(_plist_path "$svc")
+            echo "Restarting $target..."
+            launchctl unload "$plist" 2>/dev/null
+            launchctl load "$plist"
+        fi
         echo "Done. Check: $0 status"
         ;;
 
     stop)
-        case "${2:-all}" in
-            pull)
-                echo "Stopping vault-pull..."
-                launchctl unload "$PULL_PLIST" 2>/dev/null
-                ;;
-            push)
-                echo "Stopping vault-push..."
-                launchctl unload "$PUSH_PLIST" 2>/dev/null
-                ;;
-            context)
-                echo "Stopping claude-context-push..."
-                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
-                ;;
-            docs)
-                echo "Stopping vault-docs-sync..."
-                launchctl unload "$DOCS_PLIST" 2>/dev/null
-                ;;
-            all|*)
-                echo "Stopping all services..."
-                launchctl unload "$PULL_PLIST" 2>/dev/null
-                launchctl unload "$PUSH_PLIST" 2>/dev/null
-                launchctl unload "$CONTEXT_PLIST" 2>/dev/null
-                launchctl unload "$DOCS_PLIST" 2>/dev/null
-                ;;
-        esac
+        target="${2:-all}"
+        if [ "$target" = "all" ]; then
+            echo "Stopping all services..."
+            for svc in "${SERVICES[@]}"; do
+                launchctl unload "$(_plist_path "$svc")" 2>/dev/null
+            done
+        else
+            svc=$(_find_service "$target") || { echo "Unknown service: $target"; exit 1; }
+            echo "Stopping $target..."
+            launchctl unload "$(_plist_path "$svc")" 2>/dev/null
+        fi
         echo "Stopped."
         ;;
 
     logs)
-        case "${2:-all}" in
-            pull)
-                echo "=== Pull stdout ==="
-                tail -30 /tmp/vault-pull.log 2>/dev/null || echo "No logs"
+        target="${2:-all}"
+        if [ "$target" = "all" ]; then
+            for svc in "${SERVICES[@]}"; do
+                name=$(_get_field "$svc" 1)
+                logprefix=$(_get_field "$svc" 5)
+                echo "=== $name stdout ==="
+                tail -10 "/tmp/${logprefix}.log" 2>/dev/null || echo "No logs"
                 echo ""
-                echo "=== Pull stderr ==="
-                tail -10 /tmp/vault-pull.err 2>/dev/null || echo "No errors"
-                ;;
-            push)
-                echo "=== Push stdout ==="
-                tail -30 /tmp/vault-push.log 2>/dev/null || echo "No logs"
-                echo ""
-                echo "=== Push stderr ==="
-                tail -10 /tmp/vault-push.err 2>/dev/null || echo "No errors"
-                ;;
-            context)
-                echo "=== Claude Context Push stdout ==="
-                tail -30 /tmp/claude-context-push.log 2>/dev/null || echo "No logs"
-                echo ""
-                echo "=== Claude Context Push stderr ==="
-                tail -10 /tmp/claude-context-push.err 2>/dev/null || echo "No errors"
-                ;;
-            docs)
-                echo "=== Vault Docs Sync stdout ==="
-                tail -30 /tmp/vault-docs-sync.log 2>/dev/null || echo "No logs"
-                echo ""
-                echo "=== Vault Docs Sync stderr ==="
-                tail -10 /tmp/vault-docs-sync.err 2>/dev/null || echo "No errors"
-                ;;
-            all|*)
-                echo "=== Pull stdout ==="
-                tail -15 /tmp/vault-pull.log 2>/dev/null || echo "No logs"
-                echo ""
-                echo "=== Push stdout ==="
-                tail -15 /tmp/vault-push.log 2>/dev/null || echo "No logs"
-                echo ""
-                echo "=== Claude Context Push stdout ==="
-                tail -15 /tmp/claude-context-push.log 2>/dev/null || echo "No logs"
-                echo ""
-                echo "=== Vault Docs Sync stdout ==="
-                tail -15 /tmp/vault-docs-sync.log 2>/dev/null || echo "No logs"
-                echo ""
-                echo "=== Errors (pull) ==="
-                tail -5 /tmp/vault-pull.err 2>/dev/null || echo "No errors"
-                echo "=== Errors (push) ==="
-                tail -5 /tmp/vault-push.err 2>/dev/null || echo "No errors"
-                echo "=== Errors (context) ==="
-                tail -5 /tmp/claude-context-push.err 2>/dev/null || echo "No errors"
-                echo "=== Errors (docs) ==="
-                tail -5 /tmp/vault-docs-sync.err 2>/dev/null || echo "No errors"
-                ;;
-        esac
+            done
+            for svc in "${SERVICES[@]}"; do
+                name=$(_get_field "$svc" 1)
+                logprefix=$(_get_field "$svc" 5)
+                echo "=== $name stderr ==="
+                tail -5 "/tmp/${logprefix}.err" 2>/dev/null || echo "No errors"
+            done
+        else
+            svc=$(_find_service "$target") || { echo "Unknown service: $target"; exit 1; }
+            logprefix=$(_get_field "$svc" 5)
+            echo "=== $target stdout ==="
+            tail -30 "/tmp/${logprefix}.log" 2>/dev/null || echo "No logs"
+            echo ""
+            echo "=== $target stderr ==="
+            tail -10 "/tmp/${logprefix}.err" 2>/dev/null || echo "No errors"
+        fi
         ;;
 
     install)
@@ -367,13 +220,15 @@ case "${1:-status}" in
         ;;
 
     *)
-        echo "Usage: $0 {status|restart|stop|logs|install} [pull|push|context|docs]"
+        echo "Usage: $0 {status|restart|stop|logs|install} [SERVICE]"
         echo ""
-        echo "  status                              Check all services"
-        echo "  restart [pull|push|context|docs]    Restart service(s)"
-        echo "  stop [pull|push|context|docs]       Stop service(s)"
-        echo "  logs [pull|push|context|docs]       View recent logs"
-        echo "  install                             Install/reinstall launchd plists"
+        echo "  status                Check all services"
+        echo "  restart [SERVICE]     Restart service(s)"
+        echo "  stop [SERVICE]        Stop service(s)"
+        echo "  logs [SERVICE]        View recent logs"
+        echo "  install               Install/reinstall launchd plists"
+        echo ""
+        echo "Services: $(_svc_names)"
         exit 1
         ;;
 esac

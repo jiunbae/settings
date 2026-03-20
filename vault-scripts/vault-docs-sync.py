@@ -15,6 +15,7 @@ rsync하고, 서버에서 제거된 파일은 삭제합니다.
 import argparse
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -29,14 +30,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 VAULT_ROOT = Path.home() / "s-lastorder"
 ARTICLES_DIR = VAULT_ROOT / "articles"
 
-# Load from ~/.envs/docs-publish.env or defaults
-DOCS_HOST = os.environ.get("DOCS_HOST", "192.168.32.70")
-DOCS_USER = os.environ.get("DOCS_USER", "root")
-DOCS_ROOT = os.environ.get("DOCS_ROOT", "/var/www/docs")
-DOCS_URL = os.environ.get("DOCS_URL", "https://docs.jiun.dev")
-
 # Files to exclude from sync
 EXCLUDE_FILES = {"INDEX.md", "_sidebar.md", "README.md", "index.md"}
+
+# Valid filename pattern for remote operations
+_SAFE_FILENAME_RE = re.compile(r'^[a-zA-Z0-9가-힣._\- ]+\.md$')
+# Valid DOCS_ROOT pattern
+_SAFE_PATH_RE = re.compile(r'^/[a-zA-Z0-9/_.\-]+$')
 
 
 def _load_env_files() -> None:
@@ -51,7 +51,6 @@ def _load_env_files() -> None:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            # Handle export prefix
             if line.startswith("export "):
                 line = line[7:]
             if "=" not in line:
@@ -65,9 +64,17 @@ def _load_env_files() -> None:
 
 _load_env_files()
 
-# Re-read after env load
-DOCS_HOST = os.environ.get("DOCS_HOST", DOCS_HOST)
-DOCS_URL = os.environ.get("DOCS_URL", DOCS_URL)
+DOCS_HOST = os.environ.get("DOCS_HOST", "192.168.32.70")
+DOCS_USER = os.environ.get("DOCS_USER", "root")
+DOCS_ROOT = os.environ.get("DOCS_ROOT", "/var/www/docs")
+DOCS_URL = os.environ.get("DOCS_URL", "https://docs.jiun.dev")
+
+
+def _validate_config() -> None:
+    """설정값 검증"""
+    if not _SAFE_PATH_RE.match(DOCS_ROOT):
+        print(f"Error: DOCS_ROOT contains invalid characters: {DOCS_ROOT}", file=sys.stderr)
+        sys.exit(1)
 
 
 # ============================================================================
@@ -75,24 +82,22 @@ DOCS_URL = os.environ.get("DOCS_URL", DOCS_URL)
 # ============================================================================
 
 def parse_publish_flag(filepath: Path) -> bool:
-    """frontmatter에서 publish: true 여부 확인"""
+    """frontmatter에서 publish: true 여부 확인 (첫 4KB만 읽음)"""
     try:
-        content = filepath.read_text(encoding="utf-8", errors="replace")
+        with open(filepath, encoding="utf-8", errors="replace") as f:
+            header = f.read(4096)
     except Exception:
         return False
 
-    if not content.startswith("---"):
+    if not header.startswith("---"):
         return False
 
-    end = content.find("---", 3)
+    end = header.find("---", 3)
     if end < 0:
         return False
 
-    frontmatter = content[3:end]
-    # publish: true (YAML boolean)
-    if re.search(r'^publish:\s*true\s*$', frontmatter, re.MULTILINE):
-        return True
-    return False
+    frontmatter = header[3:end]
+    return bool(re.search(r'^publish:\s*true\s*$', frontmatter, re.MULTILINE))
 
 
 def scan_publishable_articles() -> list[Path]:
@@ -102,7 +107,7 @@ def scan_publishable_articles() -> list[Path]:
 
     publishable = []
     for f in sorted(ARTICLES_DIR.iterdir()):
-        if not f.is_file() or not f.suffix == ".md":
+        if not f.is_file() or f.suffix != ".md":
             continue
         if f.name in EXCLUDE_FILES:
             continue
@@ -116,15 +121,21 @@ def scan_publishable_articles() -> list[Path]:
 # Remote Operations
 # ============================================================================
 
+def _ssh_cmd(command: str) -> subprocess.CompletedProcess:
+    """SSH 명령 실행 (DOCS_ROOT는 이미 검증됨)"""
+    return subprocess.run(
+        ["ssh", f"{DOCS_USER}@{DOCS_HOST}", command],
+        capture_output=True, text=True, timeout=15,
+    )
+
+
 def get_remote_files() -> set[str]:
     """docs 서버의 현재 파일 목록"""
     try:
-        result = subprocess.run(
-            ["ssh", f"{DOCS_USER}@{DOCS_HOST}",
-             f"find {DOCS_ROOT} -maxdepth 1 -name '*.md' "
-             f"-not -name '_sidebar.md' -not -name 'README.md' "
-             f"-not -name 'index.md' -printf '%f\\n'"],
-            capture_output=True, text=True, timeout=15,
+        result = _ssh_cmd(
+            f"find {shlex.quote(DOCS_ROOT)} -maxdepth 1 -name '*.md' "
+            f"-not -name '_sidebar.md' -not -name 'README.md' "
+            f"-not -name 'index.md' -printf '%f\\n'"
         )
         if result.returncode != 0:
             print(f"  [WARN] Failed to list remote files: {result.stderr.strip()}")
@@ -140,7 +151,6 @@ def rsync_files(files: list[Path], dry_run: bool = False) -> int:
     if not files:
         return 0
 
-    # Stage files in a temp directory to rsync only selected files
     with tempfile.TemporaryDirectory() as tmpdir:
         for f in files:
             shutil.copy2(f, os.path.join(tmpdir, f.name))
@@ -153,8 +163,7 @@ def rsync_files(files: list[Path], dry_run: bool = False) -> int:
             "--exclude=*",
         ]
         if dry_run:
-            cmd.append("--dry-run")
-            cmd.append("-v")
+            cmd.extend(["--dry-run", "-v"])
 
         cmd.extend([
             f"{tmpdir}/",
@@ -174,48 +183,52 @@ def rsync_files(files: list[Path], dry_run: bool = False) -> int:
     # Fix permissions after rsync (macOS openrsync doesn't support --chmod/--chown)
     if not dry_run:
         try:
-            subprocess.run(
-                ["ssh", f"{DOCS_USER}@{DOCS_HOST}",
-                 f"chmod 755 {DOCS_ROOT} && "
-                 f"find {DOCS_ROOT} -maxdepth 1 -type f -exec chmod 644 {{}} + && "
-                 f"chown -R www-data:www-data {DOCS_ROOT}"],
-                capture_output=True, timeout=15,
+            _ssh_cmd(
+                f"chmod 755 {shlex.quote(DOCS_ROOT)} && "
+                f"find {shlex.quote(DOCS_ROOT)} -maxdepth 1 -type f -exec chmod 644 {{}} + && "
+                f"chown -R www-data:www-data {shlex.quote(DOCS_ROOT)}"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [WARN] Permission fix failed: {e}")
 
     return len(files)
 
 
 def delete_remote_files(files: set[str], dry_run: bool = False) -> int:
-    """docs 서버에서 파일 삭제"""
+    """docs 서버에서 파일 삭제 (일괄 처리)"""
     if not files:
         return 0
 
+    # Validate all filenames before executing
+    safe_files = []
     for f in sorted(files):
-        if dry_run:
-            print(f"  [DELETE] {f}")
-        else:
-            try:
-                subprocess.run(
-                    ["ssh", f"{DOCS_USER}@{DOCS_HOST}",
-                     f"rm -f '{DOCS_ROOT}/{f}'"],
-                    capture_output=True, timeout=10,
-                )
-            except Exception as e:
-                print(f"  [ERROR] Delete {f}: {e}")
+        if not _SAFE_FILENAME_RE.match(f):
+            print(f"  [WARN] Skipping unsafe filename: {f}")
+            continue
+        safe_files.append(f)
 
-    return len(files)
+    if dry_run:
+        for f in safe_files:
+            print(f"  [DELETE] {f}")
+        return len(safe_files)
+
+    if safe_files:
+        # Batch delete in single SSH call
+        rm_args = " ".join(
+            shlex.quote(f"{DOCS_ROOT}/{f}") for f in safe_files
+        )
+        try:
+            _ssh_cmd(f"rm -f {rm_args}")
+        except Exception as e:
+            print(f"  [ERROR] Batch delete failed: {e}")
+
+    return len(safe_files)
 
 
 def trigger_sidebar_update() -> None:
     """서버의 sidebar 재생성 트리거"""
     try:
-        subprocess.run(
-            ["ssh", f"{DOCS_USER}@{DOCS_HOST}",
-             "/usr/local/bin/update-sidebar"],
-            capture_output=True, timeout=15,
-        )
+        _ssh_cmd("/usr/local/bin/update-sidebar")
     except Exception:
         pass
 
@@ -243,16 +256,8 @@ def sync(force: bool = False, dry_run: bool = False, verbose: bool = False) -> d
     print(f"  Published: {len(remote_names)} articles")
 
     # 3. Determine what to sync
-    to_sync = publishable if force else [
-        f for f in publishable
-        if f.name not in remote_names or force
-    ]
-
-    # For non-force mode, also check mtime
-    if not force and to_sync:
-        # If file already exists on remote, we still sync it (checksum-based rsync handles dedup)
-        to_sync = publishable  # rsync --checksum will skip unchanged files
-
+    # rsync --checksum handles deduplication, so always pass all publishable files
+    to_sync = publishable
     to_delete = remote_names - local_names
 
     new_files = local_names - remote_names
@@ -289,7 +294,7 @@ def sync(force: bool = False, dry_run: bool = False, verbose: bool = False) -> d
         print("[Sidebar] Regenerating sidebar...")
         trigger_sidebar_update()
 
-    stats["skipped"] = len(remote_names) - len(to_delete) - len(new_files)
+    stats["skipped"] = max(0, len(remote_names) - len(to_delete) - len(new_files))
 
     return stats
 
@@ -307,6 +312,8 @@ def main():
     print("=" * 60)
     print(f"Vault Docs Sync → {DOCS_URL}")
     print("=" * 60)
+
+    _validate_config()
 
     if args.dry_run:
         print("[DRY RUN] No changes will be made\n")
