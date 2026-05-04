@@ -208,6 +208,7 @@ alias vi="nvim"
 alias vimdiff="nvim -d"
 alias c="claude --dangerously-skip-permissions"
 alias oc="opencode"
+alias cm='ANTHROPIC_BASE_URL=${CM_BASE_URL} ANTHROPIC_AUTH_TOKEN=${CM_TOKEN} API_TIMEOUT_MS=3000000 ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1-fp8 ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.1-fp8 ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-5.1-fp8 claude --dangerously-skip-permissions'
 
 # Zellij (terminal multiplexer)
 alias zs='zellij -s'
@@ -409,6 +410,9 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   zle -N _hishtory_search
   bindkey '^R' _hishtory_search
 fi
+
+# vault warden session-name
+export BW_SESSION=$(cat ~/.bw_session 2>/dev/null)
 
 # pnpm
 export PNPM_HOME="$HOME/Library/pnpm"
