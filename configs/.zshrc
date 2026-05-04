@@ -208,7 +208,32 @@ alias vi="nvim"
 alias vimdiff="nvim -d"
 alias c="claude --dangerously-skip-permissions"
 alias oc="opencode"
-alias cm='ANTHROPIC_BASE_URL=${CM_BASE_URL} ANTHROPIC_AUTH_TOKEN=${CM_TOKEN} API_TIMEOUT_MS=3000000 ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1-fp8 ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5.1-fp8 ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-5.1-fp8 claude --dangerously-skip-permissions'
+
+claude_with_glm_env() {
+    BASH_ENV="" \
+    ENV="" \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5.1-fp8" \
+    ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.1-fp8" \
+    ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.1-fp8" \
+    ANTHROPIC_AUTH_TOKEN="${CM_TOKEN}" \
+    ANTHROPIC_BASE_URL="${CM_BASE_URL}" \
+    API_TIMEOUT_MS="3000000" \
+    command claude --dangerously-skip-permissions "$@"
+}
+alias cmg='claude_with_glm_env'
+claude_with_mimo_env() {
+    BASH_ENV="" \
+    ENV="" \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL="MiMo-V2.5-Pro" \
+    ANTHROPIC_DEFAULT_SONNET_MODEL="MiMo-V2.5-Pro" \
+    ANTHROPIC_DEFAULT_OPUS_MODEL="MiMo-V2.5-Pro" \
+    ANTHROPIC_AUTH_TOKEN="${CM_TOKEN}" \
+    ANTHROPIC_BASE_URL="${CM_BASE_URL}" \
+    API_TIMEOUT_MS="3000000" \
+    command claude --dangerously-skip-permissions "$@"
+}
+alias cmg='claude_with_glm_env'
+alias cmm='claude_with_mimo_env'
 
 # Zellij (terminal multiplexer)
 alias zs='zellij -s'
