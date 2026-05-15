@@ -335,6 +335,7 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   npx() { _nvm_lazy_load; command npx "$@" }
   pnpm() { _nvm_lazy_load; command pnpm "$@" }
   nvm() { _nvm_lazy_load; nvm "$@" }
+  tsx() { _nvm_lazy_load; command tsx "$@" }
 fi
 
   export NVM_DIR="$HOME/.nvm"
@@ -445,3 +446,8 @@ case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
+
+export AWS_VAULT_BACKEND=file
+
+# bun completions
+[ -s "/home/june/.bun/_bun" ] && source "/home/june/.bun/_bun"
