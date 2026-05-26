@@ -1,5 +1,19 @@
 local application = require "hs.application"
 
+-- Logging
+hs.logger.defaultLogLevel = "info"
+local log = hs.logger.new("init", "info")
+log.i("init.lua loaded at " .. os.date())
+
+-- pcall + logging wrapper for hs.hotkey.bind callbacks so silent Lua errors
+-- don't leave the keystroke unhandled (which would leak alt+u/i as dead keys)
+local function safeBind(mods, key, name, fn)
+  return hs.hotkey.bind(mods, key, function()
+    local ok, err = pcall(fn)
+    if not ok then log.ef("hotkey [%s] error: %s", name, tostring(err)) end
+  end)
+end
+
 -- Fn + I/J/K/L to arrow keys for internal keyboards
 local fnDown = false
 local INTERNAL_TYPES = { 91 }
@@ -23,18 +37,19 @@ local function isInternal(event)
   end
 end
 
--- tracking Fn key state
-hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e)
+-- tracking Fn key state (stored in module-level local so GC won't reap it)
+local fnFlagsTap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e)
   fnDown = e:getFlags().fn or false
   return false
-end):start()
+end)
+fnFlagsTap:start()
 
 local MAP = { 
   i = "up", j = "left", k = "down", l = "right",
   ["ㅑ"] = "up", ["ㅓ"] = "left", ["ㅏ"] = "down", ["ㅣ"] = "right",
 }
 
-hs.eventtap.new(
+local fnRemapTap = hs.eventtap.new(
   { hs.eventtap.event.types.keyDown, hs.eventtap.event.types.keyUp },
   function(e)
     if not fnDown then return false end
@@ -50,7 +65,21 @@ hs.eventtap.new(
     hs.eventtap.event.newKeyEvent(modsList, arrow, isDown):post()
     return true
   end
-):start()
+)
+fnRemapTap:start()
+
+-- Watchdog: macOS silently disables event taps that take too long or after
+-- some sleep/wake cycles. Re-arm them every 30s if they've gone inactive.
+local eventtapWatchdog = hs.timer.doEvery(30, function()
+  if not fnFlagsTap:isEnabled() then
+    log.w("fnFlagsTap disabled by system, restarting")
+    fnFlagsTap:start()
+  end
+  if not fnRemapTap:isEnabled() then
+    log.w("fnRemapTap disabled by system, restarting")
+    fnRemapTap:start()
+  end
+end)
 
 -- Function to move the mouse to a specific screen
 function moveMouseToScreen(screenIndex)
@@ -80,55 +109,68 @@ function moveWindowToScreen(screenIndex)
   end
 end
 
---- Function to rotate window focus forward or backward within the same screen and space
+local function focusAndCenterMouse(window)
+  if not window then return end
+  window:focus()
+  hs.mouse.absolutePosition(hs.geometry.rectMidPoint(window:frame()))
+end
+
+-- Rotate focus among windows on the current screen using a stable spatial
+-- order (top -> bottom, then left -> right). Using window position instead of
+-- z-order avoids the A<->B oscillation that happens when :focus() reshuffles
+-- z-order between calls.
 function rotateWindowFocus(direction)
   local focusedWindow = hs.window.focusedWindow()
   if not focusedWindow then return end
-  
-  local focusedScreen = focusedWindow:screen()
-  local visibleWindows = hs.window.visibleWindows()
-  
-  local firstVisibleWindows = nil
-  local currentVisibleWindows = nil
-  local previousVisibleWindows = nil
-  local isWindowFocused = false
+  local focusedScreenId = focusedWindow:screen():id()
+  local focusedId = focusedWindow:id()
 
-  for i, window in ipairs(visibleWindows) do
-    if window:screen():id() == focusedScreen:id() and window:title() ~= "" then
-      if firstVisibleWindows == nil then
-        firstVisibleWindows = window
+  local items = {}
+  for _, w in ipairs(hs.window.visibleWindows()) do
+    local s = w:screen()
+    if s and s:id() == focusedScreenId then
+      local t = w:title()
+      if t and t ~= "" then
+        local f = w:frame()
+        items[#items + 1] = { w = w, id = w:id(), x = f.x, y = f.y }
       end
-      currentVisibleWindows = window
-      
-      if direction == "forward" and previousVisibleWindows == focusedWindow then
-        window:focus()
-        isWindowFocused = true
-        break
-      elseif direction == "backward" and window == focusedWindow and previousVisibleWindows ~= nil then
-        previousVisibleWindows:focus()
-        isWindowFocused = true
-        break
-      end
-      previousVisibleWindows = window
     end
   end
-  if not isWindowFocused then
-    if direction == "forward" then
-      firstVisibleWindows:focus()
-    elseif direction == "backward" then
-      currentVisibleWindows:focus()
-    end
+  if #items <= 1 then return end
+
+  table.sort(items, function(a, b)
+    if a.y ~= b.y then return a.y < b.y end
+    if a.x ~= b.x then return a.x < b.x end
+    return a.id < b.id
+  end)
+
+  local idx
+  for i, it in ipairs(items) do
+    if it.id == focusedId then idx = i; break end
   end
+
+  local nextIdx
+  if idx == nil then
+    nextIdx = direction == "forward" and 1 or #items
+  elseif direction == "forward" then
+    nextIdx = idx % #items + 1
+  else
+    nextIdx = (idx - 2) % #items + 1
+  end
+
+  focusAndCenterMouse(items[nextIdx].w)
 end
 
 -- Hotkeys to switch mouse focus to the first or second screen
-hs.hotkey.bind({"alt", "shift"}, "i", function() moveMouseToScreen(1) end)
-hs.hotkey.bind({"alt", "shift"}, "u", function() moveMouseToScreen(2) end)
+safeBind({"alt", "shift"}, "i", "mouse->screen1", function() moveMouseToScreen(1) end)
+safeBind({"alt", "shift"}, "u", "mouse->screen2", function() moveMouseToScreen(2) end)
 
 -- Hotkeys to switch window to the first or second screen
-hs.hotkey.bind({"ctrl", "alt", "shift"}, "i", function() moveWindowToScreen(1) end)
-hs.hotkey.bind({"ctrl", "alt", "shift"}, "u", function() moveWindowToScreen(2) end)
+safeBind({"ctrl", "alt", "shift"}, "i", "window->screen1", function() moveWindowToScreen(1) end)
+safeBind({"ctrl", "alt", "shift"}, "u", "window->screen2", function() moveWindowToScreen(2) end)
 
 -- Hotkey to cycle window focus
-hs.hotkey.bind({"alt", "shift"}, "j", function() rotateWindowFocus("backward") end)
-hs.hotkey.bind({"alt", "shift"}, "k", function() rotateWindowFocus("forward") end)
+safeBind({"alt", "shift"}, "j", "rotate-backward", function() rotateWindowFocus("backward") end)
+safeBind({"alt", "shift"}, "k", "rotate-forward",  function() rotateWindowFocus("forward")  end)
+
+log.i("hotkeys registered")
