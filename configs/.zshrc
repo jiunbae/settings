@@ -447,7 +447,7 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 
-export AWS_VAULT_BACKEND=file
+[[ "$(uname)" != "Darwin" ]] && export AWS_VAULT_BACKEND=file
 
 # bun completions
 [ -s "/home/june/.bun/_bun" ] && source "/home/june/.bun/_bun"
