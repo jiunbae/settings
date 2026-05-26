@@ -103,6 +103,7 @@ Components:
   tools-extra   Extra CLI tools (delta, dust, procs, bottom)
   ssh           SSH config (copy only, not symlinked)
   hishtory      hishtory (better shell history with sync support)
+  hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
 ```
 
 ## Components
@@ -177,6 +178,15 @@ export HISHTORY_SECRET="your-secret-key-uuid"
 Without `HISHTORY_SERVER`, hishtory runs in local-only mode.
 To sync across devices, use the same `HISHTORY_SECRET` on all machines.
 
+### macOS Automation
+| Component | Description |
+|-----------|-------------|
+| [Hammerspoon](https://www.hammerspoon.org/) | Lua-scriptable macOS automation (window/screen/keyboard) |
+
+**Installs via Homebrew Cask and symlinks `~/.hammerspoon/init.lua` to this repo.**
+Skipped automatically on Linux/WSL. Accessibility permission must be granted manually:
+System Settings → Privacy & Security → Accessibility → enable Hammerspoon.
+
 ## Directory Structure
 
 ```
@@ -196,7 +206,8 @@ settings/
 │   ├── python.sh          #   uv
 │   ├── tools.sh           #   CLI tools
 │   ├── ssh.sh             #   SSH config
-│   └── hishtory.sh        #   hishtory + self-hosted sync
+│   ├── hishtory.sh        #   hishtory + self-hosted sync
+│   └── hammerspoon.sh     #   Hammerspoon (macOS-only)
 ├── worker/                 # Cloudflare Worker (settings.jiun.dev)
 │   ├── index.js           #   Proxy raw GitHub content
 │   └── wrangler.toml      #   Wrangler configuration

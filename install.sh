@@ -37,6 +37,7 @@ source "$SCRIPT_DIR/modules/python.sh"
 source "$SCRIPT_DIR/modules/tools.sh"
 source "$SCRIPT_DIR/modules/ssh.sh"
 source "$SCRIPT_DIR/modules/hishtory.sh"
+source "$SCRIPT_DIR/modules/hammerspoon.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -53,6 +54,7 @@ get_component_name() {
         tools-extra) echo "Extra CLI tools" ;;
         ssh)         echo "SSH config" ;;
         hishtory)    echo "hishtory (shell history)" ;;
+        hammerspoon) echo "Hammerspoon (macOS automation)" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -127,6 +129,9 @@ main() {
                 ;;
             hishtory)
                 install_hishtory
+                ;;
+            hammerspoon)
+                install_hammerspoon
                 ;;
             *)
                 progress_info "Unknown component: $component"
