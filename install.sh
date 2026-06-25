@@ -31,6 +31,7 @@ source "$SCRIPT_DIR/lib/cli.sh"
 source "$SCRIPT_DIR/modules/base.sh"
 source "$SCRIPT_DIR/modules/shell.sh"
 source "$SCRIPT_DIR/modules/editor.sh"
+source "$SCRIPT_DIR/modules/tmux.sh"
 source "$SCRIPT_DIR/modules/zellij.sh"
 source "$SCRIPT_DIR/modules/rust.sh"
 source "$SCRIPT_DIR/modules/python.sh"
@@ -47,6 +48,7 @@ get_component_name() {
         base)        echo "Base packages" ;;
         zsh)         echo "Zsh + zinit + Powerlevel10k" ;;
         nvim)        echo "NeoVim + LazyVim" ;;
+        tmux)        echo "tmux + TPM (terminal multiplexer)" ;;
         zellij)      echo "zellij (terminal multiplexer)" ;;
         rust)        echo "Rust toolchain" ;;
         uv)          echo "uv (Python)" ;;
@@ -108,6 +110,9 @@ main() {
                 ;;
             nvim)
                 install_editor
+                ;;
+            tmux)
+                install_tmux
                 ;;
             zellij)
                 install_zellij

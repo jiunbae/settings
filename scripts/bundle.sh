@@ -62,7 +62,7 @@ for file in "$SCRIPT_DIR"/modules/*.sh; do
 done
 
 # Embed config files
-for file in "$SCRIPT_DIR"/configs/.zshrc "$SCRIPT_DIR"/configs/.p10k.zsh; do
+for file in "$SCRIPT_DIR"/configs/.zshrc "$SCRIPT_DIR"/configs/.p10k.zsh "$SCRIPT_DIR"/configs/.tmux.conf; do
     if [[ -f "$file" ]]; then
         embed_file "$file"
     fi
