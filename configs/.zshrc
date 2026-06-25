@@ -232,7 +232,6 @@ claude_with_mimo_env() {
     API_TIMEOUT_MS="3000000" \
     command claude --dangerously-skip-permissions "$@"
 }
-alias cmg='claude_with_glm_env'
 alias cmm='claude_with_mimo_env'
 
 # Zellij (terminal multiplexer)
@@ -337,10 +336,9 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   nvm() { _nvm_lazy_load; nvm "$@" }
   tsx() { _nvm_lazy_load; command tsx "$@" }
 fi
-
-  export NVM_DIR="$HOME/.nvm"
-  [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
-  [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"  # This loads nvm bash_completion
+# NOTE: homebrew 기본 nvm 스니펫(아래)은 매 시작마다 nvm.sh 를 즉시 source 하여
+# 위 lazy-load 를 무력화하고 시작 시간을 ~2초 늘렸기에 제거함 (2026-06-25).
+# nvm completion 은 `nvm` 최초 사용 시 nvm.sh 와 함께 로드됨.
 
 ################################
 # uv (Python package manager) - cached completion
