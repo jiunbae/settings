@@ -267,6 +267,7 @@ _zellij_sessions() { compadd $(zellij list-sessions 2>/dev/null | command grep -
 compdef _zellij_sessions za zs zx zd
 export EDITOR=nvim
 export GPG_TTY=$(tty)
+gpg-connect-agent updatestartuptty /bye >/dev/null 2>&1
 
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
@@ -449,3 +450,6 @@ esac
 
 # bun completions
 [ -s "/home/june/.bun/_bun" ] && source "/home/june/.bun/_bun"
+
+# Warm gpg-agent cache so signing works in headless contexts
+[ -r "$HOME/.gnupg/passphrase" ] && gpg --pinentry-mode loopback --passphrase-file "$HOME/.gnupg/passphrase" --batch --sign </dev/null >/dev/null 2>&1 &!
