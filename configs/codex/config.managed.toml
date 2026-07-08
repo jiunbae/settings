@@ -1,0 +1,142 @@
+model = "gpt-5.5"
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
+model_reasoning_effort = "xhigh"
+service_tier = "default"
+personality = "pragmatic"
+sandbox_mode = "danger-full-access"
+approvals_reviewer = "user"
+notify = ["node", "/Users/jiun/.config/oh-my-prompt/hooks/codex/notify-wrapper.js"]
+
+[projects."/Users/jiun/workspace/agent-skills"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/issueboard"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/guided"]
+trust_level = "trusted"
+
+[projects."/Users/jiun"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/prompt-manager"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/pc-health-poc"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-ext"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/settings"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/IaC"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/backup"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-ext/aily"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/open330/open-agent-contribution"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/oh-my-prompt"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/jiunbae.github.io"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-open330/quickstart-for-agents"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/nova-pouch"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-open330/agt"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/kakao-persona"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-open330/context-compress"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-open330/github-pr-reverse"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/personal/jiun"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/personal/flatten"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-game/wow-3d"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/test"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-open330/open330-offline-judge"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/nearm"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/personal/rtelier"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace-open330/cmux"]
+trust_level = "trusted"
+
+[projects."/Users/jiun/workspace/menubucket"]
+trust_level = "trusted"
+
+[notice]
+hide_full_access_warning = true
+
+[agents]
+max_threads = 18
+
+[features]
+fast_mode = true
+js_repl = false
+
+[[hooks.SessionStart]]
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "muxa hook codex --event session_start"
+
+[[hooks.UserPromptSubmit]]
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "muxa hook codex --event user_prompt_submit"
+
+[[hooks.PreToolUse]]
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "muxa hook codex --event pre_tool_use"
+
+[[hooks.PostToolUse]]
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "muxa hook codex --event post_tool_use"
+
+[[hooks.PermissionRequest]]
+
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "muxa hook codex --event permission_request"
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "muxa hook codex --event stop"

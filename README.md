@@ -105,6 +105,7 @@ Components:
   ssh           SSH config (copy only, not symlinked)
   hishtory      hishtory (better shell history with sync support)
   hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
+  codex         Codex CLI/App config, hooks, and notify chain
 ```
 
 ## Components
@@ -163,6 +164,11 @@ Components:
 |-----------|-------------|
 | [hishtory](https://github.com/ddworken/hishtory) | Better shell history with context, search, and sync |
 
+### AI Coding Tools
+| Component | Description |
+|-----------|-------------|
+| codex | Managed Codex config template. Applies stable model/project/hook settings, disables legacy `~/.codex/hooks.json`, and preserves Codex-owned runtime sections such as hook trust state, plugins, MCP servers, TUI state, and desktop settings. |
+
 **hishtory features:**
 - Context-aware history (directory, exit code, duration)
 - Fuzzy search with `Ctrl+R`
@@ -211,7 +217,8 @@ settings/
 │   ├── tools.sh           #   CLI tools
 │   ├── ssh.sh             #   SSH config
 │   ├── hishtory.sh        #   hishtory + self-hosted sync
-│   └── hammerspoon.sh     #   Hammerspoon (macOS-only)
+│   ├── hammerspoon.sh     #   Hammerspoon (macOS-only)
+│   └── codex.sh           #   Codex CLI/App config
 ├── worker/                 # Cloudflare Worker (settings.jiun.dev)
 │   ├── index.js           #   Proxy raw GitHub content
 │   └── wrangler.toml      #   Wrangler configuration
@@ -225,6 +232,7 @@ settings/
 │   ├── zellij/            #   zellij config + layouts
 │   ├── nvim/              #   NeoVim + LazyVim config
 │   ├── hishtory/          #   hishtory config template
+│   ├── codex/             #   Codex managed config template
 │   └── windows-terminal/  #   Windows Terminal configuration
 └── .github/workflows/      # CI/CD
     └── release.yml         #   Auto-release on tag

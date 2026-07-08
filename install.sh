@@ -39,6 +39,7 @@ source "$SCRIPT_DIR/modules/tools.sh"
 source "$SCRIPT_DIR/modules/ssh.sh"
 source "$SCRIPT_DIR/modules/hishtory.sh"
 source "$SCRIPT_DIR/modules/hammerspoon.sh"
+source "$SCRIPT_DIR/modules/codex.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -57,6 +58,7 @@ get_component_name() {
         ssh)         echo "SSH config" ;;
         hishtory)    echo "hishtory (shell history)" ;;
         hammerspoon) echo "Hammerspoon (macOS automation)" ;;
+        codex)       echo "Codex CLI/App configuration" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -137,6 +139,9 @@ main() {
                 ;;
             hammerspoon)
                 install_hammerspoon
+                ;;
+            codex)
+                install_codex
                 ;;
             *)
                 progress_info "Unknown component: $component"

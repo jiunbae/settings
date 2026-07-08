@@ -11,7 +11,7 @@ readonly VERSION="2.0.0"
 # Available Components
 # ==============================================================================
 # Component list (bash 3.2 compatible - no associative arrays)
-readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory hammerspoon)
+readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory hammerspoon codex)
 
 # Basic components for --basic option
 readonly BASIC_COMPONENTS=(base zsh nvim tmux)
@@ -34,6 +34,7 @@ get_component_desc() {
         ssh)         echo "SSH config (copy only, not symlinked)" ;;
         hishtory)    echo "hishtory (better shell history with S3 sync)" ;;
         hammerspoon) echo "Hammerspoon (macOS-only: window manager + keybindings)" ;;
+        codex)       echo "Codex CLI/App config, hooks, and notify chain" ;;
         *)           echo "" ;;
     esac
 }
