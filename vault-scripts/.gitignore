@@ -3,3 +3,10 @@
 .env
 node_modules/
 dist/
+
+# Machine-local push state (session id -> last pushed timestamp)
+.codex-push-state.json
+.opencode-push-state.json
+
+# One-off agent review artifacts
+.context/
