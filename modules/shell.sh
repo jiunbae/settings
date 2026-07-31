@@ -17,6 +17,7 @@ fi
 # Configuration
 # ==============================================================================
 readonly ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
+readonly ZINIT_REF="74173749a6276a7895711008555651fcdacd0f69"
 
 # ==============================================================================
 # Installation Functions
@@ -57,8 +58,7 @@ install_zinit() {
 
     # Install zinit
     mkdir -p "$(dirname "$ZINIT_HOME")"
-    run_with_spinner "Installing zinit" \
-        git clone --depth 1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+    git_clone_pinned "https://github.com/zdharma-continuum/zinit.git" "$ZINIT_HOME" "$ZINIT_REF"
     track_installed "zinit"
     log_success "zinit installed"
 }

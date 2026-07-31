@@ -17,6 +17,7 @@ fi
 # Configuration
 # ==============================================================================
 readonly TPM_DIR="$HOME/.tmux/plugins/tpm"
+readonly TPM_REF="e261deb1b47614eed3400089ce7197dc68acc4eb"
 
 # ==============================================================================
 # Installation Functions
@@ -63,7 +64,7 @@ install_tpm() {
         fi
     fi
 
-    git_clone "https://github.com/tmux-plugins/tpm" "$TPM_DIR"
+    git_clone_pinned "https://github.com/tmux-plugins/tpm.git" "$TPM_DIR" "$TPM_REF"
     track_installed "TPM"
     log_success "TPM installed"
 }

@@ -74,6 +74,14 @@ download_with_git() {
     if [[ -d "$INSTALL_DIR" ]]; then
         log_info "Updating existing installation..."
         cd "$INSTALL_DIR"
+        if ! git diff --quiet || ! git diff --cached --quiet; then
+            if [[ "${SETTINGS_FORCE_UPDATE:-false}" != "true" ]]; then
+                log_error "Local changes detected in $INSTALL_DIR"
+                log_error "Commit/stash them, or set SETTINGS_FORCE_UPDATE=true to discard them."
+                exit 1
+            fi
+            log_warn "Discarding local changes because SETTINGS_FORCE_UPDATE=true"
+        fi
         git fetch origin
         git reset --hard origin/master
     else

@@ -282,6 +282,38 @@ git_clone() {
     run_with_spinner "Cloning $repo_name" git clone --depth="$depth" "$url" "$dest"
 }
 
+# Clone a git repository at an explicit commit/ref.
+git_clone_pinned() {
+    local url=$1
+    local dest=$2
+    local ref=$3
+    local depth=${4:-1}
+
+    local repo_name
+    repo_name=$(basename "$url" .git)
+
+    if [[ -d "$dest" ]]; then
+        if [[ "$FORCE" == "true" ]]; then
+            log_info "Removing existing directory: $dest"
+            rm -rf "$dest"
+        else
+            echo -e "${GREEN}✓${NC} $repo_name (already cloned)"
+            return 0
+        fi
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would clone pinned ref: $url@$ref"
+        return 0
+    fi
+
+    mkdir -p "$dest"
+    run_with_spinner "Initializing $repo_name" git -C "$dest" init
+    git -C "$dest" remote add origin "$url"
+    run_with_spinner "Fetching $repo_name@$ref" git -C "$dest" fetch --depth="$depth" origin "$ref"
+    run_with_spinner "Checking out $repo_name@$ref" git -C "$dest" checkout --detach FETCH_HEAD
+}
+
 # ==============================================================================
 # Terminal Control
 # ==============================================================================

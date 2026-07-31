@@ -16,6 +16,7 @@ fi
 # ==============================================================================
 # Configuration
 # ==============================================================================
+readonly FZF_REF="845752f3055a5c10b65adc1d4c7c7734b7c2dd56"
 
 # Basic CLI tools
 readonly TOOLS_BASIC=(
@@ -153,8 +154,7 @@ install_fzf() {
                 return 0
             fi
 
-            run_with_spinner "Cloning fzf" \
-                git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
+            git_clone_pinned "https://github.com/junegunn/fzf.git" "$HOME/.fzf" "$FZF_REF"
             run_with_spinner "Installing fzf" \
                 "$HOME/.fzf/install" --all --no-bash --no-fish
             ;;
