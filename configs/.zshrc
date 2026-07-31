@@ -126,13 +126,13 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7'
 export PATH=$HOME/bin:$HOME/.local/bin:$HOME/.scripts:$PATH
 
 ################################
-# Load environment files from ~/.envs
-# Store secrets in ~/.envs/*.env (not tracked by git)
-if [[ -d "$HOME/.envs" ]]; then
-  for env_file in "$HOME/.envs"/*.env(N); do
-    [[ -f "$env_file" ]] && source "$env_file"
-  done
-fi
+# Scoped environment file loader.
+# Do not source every ~/.envs/*.env at shell startup; most of those files hold
+# secrets that would be inherited by every child process.
+_source_env_file() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] && source "$env_file"
+}
 
 ################################
 # OS Based settings
@@ -210,31 +210,6 @@ alias vimdiff="nvim -d"
 alias cx="codex --yolo"
 alias c="claude --dangerously-skip-permissions"
 alias oc="opencode"
-
-claude_with_glm_env() {
-    BASH_ENV="" \
-    ENV="" \
-    ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5.1-fp8" \
-    ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.1-fp8" \
-    ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.1-fp8" \
-    ANTHROPIC_AUTH_TOKEN="${CM_TOKEN}" \
-    ANTHROPIC_BASE_URL="${CM_BASE_URL}" \
-    API_TIMEOUT_MS="3000000" \
-    command claude --dangerously-skip-permissions "$@"
-}
-alias cmg='claude_with_glm_env'
-claude_with_mimo_env() {
-    BASH_ENV="" \
-    ENV="" \
-    ANTHROPIC_DEFAULT_HAIKU_MODEL="MiMo-V2.5-Pro" \
-    ANTHROPIC_DEFAULT_SONNET_MODEL="MiMo-V2.5-Pro" \
-    ANTHROPIC_DEFAULT_OPUS_MODEL="MiMo-V2.5-Pro" \
-    ANTHROPIC_AUTH_TOKEN="${CM_TOKEN}" \
-    ANTHROPIC_BASE_URL="${CM_BASE_URL}" \
-    API_TIMEOUT_MS="3000000" \
-    command claude --dangerously-skip-permissions "$@"
-}
-alias cmm='claude_with_mimo_env'
 
 # Zellij (terminal multiplexer)
 alias zs='zellij -s'
@@ -406,7 +381,7 @@ export BUN_INSTALL="$HOME/.bun"
 #   HISHTORY_SERVER="https://hishtory.example.com"
 #   HISHTORY_SECRET="your-secret-key"
 # Without these, hishtory runs in local-only mode
-[[ -f "$HOME/.envs/hishtory.env" ]] && source "$HOME/.envs/hishtory.env"
+_source_env_file "$HOME/.envs/hishtory.env"
 if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   [[ -f "$HOME/.hishtory/hishtory" ]] && export PATH="$HOME/.hishtory:$PATH"
   # Auto-init with secret if configured but not yet initialized
@@ -438,8 +413,14 @@ if [[ -f "$HOME/.hishtory/hishtory" ]] || (( $+commands[hishtory] )); then
   bindkey '^R' _hishtory_search
 fi
 
-# vault warden session-name
-export BW_SESSION=$(cat ~/.bw_session 2>/dev/null)
+# Bitwarden session helper. Keep BW_SESSION out of the global shell env so
+# arbitrary child processes cannot unlock the vault via inherited variables.
+bw_with_session() {
+  local session
+  session="$(cat "$HOME/.bw_session" 2>/dev/null)" || return 1
+  BW_SESSION="$session" command bw "$@"
+}
+alias bwx='bw_with_session'
 
 # pnpm
 export PNPM_HOME="$HOME/Library/pnpm"
@@ -448,7 +429,11 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 
-[[ "$(uname)" != "Darwin" ]] && export AWS_VAULT_BACKEND=file
+if [[ "$(uname)" == "Darwin" ]]; then
+  export AWS_VAULT_BACKEND=keychain
+else
+  export AWS_VAULT_BACKEND=file
+fi
 
 # bun completions
 [ -s "/home/june/.bun/_bun" ] && source "/home/june/.bun/_bun"
