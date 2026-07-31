@@ -254,34 +254,6 @@ run_cmd() {
     "$@"
 }
 
-# Clone a git repository if not exists
-git_clone() {
-    local url=$1
-    local dest=$2
-    local depth=${3:-1}
-
-    # Extract repo name for display
-    local repo_name
-    repo_name=$(basename "$url" .git)
-
-    if [[ -d "$dest" ]]; then
-        if [[ "$FORCE" == "true" ]]; then
-            log_info "Removing existing directory: $dest"
-            rm -rf "$dest"
-        else
-            echo -e "${GREEN}✓${NC} $repo_name (already cloned)"
-            return 0
-        fi
-    fi
-
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would clone: $url"
-        return 0
-    fi
-
-    run_with_spinner "Cloning $repo_name" git clone --depth="$depth" "$url" "$dest"
-}
-
 # Clone a git repository at an explicit commit/ref.
 git_clone_pinned() {
     local url=$1
