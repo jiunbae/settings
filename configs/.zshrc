@@ -206,6 +206,8 @@ fi
 alias vim="nvim"
 alias vi="nvim"
 alias vimdiff="nvim -d"
+
+alias cx="codex --yolo"
 alias c="claude --dangerously-skip-permissions"
 alias oc="opencode"
 
@@ -453,3 +455,33 @@ esac
 
 # Warm gpg-agent cache so signing works in headless contexts
 [ -r "$HOME/.gnupg/passphrase" ] && gpg --pinentry-mode loopback --passphrase-file "$HOME/.gnupg/passphrase" --batch --sign </dev/null >/dev/null 2>&1 &!
+
+# Kimi K3 (Kimi Code subscription) — https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html
+claude_with_kimi_env() {
+    [[ -f "$HOME/.envs/kimi.env" ]] && source "$HOME/.envs/kimi.env"
+    if [[ -z "${KIMI_K3_TOKEN}" ]]; then
+        echo "KIMI_K3_TOKEN is not set (expected in ~/.envs/kimi.env)." >&2
+        echo "Create a key at https://www.kimi.com/code (Kimi Code Console)." >&2
+        return 1
+    fi
+    local _model="${KIMI_MODEL:-k3[1m]}"
+    local _ctx="${KIMI_CONTEXT_TOKENS:-1048576}"
+    BASH_ENV="" \
+    ENV="" \
+    ANTHROPIC_BASE_URL="${KIMI_BASE_URL:-https://api.kimi.com/coding/}" \
+    ANTHROPIC_API_KEY="" \
+    CLAUDE_CODE_OAUTH_TOKEN="" \
+    ANTHROPIC_AUTH_TOKEN="${KIMI_K3_TOKEN}" \
+    ANTHROPIC_MODEL="${_model}" \
+    ANTHROPIC_DEFAULT_FABLE_MODEL="${_model}" \
+    ANTHROPIC_DEFAULT_OPUS_MODEL="${_model}" \
+    ANTHROPIC_DEFAULT_SONNET_MODEL="${_model}" \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL="${_model}" \
+    CLAUDE_CODE_SUBAGENT_MODEL="${_model}" \
+    CLAUDE_CODE_EFFORT_LEVEL="high" \
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW="${_ctx}" \
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS="${_ctx}" \
+    API_TIMEOUT_MS="3000000" \
+    command claude --dangerously-skip-permissions "$@"
+}
+alias cmk='claude_with_kimi_env'
