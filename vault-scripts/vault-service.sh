@@ -13,6 +13,7 @@
 #   ./vault-service.sh install         # Install/reinstall launchd plists
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="${VAULT_LOG_DIR:-$HOME/Library/Logs/vault-scripts}"
 
 # Service registry: name:label:script:interval:logprefix
 SERVICES=(
@@ -26,6 +27,8 @@ SERVICES=(
 
 _get_field() { echo "$1" | cut -d: -f"$2"; }
 _plist_path() { echo "$HOME/Library/LaunchAgents/$(_get_field "$1" 2).plist"; }
+_log_path() { echo "$LOG_DIR/$(_get_field "$1" 5).log"; }
+_err_path() { echo "$LOG_DIR/$(_get_field "$1" 5).err"; }
 
 show_service_status() {
     local label="$1" name="$2" logfile="$3" errfile="$4"
@@ -64,6 +67,10 @@ install_plists() {
     echo "Installing launchd plists..."
     echo "  Python: $python_bin"
     echo "  Scripts: $SCRIPT_DIR"
+    echo "  Logs: $LOG_DIR"
+
+    mkdir -p "$LOG_DIR"
+    chmod 700 "$LOG_DIR"
 
     for svc in "${SERVICES[@]}"; do
         name=$(_get_field "$svc" 1)
@@ -106,9 +113,9 @@ $args_xml
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/${logprefix}.log</string>
+    <string>$LOG_DIR/${logprefix}.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/${logprefix}.err</string>
+    <string>$LOG_DIR/${logprefix}.err</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -144,8 +151,7 @@ case "${1:-status}" in
         for svc in "${SERVICES[@]}"; do
             _name=$(_get_field "$svc" 1)
             _label=$(_get_field "$svc" 2)
-            _logprefix=$(_get_field "$svc" 5)
-            show_service_status "$_label" "$_name" "/tmp/${_logprefix}.log" "/tmp/${_logprefix}.err"
+            show_service_status "$_label" "$_name" "$(_log_path "$svc")" "$(_err_path "$svc")"
         done
         if [ -f "$SCRIPT_DIR/.env" ]; then
             echo "Credentials: .env found"
@@ -193,25 +199,22 @@ case "${1:-status}" in
         if [ "$target" = "all" ]; then
             for svc in "${SERVICES[@]}"; do
                 name=$(_get_field "$svc" 1)
-                logprefix=$(_get_field "$svc" 5)
                 echo "=== $name stdout ==="
-                tail -10 "/tmp/${logprefix}.log" 2>/dev/null || echo "No logs"
+                tail -10 "$(_log_path "$svc")" 2>/dev/null || echo "No logs"
                 echo ""
             done
             for svc in "${SERVICES[@]}"; do
                 name=$(_get_field "$svc" 1)
-                logprefix=$(_get_field "$svc" 5)
                 echo "=== $name stderr ==="
-                tail -5 "/tmp/${logprefix}.err" 2>/dev/null || echo "No errors"
+                tail -5 "$(_err_path "$svc")" 2>/dev/null || echo "No errors"
             done
         else
             svc=$(_find_service "$target") || { echo "Unknown service: $target"; exit 1; }
-            logprefix=$(_get_field "$svc" 5)
             echo "=== $target stdout ==="
-            tail -30 "/tmp/${logprefix}.log" 2>/dev/null || echo "No logs"
+            tail -30 "$(_log_path "$svc")" 2>/dev/null || echo "No logs"
             echo ""
             echo "=== $target stderr ==="
-            tail -10 "/tmp/${logprefix}.err" 2>/dev/null || echo "No errors"
+            tail -10 "$(_err_path "$svc")" 2>/dev/null || echo "No errors"
         fi
         ;;
 

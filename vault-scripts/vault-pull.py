@@ -34,7 +34,7 @@ import urllib.request
 import urllib.error
 import urllib.parse
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 # ============================================================================
@@ -77,6 +77,19 @@ EXCLUDE_PATTERNS = [
     "node_modules/",
     "scripts/",
 ]
+
+
+def _redact_url(url: str) -> str:
+    """Remove embedded basic-auth credentials from a URL before logging."""
+    parsed = urllib.parse.urlsplit(url)
+    if not parsed.username and not parsed.password:
+        return url
+    host = parsed.hostname or ""
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, host, parsed.path, parsed.query, parsed.fragment)
+    )
 
 
 def print_env_diagnostics() -> None:
@@ -157,7 +170,7 @@ def couchdb_request(path: str, method: str = "GET", data: dict = None, timeout: 
         except Exception:
             body = ""
 
-        msg = f"HTTP Error {e.code}: {e.reason} ({url})"
+        msg = f"HTTP Error {e.code}: {e.reason} ({_redact_url(url)})"
         if body:
             if len(body) > 2000:
                 body = body[:2000] + "...<truncated>"
@@ -285,6 +298,26 @@ def should_exclude(path: str) -> bool:
     return False
 
 
+def resolve_vault_file_path(doc_path: str) -> Optional[tuple[str, Path]]:
+    """Return a normalized vault-relative path and local path, or None if unsafe."""
+    normalized = doc_path.lstrip("/")
+    if not normalized or "\x00" in normalized or "\\" in normalized:
+        return None
+
+    posix_path = PurePosixPath(normalized)
+    if posix_path.is_absolute() or any(part in ("", ".", "..") for part in posix_path.parts):
+        return None
+
+    normalized = posix_path.as_posix()
+    root = VAULT_ROOT.resolve()
+    local_path = (VAULT_ROOT / normalized).resolve()
+    try:
+        local_path.relative_to(root)
+    except ValueError:
+        return None
+    return normalized, local_path
+
+
 # ============================================================================
 # Orphan Detection & Deletion
 # ============================================================================
@@ -345,9 +378,13 @@ def find_orphan_files(
     for doc in documents:
         doc_id = doc.get('_id', '')
         doc_path = doc.get('path', doc_id)
-        if doc_path.startswith('/'):
-            doc_path = doc_path[1:]
-        remote_paths.add(doc_path)
+        resolved = resolve_vault_file_path(doc_path)
+        if not resolved:
+            if verbose:
+                print(f"  [WARN] Skipping unsafe remote path: {doc_path}")
+            continue
+        safe_doc_path, _ = resolved
+        remote_paths.add(safe_doc_path)
 
     print(f"  Remote documents: {len(remote_paths)}")
 
@@ -444,17 +481,18 @@ def pull_documents(
         doc_id = doc.get('_id', '')
         doc_path = doc.get('path', doc_id)
 
-        if doc_path.startswith('/'):
-            doc_path = doc_path[1:]
-
+        resolved = resolve_vault_file_path(doc_path)
+        if not resolved:
+            print(f"  [WARN] Skipping unsafe remote path: {doc_path}", file=sys.stderr)
+            stats['errors'] += 1
+            continue
+        doc_path, local_path = resolved
 
         if should_exclude(doc_path):
             if verbose:
                 print(f"  [SKIP] {doc_path} (excluded)")
             stats['skipped'] += 1
             continue
-
-        local_path = VAULT_ROOT / doc_path
 
         if changed_only and local_path.exists():
             local_mtime = datetime.fromtimestamp(local_path.stat().st_mtime)

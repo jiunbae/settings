@@ -93,6 +93,19 @@ EXCLUDE_PATTERNS = [
 ]
 
 
+def _redact_url(url: str) -> str:
+    """Remove embedded basic-auth credentials from a URL before logging."""
+    parsed = urllib.parse.urlsplit(url)
+    if not parsed.username and not parsed.password:
+        return url
+    host = parsed.hostname or ""
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, host, parsed.path, parsed.query, parsed.fragment)
+    )
+
+
 def validate_config() -> None:
     missing = []
     if not COUCHDB_URI:
@@ -147,7 +160,9 @@ def couchdb_request(
             raw = e.read().decode("utf-8", errors="replace").strip()
         except Exception:
             pass
-        raise RuntimeError(f"HTTP {e.code}: {e.reason} ({url})\n{raw[:500]}") from e
+        raise RuntimeError(
+            f"HTTP {e.code}: {e.reason} ({_redact_url(url)})\n{raw[:500]}"
+        ) from e
 
 
 def couchdb_head(path: str) -> bool:

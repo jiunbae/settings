@@ -32,10 +32,19 @@ usage() {
     echo "  --help, -h         Show this help"
 }
 
+validate_config() {
+    if [[ "$DOCS_ROOT" != /* || ! "$DOCS_ROOT" =~ ^/[a-zA-Z0-9/_.-]+$ ]]; then
+        echo -e "${RED}Error:${NC} Invalid DOCS_ROOT: ${DOCS_ROOT}"
+        exit 1
+    fi
+}
+
 list_docs() {
+    local root_q
+    root_q="$(printf '%q' "$DOCS_ROOT")"
     echo -e "${CYAN}Published documents:${NC}"
     ssh "${DOCS_USER}@${DOCS_HOST}" \
-        "find ${DOCS_ROOT} -name '*.md' -not -name '_sidebar.md' -not -name 'index.md' | sort" | \
+        "find ${root_q} -name '*.md' -not -name '_sidebar.md' -not -name 'index.md' | sort" | \
     while read -r path; do
         rel="${path#${DOCS_ROOT}/}"
         name="${rel%.md}"
@@ -66,6 +75,8 @@ open_doc() {
 
 push_files() {
     local src="$1"
+    local root_q
+    root_q="$(printf '%q' "$DOCS_ROOT")"
 
     if [ -f "$src" ]; then
         # Single file
@@ -95,8 +106,12 @@ push_files() {
 
     # Fix permissions and trigger sidebar regeneration
     ssh "${DOCS_USER}@${DOCS_HOST}" \
-        "chmod 755 ${DOCS_ROOT} && find ${DOCS_ROOT} -maxdepth 1 -type f -exec chmod 644 {} + && chown -R www-data:www-data ${DOCS_ROOT} && /usr/local/bin/update-sidebar" 2>/dev/null || true
+        "chmod 755 ${root_q} && find ${root_q} -maxdepth 1 -type f -exec chmod 644 {} + && chown -R www-data:www-data ${root_q} && /usr/local/bin/update-sidebar" 2>/dev/null || true
 }
+
+if [[ "${1:-}" != "--help" && "${1:-}" != "-h" && -n "${1:-}" ]]; then
+    validate_config
+fi
 
 # Parse arguments
 case "${1:-}" in
