@@ -121,6 +121,17 @@ load_config() {
         exit 1
     fi
 
+    local mode group_other
+    mode="$(stat -f '%Lp' "$CONFIG_FILE" 2>/dev/null || stat -c '%a' "$CONFIG_FILE" 2>/dev/null || true)"
+    if [[ "$mode" =~ ^[0-9]+$ ]]; then
+        group_other=$((10#$mode % 100))
+        if (( group_other != 0 )); then
+            log_error "Configuration file permissions are too open: $CONFIG_FILE ($mode)"
+            echo "Fix with: chmod 600 \"$CONFIG_FILE\""
+            exit 1
+        fi
+    fi
+
     log_info "Loading configuration from: $CONFIG_FILE"
     # shellcheck source=/dev/null
     source "$CONFIG_FILE"

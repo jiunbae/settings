@@ -45,25 +45,26 @@ join_k3s_cluster() {
         fi
     fi
 
-    # Build k3s install command
-    local install_cmd="curl -sfL https://get.k3s.io | "
-    install_cmd+="K3S_URL='${k3s_url}' "
-    install_cmd+="K3S_TOKEN='${k3s_token}' "
-    install_cmd+="INSTALL_K3S_EXEC='agent "
-    install_cmd+="--node-name=${node_name} "
-    install_cmd+="--node-label=env=${node_env} "
-    install_cmd+="--node-label=purpose=${node_purpose} "
-    install_cmd+="--node-label=kubernetes.io/arch=arm64 "
+    # Build k3s install args without putting the token in a process argument.
+    local install_exec="agent "
+    install_exec+="--node-name=${node_name} "
+    install_exec+="--node-label=env=${node_env} "
+    install_exec+="--node-label=purpose=${node_purpose} "
+    install_exec+="--node-label=kubernetes.io/arch=arm64 "
 
     # Add extra args if provided
     if [ -n "$extra_args" ]; then
-        install_cmd+="${extra_args} "
+        install_exec+="${extra_args} "
     fi
 
-    install_cmd+="' sh -"
-
     echo "==> Installing K3s agent in VM..."
-    orb -m "$vm_name" bash -c "$install_cmd"
+    orb -m "$vm_name" bash -s <<EOF
+set -e
+export K3S_URL=$(printf '%q' "$k3s_url")
+export K3S_TOKEN=$(printf '%q' "$k3s_token")
+export INSTALL_K3S_EXEC=$(printf '%q' "$install_exec")
+curl -sfL https://get.k3s.io | sh -
+EOF
 
     # Wait for k3s agent to start
     echo "==> Waiting for K3s agent to start..."
