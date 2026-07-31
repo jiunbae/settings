@@ -37,10 +37,16 @@ jobs:
 
       - name: Generate CalVer tag
         id: version
+        env:
+          MANUAL_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$MANUAL_VERSION" ]; then
             # Manual version specified
-            VERSION="${{ github.event.inputs.version }}"
+            if [[ ! "$MANUAL_VERSION" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]; then
+              echo "Invalid version: $MANUAL_VERSION" >&2
+              exit 1
+            fi
+            VERSION="$MANUAL_VERSION"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             # Tag push - use existing tag
             VERSION="${GITHUB_REF#refs/tags/}"
@@ -57,7 +63,7 @@ jobs:
             done
           fi
 
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Generated version: $VERSION"
 
       - name: Create and push tag
