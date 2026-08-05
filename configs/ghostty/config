@@ -1,5 +1,10 @@
 # Ghostty configuration (macOS)
 #
+# This file is the WHOLE config, not a fragment: modules/ghostty.sh
+# symlinks it over ~/Library/Application Support/.../config, so anything
+# not written here stops applying. Add settings here, never only on the
+# machine.
+#
 # Installed by modules/ghostty.sh. On macOS the GUI app reads, in order:
 #   1. ~/Library/Application Support/com.mitchellh.ghostty/config.ghostty
 #   2. ~/Library/Application Support/com.mitchellh.ghostty/config   <- we link here

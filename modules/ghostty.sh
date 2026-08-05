@@ -58,6 +58,20 @@ install_ghostty_config() {
         fi
     fi
 
+    # Refuse to swap out a real config this repo has never seen. Linking
+    # replaces the file wholesale, so every theme/font/padding line the
+    # machine had would stop applying the moment Ghostty reloads —
+    # `backup_and_link` keeps a copy, but a silent restyle is not a good
+    # way to find that out. Merge first, then re-run with --force.
+    if [[ -f "$GHOSTTY_CONFIG_FILE" && ! -L "$GHOSTTY_CONFIG_FILE" && "$FORCE" != "true" ]]; then
+        log_warn "Ghostty already has its own config: $GHOSTTY_CONFIG_FILE"
+        log_warn "Linking would replace it entirely — its theme and font settings would stop applying."
+        log_info "Fold its contents into $config_source, then re-run with --force:"
+        log_info "  ./install.sh -f ghostty"
+        track_skipped "Ghostty config (existing config left alone)"
+        return 0
+    fi
+
     backup_and_link "$config_source" "$GHOSTTY_CONFIG_FILE"
 
     track_installed "Ghostty config"
