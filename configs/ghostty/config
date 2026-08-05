@@ -1,0 +1,23 @@
+# Ghostty configuration (macOS)
+#
+# Installed by modules/ghostty.sh. On macOS the GUI app reads, in order:
+#   1. ~/Library/Application Support/com.mitchellh.ghostty/config.ghostty
+#   2. ~/Library/Application Support/com.mitchellh.ghostty/config   <- we link here
+#   3. $XDG_CONFIG_HOME/ghostty/config.ghostty
+#   4. $XDG_CONFIG_HOME/ghostty/config
+# All macOS-specific paths load *after* the XDG ones, so a stray
+# ~/.config/ghostty/config cannot override what is set here.
+# Reload without restarting the app: cmd+shift+,
+
+# Left Option sends Alt/Meta so terminal apps see it.
+#
+# Without this, macOS eats Option as a compose key: Option+i becomes the
+# circumflex dead key (ˆ), Option+e becomes acute (´), and TUI bindings
+# like muxa watch's Alt-I (inspector) and Alt-E (event inbox) never
+# arrive. Ghostty only turns this on by default for the U.S. Standard and
+# U.S. International layouts, so a Korean layout lands on `false`.
+#
+# `left` rather than `true` deliberately: the right Option key stays a
+# compose key, so ˆ ´ π and friends are still typeable when you want them.
+# Verify with `cat -v` — Alt+i should print ^[i, not ˆ.
+macos-option-as-alt = left

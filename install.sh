@@ -39,6 +39,7 @@ source "$SCRIPT_DIR/modules/tools.sh"
 source "$SCRIPT_DIR/modules/ssh.sh"
 source "$SCRIPT_DIR/modules/hishtory.sh"
 source "$SCRIPT_DIR/modules/hammerspoon.sh"
+source "$SCRIPT_DIR/modules/ghostty.sh"
 source "$SCRIPT_DIR/modules/codex.sh"
 
 # ==============================================================================
@@ -58,6 +59,7 @@ get_component_name() {
         ssh)         echo "SSH config" ;;
         hishtory)    echo "hishtory (shell history)" ;;
         hammerspoon) echo "Hammerspoon (macOS automation)" ;;
+        ghostty)     echo "Ghostty terminal config (macOS)" ;;
         codex)       echo "Codex CLI/App configuration" ;;
         *)           echo "$1" ;;
     esac
@@ -139,6 +141,9 @@ main() {
                 ;;
             hammerspoon)
                 install_hammerspoon
+                ;;
+            ghostty)
+                install_ghostty
                 ;;
             codex)
                 install_codex
