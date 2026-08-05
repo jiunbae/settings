@@ -65,5 +65,9 @@ cmake-build-*/
 *.itermexport
 vault-scripts/.*-push-state.json
 
+# muxa init writes timestamped backups next to the config it edits
+*.muxa-backup-*
+*.muxa-popup-*
+
 # Cloudflare Wrangler
 worker/.wrangler/
