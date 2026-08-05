@@ -1,28 +1,147 @@
-# Ghostty configuration (macOS)
+# =============================================================================
+# Ghostty Configuration - Migrated from iTerm2
+# =============================================================================
 #
-# This file is the WHOLE config, not a fragment: modules/ghostty.sh
-# symlinks it over ~/Library/Application Support/.../config, so anything
-# not written here stops applying. Add settings here, never only on the
-# machine.
-#
-# Installed by modules/ghostty.sh. On macOS the GUI app reads, in order:
+# Managed by modules/ghostty.sh, which symlinks this file over
+#   ~/Library/Application Support/com.mitchellh.ghostty/config
+# On macOS the app searches, in order:
 #   1. ~/Library/Application Support/com.mitchellh.ghostty/config.ghostty
-#   2. ~/Library/Application Support/com.mitchellh.ghostty/config   <- we link here
+#   2. ~/Library/Application Support/com.mitchellh.ghostty/config   <- linked here
 #   3. $XDG_CONFIG_HOME/ghostty/config.ghostty
 #   4. $XDG_CONFIG_HOME/ghostty/config
-# All macOS-specific paths load *after* the XDG ones, so a stray
-# ~/.config/ghostty/config cannot override what is set here.
-# Reload without restarting the app: cmd+shift+,
-
-# Left Option sends Alt/Meta so terminal apps see it.
+# The macOS-specific paths load *after* the XDG ones, so a stray
+# ~/.config/ghostty/config cannot override anything set here.
 #
-# Without this, macOS eats Option as a compose key: Option+i becomes the
-# circumflex dead key (ˆ), Option+e becomes acute (´), and TUI bindings
+# This is the WHOLE config, not a fragment — anything not written here
+# stops applying. Add settings to this file, never only on the machine.
+# Reload without restarting: cmd+shift+,
+
+# -----------------------------------------------------------------------------
+# Font Settings
+# iTerm2: JetBrainsMonoNLNF-Regular 16, Vertical Spacing 1.1, No Ligatures
+# -----------------------------------------------------------------------------
+font-family = JetBrainsMonoHangul Nerd Font Mono
+font-size = 16
+adjust-cell-height = 10%
+font-feature = -calt
+font-feature = -liga
+font-thicken = true
+
+# -----------------------------------------------------------------------------
+# Color Scheme (MaterialDarker)
+# Migrated from iTerm2 Custom Color Preset
+# -----------------------------------------------------------------------------
+background = #212121
+foreground = #eeffff
+
+# ANSI Normal Colors (0-7)
+palette = 0=#000000
+palette = 1=#ff5370
+palette = 2=#c3e88d
+palette = 3=#ffcb6b
+palette = 4=#82aaff
+palette = 5=#c792ea
+palette = 6=#89ddff
+palette = 7=#ffffff
+
+# ANSI Bright Colors (8-15)
+palette = 8=#545454
+palette = 9=#ff5370
+palette = 10=#c3e88d
+palette = 11=#ffcb6b
+palette = 12=#82aaff
+palette = 13=#c792ea
+palette = 14=#89ddff
+palette = 15=#ffffff
+
+# Cursor
+cursor-color = #ffffff
+cursor-text = #ffffff
+
+# Selection
+selection-background = #eeffff
+selection-foreground = #545454
+
+# -----------------------------------------------------------------------------
+# Window & Transparency
+# iTerm2: Transparency 0.15, Blur Radius 16, Window 120x30
+# -----------------------------------------------------------------------------
+background-opacity = 0.85
+background-blur = 16
+window-width = 120
+window-height = 30
+window-save-state = always
+window-colorspace = srgb
+macos-titlebar-style = native
+
+# -----------------------------------------------------------------------------
+# Cursor
+# iTerm2: Block cursor, no blink
+# -----------------------------------------------------------------------------
+cursor-style = block
+cursor-style-blink = false
+
+# -----------------------------------------------------------------------------
+# Terminal Behavior
+# iTerm2: xterm-256color, Unlimited Scrollback, Visual Bell
+# -----------------------------------------------------------------------------
+term = xterm-256color
+scrollback-limit = 104857600
+
+# -----------------------------------------------------------------------------
+# Clipboard
+# iTerm2: AllowClipboardAccess = true
+# -----------------------------------------------------------------------------
+clipboard-read = allow
+clipboard-write = allow
+clipboard-paste-protection = false
+
+# -----------------------------------------------------------------------------
+# macOS Option Key
+#
+# Was `false` (carried over from iTerm2's "Option Key Sends = Normal"),
+# which leaves Option as a macOS compose key: Option+i produces the
+# circumflex dead key (ˆ) and Option+e the acute (´), so TUI bindings
 # like muxa watch's Alt-I (inspector) and Alt-E (event inbox) never
-# arrive. Ghostty only turns this on by default for the U.S. Standard and
+# reach the app. Ghostty only defaults this on for the U.S. Standard and
 # U.S. International layouts, so a Korean layout lands on `false`.
 #
 # `left` rather than `true` deliberately: the right Option key stays a
-# compose key, so ˆ ´ π and friends are still typeable when you want them.
-# Verify with `cat -v` — Alt+i should print ^[i, not ˆ.
+# compose key, so ˆ ´ π and friends are still typeable when wanted.
+# Verify with `cat -v` — left Alt+i should print ^[i, right Option+i ˆ.
+# The explicit alt+* keybinds below are unaffected either way; Ghostty
+# matches keybinds on the key event before any text encoding.
+# -----------------------------------------------------------------------------
 macos-option-as-alt = left
+
+# -----------------------------------------------------------------------------
+# Shell Integration
+# -----------------------------------------------------------------------------
+shell-integration = detect
+shell-integration-features = cursor,sudo,title
+
+# -----------------------------------------------------------------------------
+# Mouse
+# -----------------------------------------------------------------------------
+mouse-hide-while-typing = true
+
+# -----------------------------------------------------------------------------
+# Keybindings (migrated from iTerm2 profile key mappings)
+# These replicate common macOS terminal keybindings
+# -----------------------------------------------------------------------------
+# Option+Left/Right = word navigation (ESC+b / ESC+f)
+keybind = alt+left=esc:b
+keybind = alt+right=esc:f
+
+# Cmd+Left/Right = beginning/end of line (Ctrl-A / Ctrl-E)
+keybind = super+left=text:\x01
+keybind = super+right=text:\x05
+
+# Option+Backspace = delete word backward (ESC+DEL)
+keybind = alt+backspace=esc:\x7f
+
+# Option+Delete = delete word forward (ESC+d)
+keybind = alt+delete=esc:d
+
+# Cmd+Backspace = delete to beginning of line (Ctrl-U)
+keybind = super+backspace=text:\x15
