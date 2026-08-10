@@ -51,6 +51,54 @@ readonly CLAUDE_MCP_SERVERS=(
 # Helpers
 # ==============================================================================
 
+_claude_content_matches() {
+    local source=$1 target=$2
+
+    # diff follows directory symlinks and reports identical broken links as
+    # errors. Compare link metadata explicitly so copied skill trees remain
+    # idempotent even when they intentionally contain unresolved model links.
+    if command_exists python3; then
+        python3 - "$source" "$target" <<'PY'
+import filecmp
+import os
+import stat
+import sys
+
+
+def same(left: str, right: str) -> bool:
+    try:
+        left_stat = os.lstat(left)
+        right_stat = os.lstat(right)
+    except OSError:
+        return False
+
+    if stat.S_IFMT(left_stat.st_mode) != stat.S_IFMT(right_stat.st_mode):
+        return False
+    if stat.S_ISLNK(left_stat.st_mode):
+        return os.readlink(left) == os.readlink(right)
+    if stat.S_ISDIR(left_stat.st_mode):
+        try:
+            names = sorted(os.listdir(left))
+            if names != sorted(os.listdir(right)):
+                return False
+        except OSError:
+            return False
+        return all(same(os.path.join(left, name), os.path.join(right, name)) for name in names)
+    if stat.S_ISREG(left_stat.st_mode):
+        if bool(left_stat.st_mode & 0o111) != bool(right_stat.st_mode & 0o111):
+            return False
+        return filecmp.cmp(left, right, shallow=False)
+    return False
+
+
+raise SystemExit(0 if same(sys.argv[1], sys.argv[2]) else 1)
+PY
+        return $?
+    fi
+
+    diff -rq "$source" "$target" >/dev/null 2>&1
+}
+
 _claude_link() {
     local source=$1 target=$2 label=$3
 
@@ -62,7 +110,7 @@ _claude_link() {
     # In copy mode the target is a real file, so a readlink check would never
     # match and every run would re-warn. Compare contents instead.
     if [[ "$LINK_MODE" == "copy" ]]; then
-        if diff -rq "$source" "$target" >/dev/null 2>&1; then
+        if _claude_content_matches "$source" "$target"; then
             log_info "$label already up to date"
             track_skipped "$label"
             return 0
@@ -141,41 +189,88 @@ install_claude_skills() {
         return 0
     fi
 
-    local created=0 skipped=0 missing=0
+    local created=0 skipped=0 missing=0 conflicts=0
     local slot repo rel source target repo_root
 
     while IFS=$'\t' read -r slot repo rel; do
         [[ -z "$slot" || "$slot" == \#* ]] && continue
 
+        if [[ ! "$slot" =~ ^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*$ ]]; then
+            log_warn "unsafe skill slot in manifest: $slot"
+            conflicts=$((conflicts + 1))
+            continue
+        fi
+        if [[ ! "$rel" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ || "/$rel/" == *"/../"* ]]; then
+            log_warn "unsafe skill source path for $slot: $rel"
+            conflicts=$((conflicts + 1))
+            continue
+        fi
+
         case "$repo" in
             agents)       repo_root="$HOME/workspace/agents" ;;
             agent-skills) repo_root="$AGENT_SKILLS_REPO" ;;
-            *) log_warn "unknown repo token '$repo' for $slot"; continue ;;
+            *)
+                log_warn "unknown repo token '$repo' for $slot"
+                conflicts=$((conflicts + 1))
+                continue
+                ;;
         esac
 
         source="$repo_root/$rel"
         target="$CLAUDE_SKILLS_DIR/$slot"
 
         if [[ ! -f "$source/SKILL.md" ]]; then
-            (( missing++ ))
+            missing=$((missing + 1))
             continue
         fi
 
-        if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
-            (( skipped++ ))
+        local repo_root_real source_real
+        repo_root_real=$(cd "$repo_root" && pwd -P)
+        source_real=$(cd "$source" && pwd -P)
+        if [[ "$source_real" != "$repo_root_real/"* ]]; then
+            log_warn "skill source escapes its declared repo for $slot: $source"
+            conflicts=$((conflicts + 1))
+            continue
+        fi
+
+        if [[ "$LINK_MODE" == "copy" ]]; then
+            if _claude_content_matches "$source" "$target"; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+        elif [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
+            skipped=$((skipped + 1))
             continue
         fi
 
         if [[ "$DRY_RUN" == "true" ]]; then
-            log_info "[DRY-RUN] Would link $slot -> $source"
-            (( created++ ))
+            if [[ "$LINK_MODE" == "copy" ]]; then
+                log_info "[DRY-RUN] Would copy $slot <- $source"
+            else
+                log_info "[DRY-RUN] Would link $slot -> $source"
+            fi
+            created=$((created + 1))
             continue
         fi
 
-        mkdir -p "$(dirname "$target")"
-        [[ -e "$target" || -L "$target" ]] && rm -rf "$target"
-        ln -s "$source" "$target"
-        (( created++ ))
+        # Never delete a real local skill directory. backup_and_link moves it
+        # aside with a timestamp before deploying the manifest-owned entry.
+        # A different symlink is derived state and can be safely relinked.
+        FORCE=true backup_and_link "$source" "$target"
+
+        if [[ "$LINK_MODE" == "copy" ]]; then
+            if _claude_content_matches "$source" "$target"; then
+                created=$((created + 1))
+            else
+                log_warn "failed to copy Claude skill $slot"
+                conflicts=$((conflicts + 1))
+            fi
+        elif [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
+            created=$((created + 1))
+        else
+            log_warn "failed to link Claude skill $slot"
+            conflicts=$((conflicts + 1))
+        fi
     done < "$manifest"
 
     if (( missing > 0 )); then
@@ -184,9 +279,19 @@ install_claude_skills() {
         log_warn "  $AGENT_SKILLS_REPO  (github.com/jiunbae/agent-skills)"
     fi
 
+    if (( conflicts > 0 )); then
+        log_error "$conflicts skill mapping(s) could not be restored"
+        return 1
+    fi
+
     if (( created > 0 )); then
-        track_installed "Claude skills ($created linked)"
-        log_success "Linked $created skill(s), $skipped already in place"
+        if [[ "$LINK_MODE" == "copy" ]]; then
+            track_installed "Claude skills ($created copied)"
+            log_success "Copied $created skill(s), $skipped already in place"
+        else
+            track_installed "Claude skills ($created linked)"
+            log_success "Linked $created skill(s), $skipped already in place"
+        fi
     else
         log_info "Claude skills already in place ($skipped)"
         track_skipped "Claude skills"
@@ -199,7 +304,7 @@ install_claude_memory() {
     local root_dir
     root_dir=$(get_root_dir)
     # Auto-memory is keyed by the project directory with slashes turned into
-    # dashes: $HOME=/home/june becomes projects/-home-june.
+    # dashes: $HOME=/home/alice becomes projects/-home-alice.
     local slug="${HOME//\//-}"
     local project_dir="$CLAUDE_HOME/projects/$slug"
 

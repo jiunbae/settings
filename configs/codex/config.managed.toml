@@ -2,7 +2,7 @@
 #
 # Do not hand-edit: change ~/.codex/config.toml, then re-run the capture script.
 # Applied by scripts/codex/apply-config.sh, which layers this over the target
-# machine's own project trust, hook trust hashes, plugins and MCP servers.
+# machine's own project trust, hook trust hashes, notify command, and UI state.
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 approval_policy = "never"

@@ -93,6 +93,53 @@ _cship_installed_version() {
     "$bin" --version 2>/dev/null | awk 'NR==1 {print $NF; exit}'
 }
 
+# SHA-256 digests published by GitHub for the pinned release assets. Keeping
+# them in the repo makes the integrity check independent of a checksum fetched
+# from the same release at install time.
+_cship_release_sha256() {
+    local artifact=$1 target=$2
+    case "$artifact:$target" in
+        cship:aarch64-apple-darwin)              echo "21cd34887a31bb35496d5b632d178691f0144b9602184f4cae023953774dd8e3" ;;
+        cship:x86_64-apple-darwin)               echo "5118feff504154d532a8bbcf9b76fa0024abf5c84acfd65ab0d1282b7bd09649" ;;
+        cship:aarch64-unknown-linux-musl)        echo "5f97c266db4d9bdf71ed175075a9578b80739102c4225b94e61ed04ec90b8680" ;;
+        cship:x86_64-unknown-linux-musl)         echo "f39e0423a2260b2886ba8952504f9f3e16acd4071834fa419ffef5e4cf84c506" ;;
+        starship:aarch64-apple-darwin)           echo "c40b27b11f580411e068f2fa6c1be7830a387c0bc47a94d1d37f32b054c5361d" ;;
+        starship:x86_64-apple-darwin)            echo "5548f406a4b6f5695903bdea83f77ce47ec12c8c0e62dabd33122d8f133e4207" ;;
+        starship:aarch64-unknown-linux-musl)     echo "dc30189378d2f2e287384e8a692d3f95ad1df64cf0e8c36aa9201516028aed6b" ;;
+        starship:x86_64-unknown-linux-musl)      echo "b7c232b0e8249d8e55a40beb79c5c43a7d370f3f9408bd215deb0170daeaadf3" ;;
+        *) return 1 ;;
+    esac
+}
+
+_cship_sha256() {
+    local file=$1
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" | cut -d' ' -f1
+    else
+        return 1
+    fi
+}
+
+_cship_verify_download() {
+    local artifact=$1 target=$2 file=$3
+    local expected actual
+    expected=$(_cship_release_sha256 "$artifact" "$target") || {
+        log_error "No pinned checksum for $artifact ($target)"
+        return 1
+    }
+    actual=$(_cship_sha256 "$file") || {
+        log_error "No SHA-256 tool available; refusing to install $artifact"
+        return 1
+    }
+    if [[ "$expected" != "$actual" ]]; then
+        log_error "$artifact checksum mismatch (expected $expected, got $actual)"
+        return 1
+    fi
+    log_debug "$artifact checksum verified"
+}
+
 # ==============================================================================
 # Installation Functions
 # ==============================================================================
@@ -121,6 +168,7 @@ install_cship_binary() {
     local tmp
     tmp=$(mktemp)
     download_file "$url" "$tmp" || { rm -f "$tmp"; return 1; }
+    _cship_verify_download cship "$target" "$tmp" || { rm -f "$tmp"; return 1; }
     install -m 755 "$tmp" "$dest"
     rm -f "$tmp"
 
@@ -155,22 +203,10 @@ install_cship_starship() {
     tmpdir=$(mktemp -d)
     download_file "$base/$tarball" "$tmpdir/$tarball" || { rm -rf "$tmpdir"; return 1; }
 
-    # The release ships a bare digest (no filename column), so `sha256sum -c`
-    # can't read it directly — compare the hashes ourselves.
-    if download_file "$base/${tarball}.sha256" "$tmpdir/${tarball}.sha256" 2>/dev/null; then
-        local expected actual
-        expected=$(tr -d '[:space:]' < "$tmpdir/${tarball}.sha256")
-        actual=$(sha256sum "$tmpdir/$tarball" 2>/dev/null | cut -d' ' -f1)
-        [[ -z "$actual" ]] && actual=$(shasum -a 256 "$tmpdir/$tarball" 2>/dev/null | cut -d' ' -f1)
-        if [[ -n "$expected" && "$expected" != "$actual" ]]; then
-            log_error "Starship checksum mismatch (expected $expected, got $actual)"
-            rm -rf "$tmpdir"
-            return 1
-        fi
-        log_debug "Starship checksum verified"
-    else
-        log_warn "Starship checksum not published for $tarball — skipping verification"
-    fi
+    _cship_verify_download starship "$target" "$tmpdir/$tarball" || {
+        rm -rf "$tmpdir"
+        return 1
+    }
 
     tar -xzf "$tmpdir/$tarball" -C "$tmpdir"
     install -m 755 "$tmpdir/starship" "$dest"

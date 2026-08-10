@@ -51,7 +51,7 @@ trap 'rm -f "$tmp"' EXIT
 #
 # Do not hand-edit: change ~/.codex/config.toml, then re-run the capture script.
 # Applied by scripts/codex/apply-config.sh, which layers this over the target
-# machine's own project trust, hook trust hashes, plugins and MCP servers.
+# machine's own project trust, hook trust hashes, notify command, and UI state.
 HEADER
     awk '
         function is_header(line) { return line ~ /^\[/ }
@@ -62,7 +62,14 @@ HEADER
         }
         is_header($0) { skip = drop_header($0) }
         skip { next }
-        /^notify[[:space:]]*=/ { next }
+        drop_notify {
+            if ($0 ~ /\][[:space:]]*(#.*)?$/) drop_notify = 0
+            next
+        }
+        /^notify[[:space:]]*=/ {
+            if ($0 ~ /=[[:space:]]*\[/ && $0 !~ /\][[:space:]]*(#.*)?$/) drop_notify = 1
+            next
+        }
         # [[skills.config]] entries address a skill by absolute path into the
         # plugin cache, and that path carries the plugin version
         # (.../github/0.1.8-2841cf9749ae/...). It breaks on the next plugin

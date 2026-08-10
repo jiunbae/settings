@@ -24,12 +24,10 @@ DRY_RUN=false
 
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
 
-# Repos the farm may point into, longest prefix first so nested paths resolve
-# to the right one. Keys are the tokens written into the manifest.
-declare -A SKILL_REPOS=(
-    [agents]="$HOME/workspace/agents"
-    [agent-skills]="$HOME/personal/agent-skills"
-)
+# Repos the farm may point into. Parallel indexed arrays keep this script
+# compatible with the Bash 3.2 that still ships with macOS.
+SKILL_REPO_TOKENS=(agent-skills agents)
+SKILL_REPO_ROOTS=("$HOME/personal/agent-skills" "$HOME/workspace/agents")
 
 if [[ ! -d "$SKILLS_DIR" ]]; then
     printf '%s\n' "claude: no skills dir at $SKILLS_DIR" >&2
@@ -59,10 +57,13 @@ trap 'rm -f "$tmp"' EXIT
                 continue
             fi
 
-            target=$(readlink -f "${skill_dir%/}")
+            # `readlink -f` is GNU-only. cd -P resolves directory symlinks on
+            # both macOS and Linux without depending on coreutils.
+            target=$(cd "${skill_dir%/}" 2>/dev/null && pwd -P) || continue
             matched=false
-            for repo in "${!SKILL_REPOS[@]}"; do
-                root=$(readlink -f "${SKILL_REPOS[$repo]}" 2>/dev/null) || continue
+            for i in "${!SKILL_REPO_TOKENS[@]}"; do
+                repo=${SKILL_REPO_TOKENS[$i]}
+                root=$(cd "${SKILL_REPO_ROOTS[$i]}" 2>/dev/null && pwd -P) || continue
                 if [[ "$target" == "$root/"* ]]; then
                     printf '%s\t%s\t%s\n' "$category/$skill" "$repo" "${target#"$root"/}"
                     matched=true

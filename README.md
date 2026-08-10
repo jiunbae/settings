@@ -177,7 +177,7 @@ Components:
 ### AI Coding Tools
 | Component | Description |
 |-----------|-------------|
-| codex | Managed Codex config template. Applies stable model/project/hook settings, disables legacy `~/.codex/hooks.json`, and preserves Codex-owned runtime sections such as hook trust state, plugins, MCP servers, TUI state, and desktop settings. |
+| codex | Managed Codex config template. Applies stable model/plugin/MCP/hook settings, disables legacy `~/.codex/hooks.json`, and preserves machine-local runtime sections such as project/hook trust, `notify`, TUI state, and desktop settings. |
 
 **hishtory features:**
 - Context-aware history (directory, exit code, duration)
@@ -225,16 +225,44 @@ git clone git@github.com:rtzr/agents.git ~/workspace/agents
 ~/workspace/agents/scripts/install-static.sh
 ~/workspace/agents/scripts/install-shims.sh
 
-# 4. agents + statusline
+# 4. external runtimes used by the managed hooks (examples)
+#    Install and log in to Claude Code and Codex through their official installers.
+brew install open330/tap/muxa             # or follow muxa's platform instructions
+npm install -g oh-my-prompt               # provides omp
+
+# 5. agents + statusline
 cd ~/personal/settings
 ./install.sh claude cship codex
 
-# 5. secrets — never in git, place by hand
-#    ~/.envs/*.env   (LINEAR_API_KEY, SENTRY_AUTH_TOKEN, SLACK_BOT_TOKEN, …)
+# Restore Oh My Prompt's Codex notify entry after its own setup. Later Codex
+# config applies preserve this machine-local absolute command.
+omp install codex
 
-# 6. Codex directory trust is exact-path based and per-machine
+# 6. private state — never in git
+#    - ~/.envs/*.env
+#    - ~/.config/muxa/config.toml
+#    - the gitignored personal files created from agents/*/*.sample.{md,yaml}
+#      (restore from a secure backup or replace every {{PLACEHOLDER}})
+#    - re-login instead of copying Claude/Codex credential files
+
+# 7. Codex directory trust is exact-path based and per-machine. The codex
+#    component installs this helper from scripts/codex/workspace-trust-sync.sh.
 ~/.local/bin/codex-workspace-trust-sync
 ```
+
+The three Git clones restore versioned configuration and scripts. They cannot
+restore credentials, dashboard tokens, or the personalized `agents/static` and
+`agents/callabo/static` files because those are deliberately gitignored. A
+matching file count under `~/.agents` is therefore only a topology check; verify
+the contents and resolve the install-static placeholder warning before use.
+
+> [!WARNING]
+> These are personal settings for trusted workspaces. The managed Codex config
+> uses `approval_policy = "never"` with `sandbox_mode = "danger-full-access"`,
+> and Claude settings skip the dangerous-mode confirmation. Do not install them
+> unchanged on an untrusted repository or shared machine. The configured muxa,
+> Oh My Prompt, and prompt-logger hooks also receive agent lifecycle events or
+> prompt content; review those local tools and their storage policies first.
 
 ### What each agent stores, and how it is managed
 
@@ -246,7 +274,8 @@ cd ~/personal/settings
 | Claude Code | `~/.claude/skills/<category>/<name>` | 46 symlinks rebuilt from `configs/claude/skills.manifest` |
 | Claude Code | `~/.claude/projects/<slug>/memory` | **symlink** → `configs/claude/memory` |
 | Claude Code | MCP servers | `claude mcp add` (idempotent, run by the module) |
-| Codex | `~/.codex/config.toml` | **merge** — `configs/codex/config.managed.toml` + local runtime state |
+| Codex | `~/.codex/config.toml` | **merge** — managed plugins/MCP/hooks + local trust, notify and UI state |
+| Codex | `~/.local/bin/codex-workspace-trust-sync` | symlink/copy from this repo; regenerates exact-path project trust |
 | Both | statusline | `cship` module (binaries + `~/.config/{cship,starship}.toml` symlinks) |
 
 **Why Claude Code is symlinked but Codex is not.** Claude Code never rewrites
@@ -270,8 +299,8 @@ Symlink is the default and the reason drift cannot happen: `~/.claude/settings.j
 that the live config depends on the repo staying checked out at a branch that
 contains it.
 
-`--copy` installs real files instead, for machines where that dependency is
-unwanted:
+`--copy` installs real files and directories instead, including all 46 nested
+skills, for machines where that dependency is unwanted:
 
 ```bash
 ./install.sh -c claude cship        # copy instead of symlink
@@ -281,6 +310,9 @@ Copy mode is idempotent — a second run compares contents and reports
 "already up to date" rather than re-copying. The trade-off is that local edits
 no longer flow back, so after changing a copied config you have to bring it
 into the repo by hand.
+
+The self-extracting release bundle always forces copy mode because its temporary
+extraction directory is removed as soon as installation finishes.
 
 No template engine sits in between: after excluding per-machine runtime state,
 zero managed values need substitution. `configs/claude/settings.json` and both
@@ -306,10 +338,12 @@ Claude Code needs nothing — `~/.claude/settings.json` *is* the repo file.
 | | Why |
 |---|---|
 | `~/.envs/*.env` | Secrets. Restore by hand; `~/.agents/*.md` documents which key each integration needs. |
+| `agents/{static,callabo/static}` personal files | Profile, endpoints and service-specific context. They are gitignored; restore from a secure backup or fill the generated samples. |
 | `~/.claude.json` | MCP registrations sit next to per-project state Claude Code rewrites constantly. The `claude` module re-adds servers instead. |
-| `~/.claude/.credentials.json` | OAuth tokens. |
-| `~/.config/muxa/config.toml` | Carries a dashboard auth token; muxa is also mid-upgrade locally. |
-| Codex project trust | Exact-path and per-machine; regenerate with `codex-workspace-trust-sync`. |
+| `~/.claude/.credentials.json`, `~/.codex/auth.json` | OAuth tokens. Re-login on the new machine. |
+| `~/.config/muxa/config.toml` | Carries a dashboard auth token; restore it privately after installing muxa. |
+| Codex `notify` | Absolute, machine-local Oh My Prompt hook path. Create it with `omp install codex`; later applies preserve it. |
+| Codex project trust | Exact-path and per-machine; regenerate with the repo-installed `codex-workspace-trust-sync`. |
 
 ## Directory Structure
 
@@ -333,12 +367,16 @@ settings/
 │   ├── ssh.sh             #   SSH config
 │   ├── hishtory.sh        #   hishtory + self-hosted sync
 │   ├── hammerspoon.sh     #   Hammerspoon (macOS-only)
-│   └── codex.sh           #   Codex CLI/App config
+│   ├── codex.sh           #   Codex CLI/App config
+│   ├── claude.sh          #   Claude Code settings, skills and memory
+│   └── cship.sh           #   cship + Starship statusline
 ├── worker/                 # Cloudflare Worker (settings.jiun.dev)
 │   ├── index.js           #   Proxy raw GitHub content
 │   └── wrangler.toml      #   Wrangler configuration
 ├── scripts/                # Build scripts
 │   ├── bundle.sh          #   Create bundled installer
+│   ├── claude/            #   Skill-farm capture helper
+│   ├── codex/             #   Config capture/apply + trust sync
 │   └── wsl2-network.ps1   #   WSL2 network setup script
 ├── configs/                # Configuration files
 │   ├── .zshrc
@@ -348,6 +386,8 @@ settings/
 │   ├── nvim/              #   NeoVim + LazyVim config
 │   ├── hishtory/          #   hishtory config template
 │   ├── codex/             #   Codex managed config template
+│   ├── claude/            #   Claude settings, manifest, index and memory
+│   ├── cship/             #   cship + Starship configs
 │   └── windows-terminal/  #   Windows Terminal configuration
 └── .github/workflows/      # CI/CD
     └── release.yml         #   Auto-release on tag

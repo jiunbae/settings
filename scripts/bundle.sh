@@ -36,8 +36,27 @@ HEADER
 # Function to embed a file
 embed_file() {
     local file="$1"
-    local rel_path="${file#$SCRIPT_DIR/}"
-    local dir_path=$(dirname "$rel_path")
+    local rel_path="${file#"$SCRIPT_DIR"/}"
+    local dir_path
+    dir_path=$(dirname "$rel_path")
+
+    case "$rel_path" in
+        *[!A-Za-z0-9_./-]*)
+            printf 'bundle: unsafe embedded path: %s\n' "$rel_path" >&2
+            return 1
+            ;;
+    esac
+    case "$rel_path" in
+        *.example|*.sample.*) ;;
+        */.env|*/.env.*|*credentials*|*secret*|*auth.json|*.pem|*.key)
+            printf 'bundle: refusing to embed sensitive-looking file: %s\n' "$rel_path" >&2
+            return 1
+            ;;
+    esac
+    if grep -qx 'EMBEDDED_FILE_EOF' "$file"; then
+        printf 'bundle: heredoc delimiter collision in %s\n' "$rel_path" >&2
+        return 1
+    fi
 
     echo ""
     echo "    # $rel_path"
@@ -48,6 +67,9 @@ embed_file() {
     cat "$file"
     echo ""
     echo "EMBEDDED_FILE_EOF"
+    if [[ -x "$file" ]]; then
+        echo "    chmod +x '$rel_path'"
+    fi
 }
 
 # Embed all necessary files
@@ -61,34 +83,19 @@ for file in "$SCRIPT_DIR"/modules/*.sh; do
     embed_file "$file"
 done
 
-# Embed config files
-for file in "$SCRIPT_DIR"/configs/.zshrc "$SCRIPT_DIR"/configs/.p10k.zsh "$SCRIPT_DIR"/configs/.tmux.conf; do
-    if [[ -f "$file" ]]; then
+# Embed the complete config tree. Keeping an allowlist here caused newly added
+# components to ship their module code without the files that code consumes.
+while IFS= read -r file; do
+    embed_file "$file"
+done < <(find "$SCRIPT_DIR/configs" -type f | LC_ALL=C sort)
+
+# Runtime/capture helpers used by the AI-agent modules.
+for helper_dir in "$SCRIPT_DIR/scripts/claude" "$SCRIPT_DIR/scripts/codex"; do
+    [[ -d "$helper_dir" ]] || continue
+    while IFS= read -r file; do
         embed_file "$file"
-    fi
+    done < <(find "$helper_dir" -type f | LC_ALL=C sort)
 done
-
-# Embed zellij config
-if [[ -f "$SCRIPT_DIR/configs/zellij/config.kdl" ]]; then
-    embed_file "$SCRIPT_DIR/configs/zellij/config.kdl"
-fi
-if [[ -d "$SCRIPT_DIR/configs/zellij/layouts" ]]; then
-    for file in "$SCRIPT_DIR"/configs/zellij/layouts/*.kdl; do
-        if [[ -f "$file" ]]; then
-            embed_file "$file"
-        fi
-    done
-fi
-
-
-# Embed SpaceVim config if exists
-if [[ -d "$SCRIPT_DIR/configs/.SpaceVim.d" ]]; then
-    for file in "$SCRIPT_DIR"/configs/.SpaceVim.d/*; do
-        if [[ -f "$file" ]]; then
-            embed_file "$file"
-        fi
-    done
-fi
 
 # Generate footer
 cat << 'FOOTER'
@@ -100,7 +107,10 @@ cat << 'FOOTER'
 main() {
     extract_files
     cd "$TEMP_DIR"
-    ./install.sh "$@"
+    # The extraction directory is deleted on exit, so symlinking to it would
+    # leave every deployed config broken. Force copy mode after user arguments
+    # so even an accidental --link cannot create dangling links.
+    ./install.sh "$@" --copy
 }
 
 main "$@"
