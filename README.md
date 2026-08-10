@@ -106,6 +106,7 @@ Components:
   hishtory      hishtory (better shell history with sync support)
   hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
   codex         Codex CLI/App config, hooks, and notify chain
+  claude        Claude Code settings, hooks, skill index, memory, MCP
   cship         cship + Starship (fast Claude Code statusline)
 ```
 
@@ -137,6 +138,8 @@ Components:
 ### AI Coding Agents
 | Component | Description |
 |-----------|-------------|
+| Claude Code | `settings.json`, hooks, skill index and memory, symlinked to this repo — see [Restoring AI agent state](#restoring-ai-agent-state-on-a-new-machine) |
+| Codex | `config.toml` managed half, merged over local runtime state |
 | [cship](https://github.com/stephenleo/cship) | Claude Code statusline (Rust) — replaces ccstatusline: ~33ms vs ~1,250ms per render, ~18MB vs ~99MB peak RSS |
 | [Starship](https://starship.rs) | Required by cship for the `$directory` / `$git_branch` / `$git_metrics` / `$custom.worktree` passthrough segments |
 
@@ -202,6 +205,85 @@ To sync across devices, use the same `HISHTORY_SECRET` on all machines.
 **Installs via Homebrew Cask and symlinks `~/.hammerspoon/init.lua` to this repo.**
 Skipped automatically on Linux/WSL. Accessibility permission must be granted manually:
 System Settings → Privacy & Security → Accessibility → enable Hammerspoon.
+
+## Restoring AI agent state on a new machine
+
+Claude Code and Codex keep their configuration in different shapes, so this repo
+manages them differently. Follow the order below — step 2 must happen before
+step 3, because `configs/claude/settings.json` references hook scripts that live
+in the agent-skills repo.
+
+```bash
+# 1. this repo
+git clone git@github.com:jiunbae/settings.git ~/personal/settings
+
+# 2. hook scripts referenced by Claude settings.json
+git clone git@github.com:jiunbae/agent-skills.git ~/personal/agent-skills
+
+# 3. shared skill/static-doc repo, then lay down ~/.agents/
+git clone git@github.com:rtzr/agents.git ~/workspace/agents
+~/workspace/agents/scripts/install-static.sh
+~/workspace/agents/scripts/install-shims.sh
+
+# 4. agents + statusline
+cd ~/personal/settings
+./install.sh claude cship codex
+
+# 5. secrets — never in git, place by hand
+#    ~/.envs/*.env   (LINEAR_API_KEY, SENTRY_AUTH_TOKEN, SLACK_BOT_TOKEN, …)
+
+# 6. Codex directory trust is exact-path based and per-machine
+~/.local/bin/codex-workspace-trust-sync
+```
+
+### What each agent stores, and how it is managed
+
+| Agent | State | Managed as |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | **symlink** → `configs/claude/settings.json` |
+| Claude Code | `~/.claude/hooks/*.sh` | **symlink** → `agent-skills/hooks/` |
+| Claude Code | `~/.claude/skills/skill-index` | **symlink** → `configs/claude/skill-index` |
+| Claude Code | `~/.claude/projects/<slug>/memory` | **symlink** → `configs/claude/memory` |
+| Claude Code | MCP servers | `claude mcp add` (idempotent, run by the module) |
+| Codex | `~/.codex/config.toml` | **merge** — `configs/codex/config.managed.toml` + local runtime state |
+| Both | statusline | `cship` module (binaries + `~/.config/{cship,starship}.toml` symlinks) |
+
+**Why Claude Code is symlinked but Codex is not.** Claude Code never rewrites
+`settings.json` — a full session and the `/config` UI both left the symlink and
+its target untouched, so the repo copy can be the real file. Codex writes into
+its config continuously: 137 project-trust entries and 18 hook trust hashes on
+this machine. Symlinking it would drag that churn into git, so
+`scripts/codex/apply-config.sh` layers the managed half over whatever the local
+machine already has instead.
+
+`configs/claude/settings.json` uses `$HOME/...` rather than absolute paths.
+Hook commands and `statusLine.command` are run through a shell, so the expansion
+happens at run time and the file works under any username. Codex does **not**
+expand `$HOME` in TOML values, which is why its per-machine paths are excluded
+from the template rather than rewritten.
+
+### Keeping the repo in sync
+
+```bash
+# after changing Codex settings by hand or through its UI
+./scripts/codex/capture-config.sh && git diff configs/codex
+
+# after adding or removing a nested Claude skill
+python3 ~/.claude/skills/skill-index/build.py && git diff configs/claude
+```
+
+Claude Code needs nothing — `~/.claude/settings.json` *is* the repo file.
+
+### Deliberately not managed
+
+| | Why |
+|---|---|
+| `~/.envs/*.env` | Secrets. Restore by hand; `~/.agents/*.md` documents which key each integration needs. |
+| `~/.claude.json` | MCP registrations sit next to per-project state Claude Code rewrites constantly. The `claude` module re-adds servers instead. |
+| `~/.claude/.credentials.json` | OAuth tokens. |
+| `~/.config/muxa/config.toml` | Carries a dashboard auth token; muxa is also mid-upgrade locally. |
+| `~/.claude/skills/<category>/` | 46 symlinks into the agents repos — recreated by cloning those repos, catalogued by the `skill-index` skill. |
+| Codex project trust | Exact-path and per-machine; regenerate with `codex-workspace-trust-sync`. |
 
 ## Directory Structure
 

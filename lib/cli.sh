@@ -11,7 +11,7 @@ readonly VERSION="2.0.0"
 # Available Components
 # ==============================================================================
 # Component list (bash 3.2 compatible - no associative arrays)
-readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory hammerspoon ghostty codex cship)
+readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory hammerspoon ghostty codex claude cship)
 
 # Basic components for --basic option
 readonly BASIC_COMPONENTS=(base zsh nvim tmux)
@@ -36,6 +36,7 @@ get_component_desc() {
         hammerspoon) echo "Hammerspoon (macOS-only: window manager + keybindings)" ;;
         ghostty)     echo "Ghostty terminal config (macOS-only: Option-as-Alt so TUI Alt bindings work)" ;;
         codex)       echo "Codex CLI/App config, hooks, and notify chain" ;;
+        claude)      echo "Claude Code settings, hooks, skill index, memory, MCP servers" ;;
         cship)       echo "cship + Starship (fast Claude Code statusline, replaces ccstatusline)" ;;
         *)           echo "" ;;
     esac

@@ -221,15 +221,18 @@ install_cship_claude_hook() {
     fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would set statusLine.command to $CSHIP_BIN_DIR/cship in $CLAUDE_SETTINGS"
+        log_info "[DRY-RUN] Would set statusLine.command to \$HOME/.local/bin/cship in $CLAUDE_SETTINGS"
         return 0
     fi
 
     local result
     # `env` rather than a command-prefix assignment: CLAUDE_SETTINGS is declared
     # readonly above, and bash rejects `CLAUDE_SETTINGS=... cmd` for a readonly name.
+    # Written as $HOME/... to match configs/claude/settings.json: statusLine.command
+    # runs through a shell, so it expands at run time and the file stays portable.
     result=$(env CLAUDE_SETTINGS="$CLAUDE_SETTINGS" \
-                 CSHIP_BIN="$CSHIP_BIN_DIR/cship" \
+                 CSHIP_BIN='$HOME/.local/bin/cship' \
+                 CSHIP_BIN_ABS="$CSHIP_BIN_DIR/cship" \
                  FORCE="$FORCE" python3 - <<'PY'
 import json, os, shutil, sys, time
 
@@ -245,7 +248,9 @@ except (OSError, ValueError) as exc:
     sys.exit(0)
 
 current = (settings.get("statusLine") or {}).get("command")
-if current == target:
+# Accept the absolute form too: earlier installs wrote it before the config
+# moved to $HOME-relative paths, and both resolve to the same binary.
+if current in (target, os.environ.get("CSHIP_BIN_ABS")):
     print("skip:already points at cship")
     sys.exit(0)
 if current and not force:
@@ -264,7 +269,7 @@ PY
     case "$result" in
         ok)
             track_installed "Claude Code statusLine"
-            log_success "Claude Code statusLine -> $CSHIP_BIN_DIR/cship"
+            log_success "Claude Code statusLine -> \$HOME/.local/bin/cship"
             log_info "Takes effect in new Claude Code sessions"
             ;;
         skip:*)

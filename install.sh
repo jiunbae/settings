@@ -41,6 +41,7 @@ source "$SCRIPT_DIR/modules/hishtory.sh"
 source "$SCRIPT_DIR/modules/hammerspoon.sh"
 source "$SCRIPT_DIR/modules/ghostty.sh"
 source "$SCRIPT_DIR/modules/codex.sh"
+source "$SCRIPT_DIR/modules/claude.sh"
 source "$SCRIPT_DIR/modules/cship.sh"
 
 # ==============================================================================
@@ -62,6 +63,7 @@ get_component_name() {
         hammerspoon) echo "Hammerspoon (macOS automation)" ;;
         ghostty)     echo "Ghostty terminal config (macOS)" ;;
         codex)       echo "Codex CLI/App configuration" ;;
+        claude)      echo "Claude Code configuration" ;;
         cship)       echo "cship (Claude Code statusline)" ;;
         *)           echo "$1" ;;
     esac
@@ -149,6 +151,9 @@ main() {
                 ;;
             codex)
                 install_codex
+                ;;
+            claude)
+                install_claude
                 ;;
             cship)
                 install_cship

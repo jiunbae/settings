@@ -1,7 +1,10 @@
 #!/bin/bash
 # Apply the managed Codex config fragment while preserving selected Codex-owned
-# runtime sections such as hook trust state, marketplaces, plugins, MCP servers,
-# TUI state, and desktop preferences.
+# runtime sections such as hook trust state, project trust, marketplaces, plugins,
+# MCP servers, TUI state, and desktop preferences.
+#
+# Project trust is preserved rather than templated: the paths are absolute and
+# machine-specific, and losing them means re-approving every repo by hand.
 
 set -euo pipefail
 
@@ -51,6 +54,7 @@ if [[ -f "$TARGET" ]]; then
     }
     function keep_header(line) {
       return line ~ /^\[hooks\.state(\.|\])/ ||
+        line ~ /^\[projects(\.|\])/ ||
         line ~ /^\[marketplaces\./ ||
         line ~ /^\[plugins\./ ||
         line ~ /^\[mcp_servers\./ ||
