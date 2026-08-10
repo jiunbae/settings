@@ -41,6 +41,7 @@ source "$SCRIPT_DIR/modules/hishtory.sh"
 source "$SCRIPT_DIR/modules/hammerspoon.sh"
 source "$SCRIPT_DIR/modules/ghostty.sh"
 source "$SCRIPT_DIR/modules/codex.sh"
+source "$SCRIPT_DIR/modules/cship.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -61,6 +62,7 @@ get_component_name() {
         hammerspoon) echo "Hammerspoon (macOS automation)" ;;
         ghostty)     echo "Ghostty terminal config (macOS)" ;;
         codex)       echo "Codex CLI/App configuration" ;;
+        cship)       echo "cship (Claude Code statusline)" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -147,6 +149,9 @@ main() {
                 ;;
             codex)
                 install_codex
+                ;;
+            cship)
+                install_cship
                 ;;
             *)
                 progress_info "Unknown component: $component"

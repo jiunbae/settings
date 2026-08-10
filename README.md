@@ -106,6 +106,7 @@ Components:
   hishtory      hishtory (better shell history with sync support)
   hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
   codex         Codex CLI/App config, hooks, and notify chain
+  cship         cship + Starship (fast Claude Code statusline)
 ```
 
 ## Components
@@ -132,6 +133,12 @@ Components:
 | [TPM](https://github.com/tmux-plugins/tpm) | Tmux plugin manager |
 | [zellij](https://zellij.dev/) | Terminal multiplexer (alternative) |
 | [Windows Terminal](https://aka.ms/terminal) | Modern terminal for Windows |
+
+### AI Coding Agents
+| Component | Description |
+|-----------|-------------|
+| [cship](https://github.com/stephenleo/cship) | Claude Code statusline (Rust) — replaces ccstatusline: ~33ms vs ~1,250ms per render, ~18MB vs ~99MB peak RSS |
+| [Starship](https://starship.rs) | Required by cship for the `$directory` / `$git_branch` / `$git_metrics` / `$custom.worktree` passthrough segments |
 
 ### Development Tools
 | Component | Description |

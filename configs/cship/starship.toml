@@ -1,0 +1,43 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Consumed only through cship's Starship passthrough (`starship module <name>`),
+# never as a shell prompt. Each module below is spawned individually, so keep the
+# set minimal — every extra module is another process per statusline render.
+#
+# Palette matches the onedark powerline theme the previous ccstatusline config used:
+#   bg blue #61afef · bg grey #3e4452 · bg green #98c379 · bg red #e06c75
+#   bg yellow #e5c07b · fg on colour #282c34 · fg on grey #abb2bf
+
+add_newline = false
+format = "$directory$git_branch$git_metrics"
+
+[directory]
+format = "[ $path ](fg:#282c34 bg:#61afef)"
+style = "fg:#282c34 bg:#61afef"
+truncation_length = 1
+truncate_to_repo = false
+fish_style_pwd_dir_length = 1
+truncation_symbol = ""
+read_only = ""
+
+[git_branch]
+format = "[ ⎇ $branch ](fg:#282c34 bg:#61afef)"
+style = "fg:#282c34 bg:#61afef"
+only_attached = false
+
+[git_metrics]
+disabled = false
+format = "[ \\(+$added,-$deleted\\) ](fg:#282c34 bg:#98c379)"
+added_style = "fg:#282c34 bg:#98c379"
+deleted_style = "fg:#282c34 bg:#98c379"
+only_nonzero_diffs = false
+
+# Git worktree name — Starship has no native worktree module, so this shells out.
+# `git rev-parse --git-common-dir` differs from `--git-dir` only inside a linked
+# worktree; the basename of the worktree root is what the old statusline showed.
+[custom.worktree]
+command = 'basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null'
+when = 'git rev-parse --is-inside-work-tree 2>/dev/null'
+shell = ["bash", "--noprofile", "--norc"]
+format = "[ 𖠰 $output ](fg:#abb2bf bg:#3e4452)"
+style = "fg:#abb2bf bg:#3e4452"

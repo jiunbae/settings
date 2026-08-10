@@ -1,0 +1,43 @@
+# cship statusline, wired up in ~/.claude/settings.json.
+#
+# Layout mirrors the ccstatusline powerline config it replaced (removed
+# 2026-08-10; see ~/.claude/backups/config-audit-20260810/): two rows, onedark
+# palette, U+E0B0 separators. Segment colours are set per module because cship
+# only substitutes $cship.* tokens OUTSIDE style brackets — `[ $cship.model ](…)`
+# renders the token literally, so each module carries its own `format`.
+#
+# Palette: blue #61afef · grey #3e4452 · green #98c379 · red #e06c75
+#          yellow #e5c07b · fg-on-colour #282c34 · fg-on-grey #abb2bf
+#
+# $directory / $git_branch / $git_metrics / $custom.worktree come from Starship
+# passthrough and are styled in ~/.config/starship.toml.
+
+[cship]
+lines = [
+  "$directory[](fg:#61afef bg:#3e4452)$cship.model[](fg:#3e4452 bg:#98c379)$cship.context_window.used_percentage[](fg:#98c379 bg:#e06c75)$cship.context_window.total_input_tokens[](fg:#e06c75 bg:#e5c07b)$cship.context_window.total_output_tokens[](fg:#e5c07b bg:#61afef)$cship.usage_limits[](fg:#61afef)",
+  "$git_branch[](fg:#61afef bg:#3e4452)$custom.worktree[](fg:#3e4452 bg:#98c379)$git_metrics[](fg:#98c379 bg:#e06c75)$cship.cost.total_duration[](fg:#e06c75 bg:#e5c07b)$cship.cost[](fg:#e5c07b)",
+]
+
+[cship.model]
+format = "[ $value ](fg:#abb2bf bg:#3e4452)"
+
+[cship.context_window.used_percentage]
+format = "[ $value% ](fg:#282c34 bg:#98c379)"
+
+[cship.context_window.total_input_tokens]
+format = "[ $value ](fg:#282c34 bg:#e06c75)"
+
+[cship.context_window.total_output_tokens]
+format = "[ $value ](fg:#282c34 bg:#e5c07b)"
+
+[cship.usage_limits]
+style = "fg:#282c34 bg:#61afef"
+five_hour_format = "5h {pct}%"
+seven_day_format = "7d {pct}%"
+separator = " "
+
+[cship.cost.total_duration]
+format = "[ $value ](fg:#282c34 bg:#e06c75)"
+
+[cship.cost]
+format = "[ $value ](fg:#282c34 bg:#e5c07b)"
