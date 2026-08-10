@@ -71,3 +71,8 @@ vault-scripts/.*-push-state.json
 
 # Cloudflare Wrangler
 worker/.wrangler/
+
+# The global ~/.gitignore excludes *.manifest, which silently dropped this file
+# from a commit until a restore rehearsal caught it. It is generated state we
+# deliberately track: without it install.sh cannot rebuild the 46-skill farm.
+!configs/claude/skills.manifest

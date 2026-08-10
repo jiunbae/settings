@@ -1,3 +1,6 @@
+# Private-by-default permissions for files created by shells and child tools.
+umask 077
+
 . "$HOME/.cargo/env"
 
 # nvm node default on PATH for non-interactive zsh — .zshrc only loads on interactive shells,

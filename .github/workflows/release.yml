@@ -31,9 +31,14 @@ jobs:
       !contains(github.event.head_commit.message, '[no release]')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+
+      - name: Test agent-state restore paths
+        run: |
+          chmod +x scripts/tests/agent-restore-smoke.sh
+          ./scripts/tests/agent-restore-smoke.sh
 
       - name: Generate CalVer tag
         id: version
@@ -91,7 +96,7 @@ jobs:
           mv "/tmp/$ARCHIVE_NAME" .
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: Settings ${{ steps.version.outputs.version }}
