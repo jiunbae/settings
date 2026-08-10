@@ -243,6 +243,7 @@ cd ~/personal/settings
 | Claude Code | `~/.claude/settings.json` | **symlink** → `configs/claude/settings.json` |
 | Claude Code | `~/.claude/hooks/*.sh` | **symlink** → `agent-skills/hooks/` |
 | Claude Code | `~/.claude/skills/skill-index` | **symlink** → `configs/claude/skill-index` |
+| Claude Code | `~/.claude/skills/<category>/<name>` | 46 symlinks rebuilt from `configs/claude/skills.manifest` |
 | Claude Code | `~/.claude/projects/<slug>/memory` | **symlink** → `configs/claude/memory` |
 | Claude Code | MCP servers | `claude mcp add` (idempotent, run by the module) |
 | Codex | `~/.codex/config.toml` | **merge** — `configs/codex/config.managed.toml` + local runtime state |
@@ -294,7 +295,8 @@ none either now that project trust, hook hashes and the version-pinned
 ./scripts/codex/capture-config.sh && git diff configs/codex
 
 # after adding or removing a nested Claude skill
-python3 ~/.claude/skills/skill-index/build.py && git diff configs/claude
+python3 ~/.claude/skills/skill-index/build.py
+./scripts/claude/capture-skills.sh && git diff configs/claude
 ```
 
 Claude Code needs nothing — `~/.claude/settings.json` *is* the repo file.
@@ -307,7 +309,6 @@ Claude Code needs nothing — `~/.claude/settings.json` *is* the repo file.
 | `~/.claude.json` | MCP registrations sit next to per-project state Claude Code rewrites constantly. The `claude` module re-adds servers instead. |
 | `~/.claude/.credentials.json` | OAuth tokens. |
 | `~/.config/muxa/config.toml` | Carries a dashboard auth token; muxa is also mid-upgrade locally. |
-| `~/.claude/skills/<category>/` | 46 symlinks into the agents repos — recreated by cloning those repos, catalogued by the `skill-index` skill. |
 | Codex project trust | Exact-path and per-machine; regenerate with `codex-workspace-trust-sync`. |
 
 ## Directory Structure

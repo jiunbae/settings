@@ -30,8 +30,6 @@ fi
 #   ~/.claude.json     MCP registrations live here alongside per-project state
 #                      that Claude Code rewrites constantly; `claude mcp add`
 #                      below is the supported way in.
-#   ~/.claude/skills/  the 46 skills are symlinks into the agents repos; see
-#                      the skill-index skill for the layout.
 #   .credentials.json  OAuth tokens. Never in a repo.
 # ==============================================================================
 readonly CLAUDE_HOME="$HOME/.claude"
@@ -130,6 +128,71 @@ install_claude_skill_index() {
                  "$CLAUDE_SKILLS_DIR/skill-index" "Claude skill-index"
 }
 
+install_claude_skills() {
+    print_section "Restoring Claude Code skill farm"
+
+    local root_dir
+    root_dir=$(get_root_dir)
+    local manifest="$root_dir/configs/claude/skills.manifest"
+
+    if [[ ! -f "$manifest" ]]; then
+        log_warn "skills manifest not found: $manifest"
+        track_skipped "Claude skills (no manifest)"
+        return 0
+    fi
+
+    local created=0 skipped=0 missing=0
+    local slot repo rel source target repo_root
+
+    while IFS=$'\t' read -r slot repo rel; do
+        [[ -z "$slot" || "$slot" == \#* ]] && continue
+
+        case "$repo" in
+            agents)       repo_root="$HOME/workspace/agents" ;;
+            agent-skills) repo_root="$AGENT_SKILLS_REPO" ;;
+            *) log_warn "unknown repo token '$repo' for $slot"; continue ;;
+        esac
+
+        source="$repo_root/$rel"
+        target="$CLAUDE_SKILLS_DIR/$slot"
+
+        if [[ ! -f "$source/SKILL.md" ]]; then
+            (( missing++ ))
+            continue
+        fi
+
+        if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
+            (( skipped++ ))
+            continue
+        fi
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "[DRY-RUN] Would link $slot -> $source"
+            (( created++ ))
+            continue
+        fi
+
+        mkdir -p "$(dirname "$target")"
+        [[ -e "$target" || -L "$target" ]] && rm -rf "$target"
+        ln -s "$source" "$target"
+        (( created++ ))
+    done < "$manifest"
+
+    if (( missing > 0 )); then
+        log_warn "$missing skill(s) missing from their source repo — clone or update:"
+        log_warn "  $HOME/workspace/agents  (github.com/rtzr/agents)"
+        log_warn "  $AGENT_SKILLS_REPO  (github.com/jiunbae/agent-skills)"
+    fi
+
+    if (( created > 0 )); then
+        track_installed "Claude skills ($created linked)"
+        log_success "Linked $created skill(s), $skipped already in place"
+    else
+        log_info "Claude skills already in place ($skipped)"
+        track_skipped "Claude skills"
+    fi
+}
+
 install_claude_memory() {
     print_section "Setting up Claude Code memory"
 
@@ -195,6 +258,7 @@ install_claude() {
     install_claude_hooks || return 1
     install_claude_settings || return 1
     install_claude_skill_index || return 1
+    install_claude_skills || return 1
     install_claude_memory || return 1
     install_claude_mcp || return 1
 
