@@ -61,6 +61,18 @@ _claude_link() {
         return 1
     fi
 
+    # In copy mode the target is a real file, so a readlink check would never
+    # match and every run would re-warn. Compare contents instead.
+    if [[ "$LINK_MODE" == "copy" ]]; then
+        if diff -rq "$source" "$target" >/dev/null 2>&1; then
+            log_info "$label already up to date"
+            track_skipped "$label"
+            return 0
+        fi
+        FORCE=true backup_and_link "$source" "$target"
+        return 0
+    fi
+
     if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
         log_info "$label already linked"
         track_skipped "$label"

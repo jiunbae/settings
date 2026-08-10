@@ -14,6 +14,8 @@ service_tier = "default"
 
 # Added by Oh My Prompt
 
+# Added by Oh My Prompt
+
 [tui]
 notifications = true
 
@@ -41,16 +43,6 @@ enabled = false
 enabled = false
 
 # Disable only the bundled GitHub publish workflow.
-[[skills.config]]
-path = "/home/june/.codex/plugins/cache/openai-curated-remote/github/0.1.8-2841cf9749ae/skills/yeet/SKILL.md"
-enabled = false
-
-# Disabled 2026-06-22: local CLI-based `integration-notion` uses `notion-tool`
-# and `~/.agents/NOTION.yaml`; keeping Notion MCP enabled adds tool/context
-# overhead and can steer agents away from the local entrypoint.
-# [mcp_servers.notion]
-# url = "https://mcp.notion.com/mcp"
-
 [notice]
 hide_rate_limit_model_nudge = true
 hide_full_access_warning = true

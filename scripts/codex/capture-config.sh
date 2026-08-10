@@ -39,6 +39,7 @@ fi
 #                      regenerates it from scratch on a new machine.
 #   [hooks.state.*]    sha256 trust hashes tied to this config file's path.
 #   [tui.*]            NUX counters and other transient UI state.
+#   [[skills.config]]  addresses skills by version-pinned plugin-cache path.
 # Dropped keys:
 #   notify             an absolute path to a per-machine notify hook.
 tmp="$(mktemp)"
@@ -62,6 +63,13 @@ HEADER
         is_header($0) { skip = drop_header($0) }
         skip { next }
         /^notify[[:space:]]*=/ { next }
+        # [[skills.config]] entries address a skill by absolute path into the
+        # plugin cache, and that path carries the plugin version
+        # (.../github/0.1.8-2841cf9749ae/...). It breaks on the next plugin
+        # update, not just on another machine, so it is runtime state.
+        /^\[\[skills\.config\]\]/ { drop_block = 1; next }
+        drop_block && /^\[/ { drop_block = 0 }
+        drop_block { next }
         { print }
     ' "$SOURCE"
 } > "$tmp"

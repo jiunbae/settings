@@ -262,6 +262,31 @@ happens at run time and the file works under any username. Codex does **not**
 expand `$HOME` in TOML values, which is why its per-machine paths are excluded
 from the template rather than rewritten.
 
+### Symlink or copy
+
+Symlink is the default and the reason drift cannot happen: `~/.claude/settings.json`
+*is* `configs/claude/settings.json`, so editing one edits the other. The cost is
+that the live config depends on the repo staying checked out at a branch that
+contains it.
+
+`--copy` installs real files instead, for machines where that dependency is
+unwanted:
+
+```bash
+./install.sh -c claude cship        # copy instead of symlink
+```
+
+Copy mode is idempotent — a second run compares contents and reports
+"already up to date" rather than re-copying. The trade-off is that local edits
+no longer flow back, so after changing a copied config you have to bring it
+into the repo by hand.
+
+No template engine sits in between: after excluding per-machine runtime state,
+zero managed values need substitution. `configs/claude/settings.json` and both
+cship configs contain no absolute paths at all, and Codex's template contains
+none either now that project trust, hook hashes and the version-pinned
+`[[skills.config]]` path are captured out.
+
 ### Keeping the repo in sync
 
 ```bash
