@@ -33,7 +33,7 @@ callabo/callabo-voiceprint	agents	callabo/voiceprint
 callabo/callabo-workspace-audit	agents	callabo/workspace-audit
 callabo/callabo-workspace-health	agents	callabo/workspace-health
 callabo/fetch-openapi	agents	callabo/fetch-openapi
-common/korean-editor	agents	common/korean-editor
+common/korean-editor	agent-skills	common/korean-editor
 context/indexing-static-context	agent-skills	context/static-index
 development/grilling-plans	agent-skills	development/grill-me
 integration/integration-kibana	agents	integration/kibana

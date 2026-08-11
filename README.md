@@ -236,7 +236,7 @@ cd ~/personal/settings
 
 # Restore Oh My Prompt's Codex notify entry after its own setup. Later Codex
 # config applies preserve this machine-local absolute command.
-omp install codex
+omp install --cli codex
 
 # 6. private state — never in git
 #    - ~/.envs/*.env
@@ -342,7 +342,7 @@ Claude Code needs nothing — `~/.claude/settings.json` *is* the repo file.
 | `~/.claude.json` | MCP registrations sit next to per-project state Claude Code rewrites constantly. The `claude` module re-adds servers instead. |
 | `~/.claude/.credentials.json`, `~/.codex/auth.json` | OAuth tokens. Re-login on the new machine. |
 | `~/.config/muxa/config.toml` | Carries a dashboard auth token; restore it privately after installing muxa. |
-| Codex `notify` | Absolute, machine-local Oh My Prompt hook path. Create it with `omp install codex`; later applies preserve it. |
+| Codex `notify` | Absolute, machine-local Oh My Prompt hook path. Create it with `omp install --cli codex`; later applies preserve it. |
 | Codex project trust | Exact-path and per-machine; regenerate with the repo-installed `codex-workspace-trust-sync`. |
 
 ## Directory Structure
