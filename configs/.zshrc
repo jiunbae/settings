@@ -469,4 +469,38 @@ claude_with_kimi_env() {
     API_TIMEOUT_MS="3000000" \
     command claude --dangerously-skip-permissions "$@"
 }
-alias cmk='claude_with_kimi_env'
+unalias cmk 2>/dev/null
+alias cck='claude_with_kimi_env'
+
+# GLM (Anthropic-compatible internal proxy)
+claude_with_glm_env() {
+    [[ -f "$HOME/.envs/glm.env" ]] && source "$HOME/.envs/glm.env"
+    if [[ -z "${GLM_AUTH_TOKEN}" ]]; then
+        echo "GLM_AUTH_TOKEN is not set (expected in ~/.envs/glm.env)." >&2
+        return 1
+    fi
+    local _model="${GLM_MODEL:-glm-5.2-superglm}"
+    local _ctx="${GLM_CONTEXT_TOKENS:-262144}"
+    command env \
+        BASH_ENV="" \
+        ENV="" \
+        ANTHROPIC_BASE_URL="${GLM_BASE_URL:-https://aws-proxy.internal.xylolabs.com/}" \
+        ANTHROPIC_API_KEY="" \
+        CLAUDE_CODE_OAUTH_TOKEN="" \
+        ANTHROPIC_AUTH_TOKEN="${GLM_AUTH_TOKEN}" \
+        API_TIMEOUT_MS="3000000" \
+        ANTHROPIC_MODEL="${_model}" \
+        ANTHROPIC_DEFAULT_FABLE_MODEL="${_model}" \
+        ANTHROPIC_DEFAULT_OPUS_MODEL="${_model}" \
+        ANTHROPIC_DEFAULT_SONNET_MODEL="${_model}" \
+        ANTHROPIC_DEFAULT_HAIKU_MODEL="${_model}" \
+        CLAUDE_CODE_SUBAGENT_MODEL="${_model}" \
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW="${_ctx}" \
+        CLAUDE_CODE_MAX_CONTEXT_TOKENS="${_ctx}" \
+        claude --dangerously-skip-permissions \
+        --append-system-prompt "This Claude Code session uses the API backend model ${_model}. If asked for your model name or identity, report the API model identifier ${_model}; do not claim to be Claude Fable." \
+        "$@"
+}
+unalias cglm ccm 2>/dev/null
+unfunction claude_with_motif_env 2>/dev/null
+alias ccg='claude_with_glm_env'
