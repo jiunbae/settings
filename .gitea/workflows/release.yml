@@ -1,0 +1,213 @@
+name: Release
+
+# GitHub Actions is retired for this repo; releases are cut on the self-hosted
+# Gitea runner (jiun-mini, where `ubuntu-latest` maps to
+# catthehacker/ubuntu:act-latest).
+#
+# Two things this workflow does cannot go through Gitea at all, because the
+# Gitea copy of this repo is a read-only mirror of GitHub:
+#
+#   * the CalVer tag must be pushed to github.com, not to `origin`
+#     (`origin` here is the mirror and rejects writes);
+#   * the release and its two assets are created with plain api.github.com
+#     calls, because `secrets.GITHUB_TOKEN` on Gitea resolves to a *Gitea*
+#     token and would silently target the wrong host.
+#
+# Both need GH_RELEASE_TOKEN — a PAT with Contents: Read and write on
+# jiunbae/settings. Without it the build still runs and verifies, and the
+# publish half is skipped rather than failed.
+#
+# Note the mirror makes this workflow fire twice per release: once for the
+# master push that creates the tag, and again when the new tag syncs back from
+# GitHub. The second run finds the release already present and exits early.
+# The old GitHub workflow behaved the same way.
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '.gitea/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v2.0.0) - leave empty for auto CalVer'
+        required: false
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Skip if commit message contains [skip ci] or [no release]
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !contains(github.event.head_commit.message, '[no release]')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Test agent-state restore paths
+        run: |
+          chmod +x scripts/tests/agent-restore-smoke.sh
+          ./scripts/tests/agent-restore-smoke.sh
+
+      - name: Generate CalVer tag
+        id: version
+        env:
+          MANUAL_VERSION: ${{ github.event.inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$MANUAL_VERSION" ]; then
+            # Manual version specified
+            if [[ ! "$MANUAL_VERSION" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]; then
+              echo "Invalid version: $MANUAL_VERSION" >&2
+              exit 1
+            fi
+            VERSION="$MANUAL_VERSION"
+          elif [[ "$REF" == refs/tags/v* ]]; then
+            # Tag push - use existing tag
+            VERSION="${REF#refs/tags/}"
+          else
+            # Auto CalVer: v2025.01.06 format
+            BASE_VERSION="v$(date -u +'%Y.%m.%d')"
+
+            # Check if tag exists, add suffix if needed
+            SUFFIX=0
+            VERSION="$BASE_VERSION"
+            while git rev-parse "$VERSION" >/dev/null 2>&1; do
+              SUFFIX=$((SUFFIX + 1))
+              VERSION="${BASE_VERSION}.${SUFFIX}"
+            done
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Generated version: $VERSION"
+
+      - name: Create and push tag to GitHub
+        if: startsWith(github.ref, 'refs/heads/')
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "GH_RELEASE_TOKEN secret not set on this Gitea repo; skipping tag push."
+            exit 0
+          fi
+          git config user.name "CI Bot"
+          git config user.email "ci@jiun.dev"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          # `origin` is the read-only Gitea mirror, so push to GitHub explicitly.
+          # The URL carries the token, so keep it out of argv-visible output.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/jiunbae/settings.git" \
+            "refs/tags/$VERSION" >/dev/null 2>&1
+          echo "pushed tag $VERSION to github.com/jiunbae/settings"
+
+      - name: Create bundled installer
+        run: |
+          chmod +x scripts/bundle.sh
+          ./scripts/bundle.sh > install-bundled.sh
+          chmod +x install-bundled.sh
+
+      - name: Create release archive
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          ARCHIVE_NAME="settings-${VERSION}.tar.gz"
+          tar -czvf "/tmp/$ARCHIVE_NAME" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitea' \
+            --exclude='install-bundled.sh' \
+            .
+          mv "/tmp/$ARCHIVE_NAME" .
+
+      - name: Create GitHub release and upload assets
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "GH_RELEASE_TOKEN secret not set on this Gitea repo; skipping GitHub release."
+            exit 0
+          fi
+          REPO="jiunbae/settings"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf -- "$TMP"' EXIT
+
+          api() {
+            # api <method> <url> <outfile> [curl args...]
+            local method="$1" url="$2" out="$3"; shift 3
+            curl --silent --show-error --location \
+              --output "$out" --write-out '%{http_code}' \
+              -X "$method" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$@" "$url"
+          }
+
+          STATUS="$(api GET "https://api.github.com/repos/$REPO/releases/tags/$VERSION" "$TMP/release.json")"
+          case "$STATUS" in
+            200)
+              echo "release $VERSION already exists; reusing it for asset upload."
+              ;;
+            404)
+              PAYLOAD="$(jq -nc --arg tag "$VERSION" --arg name "Settings $VERSION" \
+                '{tag_name:$tag,name:$name,draft:false,prerelease:false,generate_release_notes:true}')"
+              STATUS="$(api POST "https://api.github.com/repos/$REPO/releases" "$TMP/release.json" \
+                -H "Content-Type: application/json" --data "$PAYLOAD")"
+              if [ "$STATUS" != 201 ]; then
+                echo "GitHub release creation failed with HTTP $STATUS" >&2
+                jq -r '.message // "Invalid JSON error response"' "$TMP/release.json" >&2 || true
+                exit 1
+              fi
+              ;;
+            *)
+              echo "GitHub release lookup failed with HTTP $STATUS" >&2
+              jq -r '.message // "Invalid JSON error response"' "$TMP/release.json" >&2 || true
+              exit 1
+              ;;
+          esac
+
+          RID="$(jq -er --arg tag "$VERSION" \
+            'select((.id | type) == "number" and .id > 0 and .tag_name == $tag) | .id' \
+            "$TMP/release.json")" || {
+              echo "GitHub release response lacks a valid id/tag_name" >&2
+              exit 1
+            }
+          UPLOAD_URL="https://uploads.github.com/repos/$REPO/releases/$RID/assets"
+
+          for f in "install-bundled.sh" "settings-${VERSION}.tar.gz"; do
+            [ -f "$f" ] || { echo "expected asset is missing: $f" >&2; exit 1; }
+            case "$f" in
+              *.tar.gz) CTYPE="application/gzip" ;;
+              *)        CTYPE="text/x-shellscript" ;;
+            esac
+            STATUS="$(api POST "$UPLOAD_URL?name=$f" "$TMP/upload.json" \
+              -H "Content-Type: $CTYPE" --data-binary "@$f")"
+            if [ "$STATUS" = 422 ] && \
+               jq -e '.errors[]? | select(.code == "already_exists")' "$TMP/upload.json" >/dev/null; then
+              echo "↩ asset $f already attached to $VERSION"
+              continue
+            fi
+            if [ "$STATUS" != 201 ]; then
+              echo "GitHub asset upload for '$f' failed with HTTP $STATUS" >&2
+              jq -r '.message // "Invalid JSON error response"' "$TMP/upload.json" >&2 || true
+              exit 1
+            fi
+            jq -er '.browser_download_url' "$TMP/upload.json"
+          done
