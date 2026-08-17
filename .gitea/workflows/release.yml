@@ -108,10 +108,19 @@ jobs:
           git config user.name "CI Bot"
           git config user.email "ci@jiun.dev"
           git tag -a "$VERSION" -m "Release $VERSION"
+
           # `origin` is the read-only Gitea mirror, so push to GitHub explicitly.
-          # The URL carries the token, so keep it out of argv-visible output.
-          git push "https://x-access-token:${GH_TOKEN}@github.com/jiunbae/settings.git" \
-            "refs/tags/$VERSION" >/dev/null 2>&1
+          # The token goes in a credentials file rather than the remote URL: a
+          # URL-embedded token is visible in the container's process list for the
+          # duration of the push, and it forces the whole command to be silenced
+          # to keep it out of the log — which throws away the reason a failed
+          # push failed. With the helper, stderr can flow normally.
+          CRED_DIR="$(mktemp -d)"
+          trap 'rm -rf -- "$CRED_DIR"' EXIT
+          umask 077
+          printf 'https://x-access-token:%s@github.com\n' "$GH_TOKEN" > "$CRED_DIR/creds"
+          git -c "credential.helper=store --file=$CRED_DIR/creds" \
+            push "https://github.com/jiunbae/settings.git" "refs/tags/$VERSION"
           echo "pushed tag $VERSION to github.com/jiunbae/settings"
 
       - name: Create bundled installer
