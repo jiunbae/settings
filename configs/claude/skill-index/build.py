@@ -14,6 +14,7 @@ import json
 import os
 import pathlib
 import re
+import sys
 
 ROOT = pathlib.Path.home() / ".claude" / "skills"
 SELF = "skill-index"
@@ -109,6 +110,18 @@ def collect() -> list[dict]:
 def main() -> None:
     skills = collect()
     triggers = json.loads(TRIGGERS.read_text()) if TRIGGERS.exists() else {}
+
+    # The table prints frontmatter `name` and the body tells the reader to assemble
+    # the path from it, so a directory whose name differs makes the catalogued path
+    # wrong. This held only by convention until two entries quietly broke it
+    # (static-index/indexing-static-context, grill-me/grilling-plans); verify it.
+    for s in skills:
+        if s["name"] != s["dir"]:
+            print(
+                f"WARNING: {s['category']}/{s['dir']} declares name '{s['name']}' — "
+                "the catalogued path will not resolve. Rename one to match.",
+                file=sys.stderr,
+            )
 
     by_cat: dict[str, list[dict]] = {}
     for s in skills:
