@@ -34,6 +34,11 @@ CATEGORIES = {
 
 FRONTMATTER_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):(?:\s*(.*))?$")
 
+# Snapshot directories left behind by syncs (foo.backup.20260811101821, foo.bak).
+# They carry the same frontmatter `name` as the live skill, so cataloguing them
+# emits duplicate rows pointing at stale copies.
+ARCHIVED_DIR = re.compile(r"\.(backup|bak|old|orig)(\.|$)")
+
 
 def read_frontmatter(md: pathlib.Path) -> dict[str, str]:
     lines = md.read_text(errors="replace").splitlines()
@@ -58,8 +63,23 @@ def read_frontmatter(md: pathlib.Path) -> dict[str, str]:
     }
 
 
+def autoloaded_names() -> set[str]:
+    """Skill names the harness already discovers at ~/.claude/skills/<name>/SKILL.md.
+
+    Cataloguing these again costs context in every session that reads this index
+    while telling Claude nothing it cannot already see.
+    """
+    names = set()
+    for entry in os.listdir(ROOT):
+        md = ROOT / entry / "SKILL.md"
+        if md.exists():
+            names.add(read_frontmatter(md).get("name", entry))
+    return names
+
+
 def collect() -> list[dict]:
     found = []
+    autoloaded = autoloaded_names()
     for cat in sorted(os.listdir(ROOT)):
         cat_path = ROOT / cat
         if not cat_path.is_dir() or cat == SELF:
@@ -68,9 +88,11 @@ def collect() -> list[dict]:
             continue  # flat skill — the harness already loads it
         for entry in sorted(os.listdir(cat_path)):
             md = cat_path / entry / "SKILL.md"
-            if not md.exists():
+            if not md.exists() or ARCHIVED_DIR.search(entry):
                 continue
             fm = read_frontmatter(md)
+            if fm.get("name", entry) in autoloaded:
+                continue  # promoted to depth 1 already; this copy is redundant
             found.append(
                 {
                     "name": fm.get("name", entry),
@@ -109,10 +131,12 @@ def main() -> None:
         "  member matching, poc analytics, competitor analysis, crm, product info, workspace",
         "  health/audit, resolve, callabo-set), an integration (kibana/로그, linear/이슈,",
         "  notion/노션, sentry/에러), Pronaia ML work (audio, triton, model sync, benchmark),",
-        "  Korean copy editing (윤문/퇴고), background agent workflows (planner, reviewer,",
-        "  implementer, rpf, grill-me), or static context indexing — or whenever the user",
-        "  asks what skills exist. It maps each skill to its SKILL.md path so the right one",
-        "  can be read on demand instead of loading all of them every session.",
+        "  or managing services and Obsidian notes — or whenever the user asks what skills",
+        "  exist. It maps each skill to its SKILL.md path so the right one can be read on",
+        "  demand instead of loading all of them every session. Skills that already load at",
+        "  depth 1 (korean-editor, rpf, grill-me, static-index, context-manager,",
+        "  git-commit-pr, security-auditor, background-*) are NOT listed here — the harness",
+        "  already surfaces them, so do not read this index looking for those.",
         "---",
         "",
         "# Skill Index",
@@ -130,9 +154,9 @@ def main() -> None:
         "디렉토리명 == frontmatter `name` 이 항상 성립하므로, 경로는",
         "`~/.claude/skills/<카테고리>/<이름>/SKILL.md` 로 바로 조립할 수 있습니다.",
         "",
-        "> `~/.agents/*.md` (KIBANA·LINEAR·NOTION·SENTRY·SLACK)는 별개입니다 — 그쪽은 curl+env",
-        "> 직접 호출용 레퍼런스이고, SessionStart 훅이 이미 요약을 주입합니다. 스크립트 래퍼와",
-        "> 상세 절차가 필요할 때 아래 `integration-*` 스킬을 읽으세요.",
+        "> `~/.agents/*.md` 는 별개입니다 — SessionStart 훅이 실제로 존재하는 파일만 골라",
+        "> 트리거와 함께 요약해 주입하므로, 파일명을 여기서 추측하지 말고 그 요약을 보세요.",
+        "> 스크립트 래퍼와 상세 절차가 필요할 때 아래 `integration-*` 스킬을 읽으세요.",
         "",
     ]
 

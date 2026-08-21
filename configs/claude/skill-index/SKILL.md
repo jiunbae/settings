@@ -8,15 +8,17 @@ description: >-
   member matching, poc analytics, competitor analysis, crm, product info, workspace
   health/audit, resolve, callabo-set), an integration (kibana/로그, linear/이슈,
   notion/노션, sentry/에러), Pronaia ML work (audio, triton, model sync, benchmark),
-  Korean copy editing (윤문/퇴고), background agent workflows (planner, reviewer,
-  implementer, rpf, grill-me), or static context indexing — or whenever the user
-  asks what skills exist. It maps each skill to its SKILL.md path so the right one
-  can be read on demand instead of loading all of them every session.
+  or managing services and Obsidian notes — or whenever the user asks what skills
+  exist. It maps each skill to its SKILL.md path so the right one can be read on
+  demand instead of loading all of them every session. Skills that already load at
+  depth 1 (korean-editor, rpf, grill-me, static-index, context-manager,
+  git-commit-pr, security-auditor, background-*) are NOT listed here — the harness
+  already surfaces them, so do not read this index looking for those.
 ---
 
 # Skill Index
 
-`~/.claude/skills` 아래 **46개** 스킬이 카테고리 디렉토리 안에 있습니다.
+`~/.claude/skills` 아래 **39개** 스킬이 카테고리 디렉토리 안에 있습니다.
 Claude Code는 `~/.claude/skills/<이름>/SKILL.md` **한 depth만** 스캔하므로 이 스킬들은
 자동 로딩되지 않습니다. 대신 이 인덱스를 통해 필요할 때만 꺼내 씁니다.
 
@@ -29,9 +31,9 @@ Claude Code는 `~/.claude/skills/<이름>/SKILL.md` **한 depth만** 스캔하�
 디렉토리명 == frontmatter `name` 이 항상 성립하므로, 경로는
 `~/.claude/skills/<카테고리>/<이름>/SKILL.md` 로 바로 조립할 수 있습니다.
 
-> `~/.agents/*.md` (KIBANA·LINEAR·NOTION·SENTRY·SLACK)는 별개입니다 — 그쪽은 curl+env
-> 직접 호출용 레퍼런스이고, SessionStart 훅이 이미 요약을 주입합니다. 스크립트 래퍼와
-> 상세 절차가 필요할 때 아래 `integration-*` 스킬을 읽으세요.
+> `~/.agents/*.md` 는 별개입니다 — SessionStart 훅이 실제로 존재하는 파일만 골라
+> 트리거와 함께 요약해 주입하므로, 파일명을 여기서 추측하지 말고 그 요약을 보세요.
+> 스크립트 래퍼와 상세 절차가 필요할 때 아래 `integration-*` 스킬을 읽으세요.
 
 ## callabo — Callabo 서비스
 
@@ -43,7 +45,7 @@ Claude Code는 `~/.claude/skills/<이름>/SKILL.md` **한 depth만** 스캔하�
 | `callabo-auto-label` ↗ | auto label, automatic, 자동 라벨, 자동 분류, AI labeling, categorize, content analysis, 콘텐츠 분석 | Auto-labeling skill for Callabo records - analyzes content and automatically suggests/applies appropriate labels with AI-powered recommendations. 자동 라벨링, AI 분류, 콘텐츠 분석 기능을 제공합니다. |
 | `callabo-blog-generator` ↗ | - 블로그 생성 - blog generator - SEO 최적화 - 제품 소개 글 - feature article - callabo blog | AI-powered blog content generator for Callabo product/feature articles with SEO optimization for callabo.ai/blog (inblog.dev platform). Callabo 제품/기능 소개 블로그 콘텐츠 생성, SEO 최적화, 다중 포맷 출력(Mark… |
 | `callabo-blog-writer` ↗ | - 블로그 작성 - 블로그 써줘 - 블로그 글 작성 - blog write - 콘텐츠 작성 - 포스트 생성 - 글 써줘 - 아티클 작성 | 콜라보 블로그 작성 에이전트. callabo.ai/blog 스타일에 맞춘 7가지 글 유형 (제품가이드, 제품비교, 경험공유, 업데이트노트, 체크리스트, 전문가이드, 인사이트)의 SEO 최적화 콘텐츠를 생성합니다. 주제 분석부터 Notion 발행까지 자동화된 워크플로우를 제공합니다. [경계] 7유형 작성→Notion 발행 오케스트레이션… |
-| `callabo-competitor-analysis` ↗ | - 경쟁사 분석 - competitor analysis - 시장 조사 - 가격 비교 - Otter.ai - 클로바노트 - Fireflies - 경쟁사 동향 - 티로 - tl;dv - Gong - Fathom | AI 웹 검색 기반 경쟁사 분석 및 비교 리포트 생성. 가격/기능/시장 데이터를 수집하여 비교표, Slack 알림, Metabase 대시보드로 출력합니다. Otter.ai, 클로바노트, Fireflies, 티로, tl;dv, Gong, Fathom 등 회의 AI 경쟁사나 시장·가격 비교를 요청할 때 사용합니다. |
+| `callabo-competitor-analysis` ↗ | - 경쟁사 분석 - competitor analysis - 시장 조사 - 가격 비교 - Otter.ai - 클로바노트 - Fireflies - 경쟁사 동향 - 티로 - tl;dv - Gong - Fathom | AI 웹 검색 기반 경쟁사 분석 및 비교 리포트 생성. 가격/기능/시장 데이터를 수집하여 비교표, Slack 알림, Metabase 대시보드로 출력합니다. |
 | `callabo-crm-sync` ↗ | - crm sync - CRM 동기화 - salesforce - 세일즈포스 - pipedrive - 파이프드라이브 - crm export - CRM 내보내기 - 고객 연동 | CRM 동기화 - Salesforce/Pipedrive와 회의 기록 연동. Sync meeting records with CRM systems for sales automation. |
 | `callabo-image-generator` ↗ |  | Z-Image API를 사용한 AI 이미지 생성/편집/분석. 블로그 썸네일, 마케팅 이미지, UI 스크린샷 분석 지원. "이미지 생성", "썸네일", "image", "txt2img", "img2img", "이미지 분석", "VLM" 키워드로 활성화. (project) |
 | `callabo-insights` ↗ | insight, summary, 인사이트, 요약, meeting notes, 회의록, action items, 액션 아이템, keywords, 키워드 | Retrieve, analyze, compare, and aggregate AI-generated insights from meeting records with advanced filtering and reporting. Activated when users ask about summaries, action items, meeting… |
@@ -58,7 +60,7 @@ Claude Code는 `~/.claude/skills/<이름>/SKILL.md` **한 depth만** 스캔하�
 | `callabo-records` ↗ | record, 레코드, 녹음, meeting, 미팅, recording, transcription, dialog, 대화, list records | Records management for Callabo API - list, search, filter, and retrieve record details with transcription and insights. Activated when users need to find meetings, view transcriptions, or… |
 | `callabo-resolve` ↗ |  | Resolve a Callabo Linear issue end-to-end when the user gives a CAL-XXXX identifier and asks to resolve, start, or implement it. Reuses or creates exactly one callabo-set workspace per is… |
 | `callabo-set` ↗ |  | Local Callabo dev environment skill — create exactly one registry-driven workspace per work item, add or run selected service repositories, sync dev DB, manage shared MySQL/Redis/Elastics… |
-| `callabo-skill-generator` ↗ | skill, generate, create skill, 스킬 생성, template, 템플릿, new skill, skill development | Create or update agent skills with valid name/description frontmatter, concise imperative instructions, reusable scripts/references/assets, and repository validation. 새 스킬 생성, 기존 스킬 개선, 템… |
+| `callabo-skill-generator` ↗ | skill, generate, create skill, 스킬 생성, template, 템플릿, new skill, skill development | Generate well-structured Claude Code skills following best practices and guidelines for skill development. 스킬 생성, 템플릿 제공, 베스트 프랙티스 가이드 기능을 제공합니다. |
 | `callabo-slack` ↗ | slack, notification, 알림, message, 메시지, report, 리포트, webhook, channel | Slack webhook integration skill for Callabo - send notifications, alerts, and messages to Slack channels with rich formatting. Slack 알림, 메시지 전송, 리포트 공유 기능을 제공합니다. |
 | `callabo-speaker-update` ↗ | speaker, 화자, 스피커, speaker-info, rename speaker, update speaker, 화자 이름, 스피커 업데이트, speaker name | Update speaker names in Callabo records via speaker-info API. Map speaker IDs to actual names for better transcription readability. Activated when users want to rename speakers, update sp… |
 | `callabo-transcription-check` ↗ | transcription, 전사, quality, 품질, check, 검사, validation, 검증, STT, speech to text, error detection | Analyzes Record dialogues for transcription errors with AI-powered word-level detection, speaker-aware analysis, and workspace keyword filtering. 전사 품질 검증, 오류 탐지, 리포트 생성 기능을 제공합니다. |
@@ -72,7 +74,7 @@ Claude Code는 `~/.claude/skills/<이름>/SKILL.md` **한 depth만** 스캔하�
 | 스킬 | 트리거 | 설명 |
 |---|---|---|
 | `integration-kibana` ↗ | kibana, 키바나, elasticsearch, 엘라스틱서치, log, 로그, 프로덕션 로그, production log, 500 error, transaction trace, 트랜잭션 추적, aggregation, 집계 | Kibana 로그 검색/분석 스킬 - 조건(시간 범위, KQL/Lucene 쿼리, 인덱스 패턴)으로 Elasticsearch 로그를 조회하고, transaction ID 추적, 필드 집계를 수행합니다. 문제 분석용 read-only 로그 watcher. |
-| `integration-linear` ↗ |  | Linear 이슈를 식별자(CAL-1234)나 키워드로 조회·검색하고, 새 이슈 생성, 상태·담당자·라벨·priority·estimate·project 갱신, 코멘트 추가, GitHub PR attachment 연결을 수행합니다. Linear 티켓을 확인하거나 수정해 달라는 요청에 사용합니다. 모든 mutation은 dry-run이… |
+| `integration-linear` ↗ |  | Linear 이슈 조회/생성 스킬 - 이슈 번호(CAL-1234) 또는 키워드로 검색하고, 새 이슈를 생성합니다. 생성은 dry-run이 기본이며 --execute 플래그로 실제 생성합니다. |
 | `integration-notion` ↗ | notion, 노션, 노션 검색, 노션 조회, 페이지 생성, 문서 업로드, notion search, notion create, 노션 페이지, 노션 정리 | Notion 통합 스킬 - 페이지/데이터베이스 검색, 문서 조회, 지정 위치에 문서 생성, 마크다운 업로드. Notion integration for searching pages, reading content, creating documents at specified locations, and uploading markdown fil… |
 | `integration-sentry` ↗ |  | Sentry 이슈 조회 스킬 - 이슈 ID, 에러 메시지, 프로젝트별로 Sentry 이벤트를 검색하고 stack trace, tags, breadcrumbs를 가져옵니다. Sentry issue lookup for error investigation via REST API. |
 
@@ -91,33 +93,6 @@ Claude Code는 `~/.claude/skills/<이름>/SKILL.md` **한 depth만** 스캔하�
 | `deploying-triton` ↗ |  | Deploys and manages NVIDIA Triton Inference Server containers. Automates model repository setup, config generation, and health checks. Use for "triton 서버", "triton 실행", "모델 서빙", "inferenc… |
 | `processing-audio` ↗ |  | Converts and processes audio files using ffmpeg. Supports format conversion, sample rate changes, mono/stereo conversion, and segment splitting. Use for "오디오 변환", "wav 변환", "샘플레이트", "ffmp… |
 | `syncing-ml-models` ↗ |  | Synchronizes ML model files across servers. Supports rsync-based transfer with bandwidth control and checksum verification. Use for "모델 동기화", "모델 배포", "rsync 모델", "서버로 전송" requests. |
-
-## agents — 에이전트 워크플로우
-
-| 스킬 | 트리거 | 설명 |
-|---|---|---|
-| `background-implementer` ↗ | [bg impl, 백그라운드 구현, 병렬 구현, parallel implementation, multi-agent implementation] | Run bounded parallel implementation with isolated workers (native worktrees or Codex), respect a dependency DAG, and verify each worker's diff before integrating. Use only when the user e… |
-| `background-planner` ↗ |  | Run bounded parallel planning with independent planner personas and optional multi-LLM workers, then synthesize a single plan via stance-steered consensus with explicit conflicts and open… |
-| `background-reviewer` ↗ |  | Run bounded parallel code reviews with independent persona reviewers, verify findings adversarially, merge and prioritize by root cause, and optionally repeat a review-fix-verify cycle. U… |
-| `rpf` ↗ |  | Runs an explicit pointer-document-driven review, plan, work, and feedback loop with multiple agents, scheduling independent review, verification, and implementation work concurrently and… |
-
-## common — 공용
-
-| 스킬 | 트리거 | 설명 |
-|---|---|---|
-| `korean-editor` ↗ |  | 기존 한국어 초안을 의미·사실·수치·인용·문서 구조와 작성자의 목소리를 보존하며 자연스럽게 퇴고한다. 사용자가 한국어 글의 윤문, 퇴고, 교정, 번역투 완화, 기계적이거나 AI 같은 문체 완화, 간결화, 톤 정리를 명시적으로 요청할 때 사용한다. 빈 문서에서 새 글을 쓰는 요청, 번역·요약·사실 확장, 코드 수정에는 사용하지 않는다.… |
-
-## context — 컨텍스트
-
-| 스킬 | 트리거 | 설명 |
-|---|---|---|
-| `indexing-static-context` ↗ |  | Locates existing global context files under ~/.agents without assuming that optional files exist. Use when a task needs the user's profile, security rules, IaC conventions, service regist… |
-
-## development — 개발
-
-| 스킬 | 트리거 | 설명 |
-|---|---|---|
-| `grilling-plans` ↗ |  | Interviews the user relentlessly about a plan or design until you both reach a shared understanding, resolving each branch of the decision tree before any code is written. Use when the us… |
 
 ↗ = 소스 레포(`~/workspace/agents`, `~/personal/agent-skills`)로의 심볼릭 링크.
 내용을 고치면 레포가 수정되니 커밋 여부를 확인하세요.
