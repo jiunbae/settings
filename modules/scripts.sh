@@ -43,13 +43,39 @@ install_scripts() {
         mkdir -p "$SCRIPTS_BIN_DIR"
     fi
 
-    local linked=0 skipped=0
+    local linked=0 current=0 skipped=0 pruned=0
     local source target name current_target
+
+    # A script dropped from bin/ leaves its link behind, dangling on PATH.
+    # Only links that point into our own bin/ are considered.
+    for target in "$SCRIPTS_BIN_DIR"/*; do
+        [[ -L "$target" ]] || continue
+        current_target=$(readlink "$target")
+        [[ "$current_target" == "$source_dir"/* ]] || continue
+        [[ -e "$current_target" ]] && continue
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "[DRY-RUN] Would remove stale link: $(basename "$target")"
+        else
+            rm -f "$target"
+            log_info "Removed stale link: $(basename "$target")"
+        fi
+        pruned=$((pruned + 1))
+    done
 
     for source in "$source_dir"/*; do
         [[ -f "$source" ]] || continue
 
         name="$(basename "$source")"
+
+        # bin/ is a PATH directory, so anything without the execute bit would
+        # link in as an unrunnable command. Say so rather than linking it.
+        if [[ ! -x "$source" ]]; then
+            log_warn "Not executable, skipping: $name (chmod +x to install it)"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
         target="$SCRIPTS_BIN_DIR/$name"
 
         # Short-circuit if it already points at our repo source
@@ -58,7 +84,7 @@ install_scripts() {
             if [[ "$current_target" == "$source" ]]; then
                 log_info "Already linked: $name"
                 track_skipped "$name"
-                skipped=$((skipped + 1))
+                current=$((current + 1))
                 continue
             fi
         fi
@@ -70,7 +96,7 @@ install_scripts() {
         linked=$((linked + 1))
     done
 
-    log_success "Personal scripts configured ($linked linked, $skipped already current)"
+    log_success "Personal scripts configured ($linked linked, $current current, $skipped skipped, $pruned stale removed)"
 
     if [[ ":$PATH:" != *":$SCRIPTS_BIN_DIR:"* ]]; then
         log_warn "$SCRIPTS_BIN_DIR is not on PATH; add it to use these scripts"
