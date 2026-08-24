@@ -44,6 +44,13 @@ declare -ra DEFAULT_EXCLUDES=(
 # 매칭은 ANSI 이스케이프를 제거한 사본에 대해 수행한다 (p10k 가 노이즈를 색칠해서 보냄).
 readonly NOISE_RE='^[(]eval[)]:[0-9]+: can'"'"'t change option: |^[(]anon[)]:setopt:[0-9]+: can'"'"'t change option: |gitstatus|^[[:space:]]*Add the following parameter to |^[[:space:]]*GITSTATUS_LOG_LEVEL=DEBUG[[:space:]]*$|^[[:space:]]*Restart Zsh to retry |^[[:space:]]*exec zsh[[:space:]]*$'
 
+# `wait -n` 은 bash 4.3+ 에서만 쓸 수 있다. 없으면 배치 단위로 대기한다.
+if (( BASH_VERSINFO[0] > 4 || ( BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 3 ) )); then
+    HAVE_WAIT_N=true
+else
+    HAVE_WAIT_N=false
+fi
+
 C_DIR=""; C_ERR=""; C_DIM=""; C_RST=""
 WORK=""
 PRE_EXECUTED=false
@@ -234,7 +241,7 @@ validate_options() {
 # ==============================================================================
 is_excluded() {
     local path=$1 base=${1##*/} pat
-    for pat in "${EXCLUDES[@]}"; do
+    for pat in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
         # shellcheck disable=SC2053  # glob 매칭이 의도한 동작
         [[ $base == $pat ]] && return 0
         # shellcheck disable=SC2053
@@ -268,7 +275,7 @@ collect() {
     done < <(find "$parent" "${find_opts[@]}" -print0 2>/dev/null | sort -z)  # 로케일 collation: ls/tree 와 같은 순서
 
     local idx ex
-    for child in "${kids[@]}"; do
+    for child in ${kids[@]+"${kids[@]}"}; do
         idx=$NODE_N; NODE_N=$((NODE_N + 1))
         NODE_PATH[idx]=$child
         NODE_KIDS[idx]=""
@@ -335,12 +342,12 @@ run_in_dir() {
             local cmd_str
             if $SHELL_MODE_SET; then cmd_str=$SHELL_MODE
             else cmd_str=$(quote_argv "${COMMAND[@]}"); fi
-            exec "${pre[@]}" "${SHELL:-/bin/bash}" -i -c "$cmd_str"
+            exec ${pre[@]+"${pre[@]}"} "${SHELL:-/bin/bash}" -i -c "$cmd_str"
         elif $SHELL_MODE_SET; then
-            exec "${pre[@]}" "${SHELL:-/bin/bash}" -c "$SHELL_MODE"
+            exec ${pre[@]+"${pre[@]}"} "${SHELL:-/bin/bash}" -c "$SHELL_MODE"
         else
             # 셸을 거치지 않는 직접 exec — 가장 빠르고 인용이 완전히 보존된다.
-            exec "${pre[@]}" "${COMMAND[@]}"
+            exec ${pre[@]+"${pre[@]}"} "${COMMAND[@]}"
         fi
     ) 2>&1
 }
@@ -411,11 +418,18 @@ run_parallel() {
     (( ${#targets[@]} == 0 )) && return 0
 
     local running=0
-    for i in "${targets[@]}"; do
-        while (( running >= JOBS )); do
-            wait -n 2>/dev/null
-            running=$((running - 1))
-        done
+    for i in ${targets[@]+"${targets[@]}"}; do
+        if $HAVE_WAIT_N; then
+            # 한 슬롯이 비는 대로 다음 작업을 넣는다 (bash 4.3+)
+            while (( running >= JOBS )); do
+                wait -n 2>/dev/null
+                running=$((running - 1))
+            done
+        elif (( running >= JOBS )); then
+            # 구버전 bash: 슬롯 단위로 기다릴 수 없어 한 배치를 통째로 비운다
+            wait
+            running=0
+        fi
         exec_node "$i" &
         running=$((running + 1))
     done
@@ -461,13 +475,13 @@ render() {
     kids=( ${NODE_KIDS[idx]} )
 
     local c
-    for c in "${kids[@]}"; do
+    for c in ${kids[@]+"${kids[@]}"}; do
         is_visible "$c" || continue
         shown+=("$c")
     done
 
     local n=${#shown[@]} i=0 last conn cpfx npfx
-    for c in "${shown[@]}"; do
+    for c in ${shown[@]+"${shown[@]}"}; do
         i=$((i + 1))
         last=0; (( i == n )) && last=1
 
