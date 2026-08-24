@@ -33,8 +33,8 @@ install_scripts() {
     local source_dir="$root_dir/bin"
 
     if [[ ! -d "$source_dir" ]]; then
-        log_error "Scripts directory not found at: $source_dir"
-        return 1
+        log_warn "bin directory not found in settings"
+        return 0
     fi
 
     print_section "Linking personal scripts"
@@ -78,8 +78,18 @@ install_scripts() {
 
         target="$SCRIPTS_BIN_DIR/$name"
 
-        # Short-circuit if it already points at our repo source
-        if [[ -L "$target" ]]; then
+        # Short-circuit when the target is already what we would install.
+        # Copy mode has to compare content: without this every re-run backs up
+        # and rewrites all of bin/, piling executable .backup.<ts> files into a
+        # directory that is on PATH. The bundled installer always uses --copy.
+        if [[ "$LINK_MODE" == "copy" ]]; then
+            if [[ -f "$target" && ! -L "$target" ]] && cmp -s "$source" "$target"; then
+                log_info "Already current: $name"
+                track_skipped "$name"
+                current=$((current + 1))
+                continue
+            fi
+        elif [[ -L "$target" ]]; then
             current_target=$(readlink "$target")
             if [[ "$current_target" == "$source" ]]; then
                 log_info "Already linked: $name"
