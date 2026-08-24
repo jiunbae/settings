@@ -1,20 +1,99 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# One-line host summary: CPU, RAM and GPU.
+set -uo pipefail
 
-cpu_name=$(lscpu | awk -F: '/Model name/ {print $2}' | sed 's/^[ \t]*//')
-physical_cpu_count=$(lscpu | awk '/^Socket\(s\):/ {print $2}')
-core_count=$(lscpu | awk '/^Core\(s\) per socket:/ {print $4}')
-threads_per_core=$(lscpu | awk '/^Thread\(s\) per core:/ {print $4}')
-memory_size_gib=$(free -k | awk '/Mem:/ {printf "%.2f", $2/1024/1024}')
-current_memory_usage_gib=$(free -k | awk '/Mem:/ {printf "%.2f", $3/1024/1024}')
-memory_usage_ratio=$(free -k | awk '/Mem:/ {printf "%.2f", $3/$2*100}')
+cpu_name="unknown"
+socket_count=""
+core_count=""
+thread_count=""
+memory_total_gib=""
+memory_used_gib=""
+memory_ratio=""
 
-gpu_names=""
-if command -v nvidia-smi &> /dev/null; then
-  gpu_names=$(nvidia-smi --query-gpu=name --format=csv,noheader | sort | uniq -c)
+read_linux() {
+    local lscpu_out
+    lscpu_out=$(lscpu 2>/dev/null) || return 1
+
+    cpu_name=$(awk -F: '/Model name/ {sub(/^[ \t]+/, "", $2); print $2; exit}' <<< "$lscpu_out")
+    socket_count=$(awk '/^Socket\(s\):/ {print $2; exit}' <<< "$lscpu_out")
+    local per_socket threads_per_core
+    per_socket=$(awk '/^Core\(s\) per socket:/ {print $4; exit}' <<< "$lscpu_out")
+    threads_per_core=$(awk '/^Thread\(s\) per core:/ {print $4; exit}' <<< "$lscpu_out")
+
+    if [[ $per_socket =~ ^[0-9]+$ && $socket_count =~ ^[0-9]+$ ]]; then
+        core_count=$(( per_socket * socket_count ))
+        [[ $threads_per_core =~ ^[0-9]+$ ]] && thread_count=$(( core_count * threads_per_core ))
+    fi
+
+    local mem
+    mem=$(free -k 2>/dev/null | awk '/Mem:/ {printf "%.2f %.2f %.2f", $3/1024/1024, $2/1024/1024, $3/$2*100; exit}')
+    [[ -n $mem ]] && read -r memory_used_gib memory_total_gib memory_ratio <<< "$mem"
+    return 0
+}
+
+read_macos() {
+    command -v sysctl > /dev/null 2>&1 || return 1
+
+    cpu_name=$(sysctl -n machdep.cpu.brand_string 2>/dev/null) || cpu_name="unknown"
+    socket_count=1
+    core_count=$(sysctl -n hw.physicalcpu 2>/dev/null)
+    thread_count=$(sysctl -n hw.logicalcpu 2>/dev/null)
+
+    local total_bytes
+    total_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+    if [[ $total_bytes =~ ^[0-9]+$ ]]; then
+        memory_total_gib=$(awk -v b="$total_bytes" 'BEGIN{printf "%.2f", b/1024/1024/1024}')
+        # vm_stat reports pages; anything not free/inactive counts as in use.
+        local used
+        used=$(vm_stat 2>/dev/null | awk '
+            /page size of/ { match($0, /[0-9]+/); ps = substr($0, RSTART, RLENGTH) }
+            /Pages active/ { gsub(/\./, "", $3); a = $3 }
+            /Pages wired down/ { gsub(/\./, "", $4); w = $4 }
+            END { if (ps && (a || w)) printf "%.2f", (a + w) * ps / 1024 / 1024 / 1024 }')
+        if [[ -n $used ]]; then
+            memory_used_gib=$used
+            memory_ratio=$(awk -v u="$used" -v t="$memory_total_gib" 'BEGIN{ if (t > 0) printf "%.2f", u/t*100 }')
+        fi
+    fi
+    return 0
+}
+
+case "$(uname -s)" in
+    Darwin) read_macos || true ;;
+    *)      read_linux || read_macos || true ;;
+esac
+
+printf ' %s\n' "$(hostname)"
+
+cpu_line=" CPU:"
+[[ -n $socket_count ]] && cpu_line+=" ($socket_count)"
+if [[ -n $core_count && -n $thread_count ]]; then
+    cpu_line+=" (${core_count}C${thread_count}T)"
+elif [[ -n $core_count ]]; then
+    cpu_line+=" (${core_count}C)"
+fi
+printf '%s %s\n' "$cpu_line" "$cpu_name"
+
+if [[ -n $memory_used_gib && -n $memory_total_gib ]]; then
+    printf ' RAM: %s / %s GiB (%s%%)\n' "$memory_used_gib" "$memory_total_gib" "${memory_ratio:-?}"
+elif [[ -n $memory_total_gib ]]; then
+    printf ' RAM: %s GiB\n' "$memory_total_gib"
+else
+    printf ' RAM: unavailable\n'
 fi
 
-echo " $(hostname)"
-echo " CPU: ($physical_cpu_count) (${core_count}C$(($core_count * $threads_per_core))T) $cpu_name"
-echo " RAM: $current_memory_usage_gib / $memory_size_gib GiB ($memory_usage_ratio%)"
-echo "󱐋 GPU: $gpu_names" | awk '{printf $1 " " $2 " (" $3 ") "; for (i = 4; i <= NF; i++) printf "%s", $i (i == NF ? "" : " "); print ""}'
-
+# One line per distinct GPU model. The previous single-line awk reformatter
+# mangled every model after the first on heterogeneous hosts.
+if command -v nvidia-smi > /dev/null 2>&1; then
+    gpu_lines=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | sort | uniq -c)
+    if [[ -n $gpu_lines ]]; then
+        while read -r count name; do
+            [[ -n $name ]] || continue
+            printf '󱐋 GPU: (%s) %s\n' "$count" "$name"
+        done <<< "$gpu_lines"
+    else
+        printf '󱐋 GPU: none detected\n'
+    fi
+else
+    printf '󱐋 GPU: none detected\n'
+fi

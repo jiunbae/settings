@@ -71,3 +71,7 @@ while IFS= read -r -d '' f; do
 done < <(find "$ROOT" -type f -iname '*.mp4' -print0)
 
 echo "완료: 변환 ${converted}개, 건너뜀 ${skipped}개, 에러 ${errors}개"
+
+# 변환이 하나라도 실패하면 종료 코드로 알린다.
+# 그렇지 않으면 `mp4-to-wav.sh dir && start-training` 이 WAV 없이 진행된다.
+(( errors == 0 ))

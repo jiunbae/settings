@@ -400,7 +400,13 @@ exec_node() {
     if $INTERACTIVE && ! $RAW; then
         out=$(printf '%s\n' "$out" | filter_noise | squeeze_blanks)
     fi
-    out=$(printf '%s\n' "$out" | trim_blank_edges)
+    # $(...) 가 이미 뒤쪽 개행을 걷어내므로 대개 트림할 것이 없다.
+    # 그 경우 디렉토리마다 awk 를 fork 하지 않고 넘어간다.
+    if [[ -n $out && $out != [[:space:]]* && $out != *[[:space:]] ]]; then
+        :
+    else
+        out=$(printf '%s\n' "$out" | trim_blank_edges)
+    fi
 
     printf '%s' "$out" > "$WORK/$i.out"
     printf '%s' "$rc"  > "$WORK/$i.rc"
