@@ -1,0 +1,35 @@
+#!/bin/bash
+
+source_dir="$1"
+target_dir="$2"
+absolute=false
+
+if [ "$3" == "--absolute" ]; then
+  absolute=true
+fi
+
+if [ -z "$source_dir" ] || [ -z "$target_dir" ]; then
+  echo "Usage: $0 /path/to/source/directory /path/to/target/directory [--absolute]"
+  exit 1
+fi
+
+mkdir -p "$target_dir"
+
+absolute_source_dir=$(realpath "$source_dir")
+absolute_target_dir=$(realpath "$target_dir")
+
+for file in "$source_dir"/*; do
+  filename=$(basename "$file")
+
+  if $absolute; then
+    link_target=$(realpath "$file")
+  else
+    relative_source=$(realpath --relative-to="$absolute_target_dir" "$file")
+    link_target="$relative_source"
+  fi
+
+  ln -s "$link_target" "$target_dir/$filename"
+done
+
+echo "Symbolic links created in $target_dir"
+

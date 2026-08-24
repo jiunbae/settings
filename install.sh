@@ -43,6 +43,7 @@ source "$SCRIPT_DIR/modules/ghostty.sh"
 source "$SCRIPT_DIR/modules/codex.sh"
 source "$SCRIPT_DIR/modules/claude.sh"
 source "$SCRIPT_DIR/modules/cship.sh"
+source "$SCRIPT_DIR/modules/scripts.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -65,6 +66,7 @@ get_component_name() {
         codex)       echo "Codex CLI/App configuration" ;;
         claude)      echo "Claude Code configuration" ;;
         cship)       echo "cship (Claude Code statusline)" ;;
+        scripts)     echo "Personal CLI scripts" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -157,6 +159,9 @@ main() {
                 ;;
             cship)
                 install_cship
+                ;;
+            scripts)
+                install_scripts
                 ;;
             *)
                 progress_info "Unknown component: $component"

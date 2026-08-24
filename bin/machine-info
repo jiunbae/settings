@@ -1,0 +1,20 @@
+#!/bin/bash
+
+cpu_name=$(lscpu | awk -F: '/Model name/ {print $2}' | sed 's/^[ \t]*//')
+physical_cpu_count=$(lscpu | awk '/^Socket\(s\):/ {print $2}')
+core_count=$(lscpu | awk '/^Core\(s\) per socket:/ {print $4}')
+threads_per_core=$(lscpu | awk '/^Thread\(s\) per core:/ {print $4}')
+memory_size_gib=$(free -k | awk '/Mem:/ {printf "%.2f", $2/1024/1024}')
+current_memory_usage_gib=$(free -k | awk '/Mem:/ {printf "%.2f", $3/1024/1024}')
+memory_usage_ratio=$(free -k | awk '/Mem:/ {printf "%.2f", $3/$2*100}')
+
+gpu_names=""
+if command -v nvidia-smi &> /dev/null; then
+  gpu_names=$(nvidia-smi --query-gpu=name --format=csv,noheader | sort | uniq -c)
+fi
+
+echo " $(hostname)"
+echo " CPU: ($physical_cpu_count) (${core_count}C$(($core_count * $threads_per_core))T) $cpu_name"
+echo " RAM: $current_memory_usage_gib / $memory_size_gib GiB ($memory_usage_ratio%)"
+echo "󱐋 GPU: $gpu_names" | awk '{printf $1 " " $2 " (" $3 ") "; for (i = 4; i <= NF; i++) printf "%s", $i (i == NF ? "" : " "); print ""}'
+
