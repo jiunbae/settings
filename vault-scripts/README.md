@@ -216,8 +216,8 @@ VAULT_LOG_DIR=~/Library/Logs/vault-scripts  # 기본값
 `docs-push`는 별도로 `~/.envs/docs-publish.env`에서 읽습니다:
 
 ```bash
-DOCS_HOST=192.168.32.70          # 기본값
-DOCS_USER=root                   # 기본값
+DOCS_HOST=<docs 서버 주소>       # 필수
+DOCS_USER=<ssh 계정>             # 필수
 DOCS_ROOT=/var/www/docs          # 기본값
 DOCS_URL=https://docs.jiun.dev   # 기본값
 ```

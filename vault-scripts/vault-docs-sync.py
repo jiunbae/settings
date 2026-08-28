@@ -64,14 +64,22 @@ def _load_env_files() -> None:
 
 _load_env_files()
 
-DOCS_HOST = os.environ.get("DOCS_HOST", "192.168.32.70")
-DOCS_USER = os.environ.get("DOCS_USER", "root")
+DOCS_HOST = os.environ.get("DOCS_HOST", "")
+DOCS_USER = os.environ.get("DOCS_USER", "")
 DOCS_ROOT = os.environ.get("DOCS_ROOT", "/var/www/docs")
 DOCS_URL = os.environ.get("DOCS_URL", "https://docs.jiun.dev")
 
 
 def _validate_config() -> None:
     """설정값 검증"""
+    missing = [k for k, v in (("DOCS_HOST", DOCS_HOST), ("DOCS_USER", DOCS_USER)) if not v]
+    if missing:
+        print(
+            f"Error: set {', '.join(missing)} in ~/.envs/docs-publish.env "
+            "(see vault-scripts/docs-publish.env.example)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     if not _SAFE_PATH_RE.match(DOCS_ROOT):
         print(f"Error: DOCS_ROOT contains invalid characters: {DOCS_ROOT}", file=sys.stderr)
         sys.exit(1)

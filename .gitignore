@@ -76,3 +76,10 @@ worker/.wrangler/
 # from a commit until a restore rehearsal caught it. It is generated state we
 # deliberately track: without it install.sh cannot rebuild the 46-skill farm.
 !configs/claude/skills.manifest
+
+# Any Claude session whose project root is $HOME writes its memories straight
+# into configs/claude/memory (that path is the symlink target), so files land
+# here without review. This repo is public. The memories committed deliberately
+# stay tracked — .gitignore does not apply to tracked files — while anything new
+# needs `git add -f`, which is the review step.
+configs/claude/memory/*.md

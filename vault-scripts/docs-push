@@ -10,8 +10,13 @@ set -euo pipefail
 
 # Load config from env file, with defaults
 [ -f ~/.envs/docs-publish.env ] && source ~/.envs/docs-publish.env
-DOCS_HOST="${DOCS_HOST:-192.168.32.70}"
-DOCS_USER="${DOCS_USER:-root}"
+DOCS_HOST="${DOCS_HOST:-}"
+DOCS_USER="${DOCS_USER:-}"
+if [ -z "$DOCS_HOST" ] || [ -z "$DOCS_USER" ]; then
+    echo "docs-push: set DOCS_HOST and DOCS_USER in ~/.envs/docs-publish.env" >&2
+    echo "  see vault-scripts/docs-publish.env.example" >&2
+    exit 2
+fi
 DOCS_ROOT="${DOCS_ROOT:-/var/www/docs}"
 DOCS_URL="${DOCS_URL:-https://docs.jiun.dev}"
 
