@@ -1,0 +1,573 @@
+#!/usr/bin/env bash
+# subd - Subdirectory Command Runner
+# 서브디렉토리를 순회하며 명령을 실행하고 tree 형태로 결과 출력
+#
+# v2 설계 원칙
+#   - 기본은 non-interactive: 셸을 거치지 않고 argv 를 그대로 exec (빠르고 인용 안전)
+#   - 출력은 절대 조용히 버리지 않는다 (필터는 -i 모드에서만, --raw 로 해제)
+#   - 하위 명령의 실패는 subd 의 종료 코드로 전파된다
+
+set -uo pipefail
+
+readonly SUBD_VERSION=2.0.0
+
+# ==============================================================================
+# 기본값
+# ==============================================================================
+DEPTH=1
+CONTINUOUS=false
+SHOW_HIDDEN=false
+ONLY_GIT=false
+PRUNE=false
+INTERACTIVE=false
+RAW=false
+DRY_RUN=false
+VERBOSE=false
+JOBS=1
+TIMEOUT=0
+COLOR_MODE=auto
+SHELL_MODE=""
+SHELL_MODE_SET=false
+USE_DEFAULT_EXCLUDES=true
+
+declare -a COMMAND=()
+declare -a EXCLUDES=()
+
+# 숨김 디렉토리는 기본적으로 제외되므로, 아래 목록은 주로 -a 와 함께 의미가 있다.
+declare -ra DEFAULT_EXCLUDES=(
+    node_modules venv .venv __pycache__ .mypy_cache .pytest_cache .ruff_cache
+    dist build target .next .nuxt .turbo vendor .terraform .gradle
+)
+
+# -i (interactive) 모드에서만 적용되는 프롬프트 플러그인 노이즈 패턴.
+# 앵커를 걸어 사용자 출력(예: "[2026-08-24 ERROR] db failed")을 삼키지 않게 한다.
+# 매칭은 ANSI 이스케이프를 제거한 사본에 대해 수행한다 (p10k 가 노이즈를 색칠해서 보냄).
+readonly NOISE_RE='^[(]eval[)]:[0-9]+: can'"'"'t change option: |^[(]anon[)]:setopt:[0-9]+: can'"'"'t change option: |^[[]ERROR[]]: gitstatus |^[[:space:]]*Add the following parameter to |^[[:space:]]*GITSTATUS_LOG_LEVEL=DEBUG[[:space:]]*$|^[[:space:]]*Restart Zsh to retry |^[[:space:]]*exec zsh[[:space:]]*$'
+
+# `wait -n` 은 bash 4.3+ 에서만 쓸 수 있다. 없으면 배치 단위로 대기한다.
+if (( BASH_VERSINFO[0] > 4 || ( BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 3 ) )); then
+    HAVE_WAIT_N=true
+else
+    HAVE_WAIT_N=false
+fi
+
+C_DIR=""; C_ERR=""; C_DIM=""; C_RST=""
+WORK=""
+PRE_EXECUTED=false
+NODE_N=0
+declare -a NODE_PATH=() NODE_KIDS=() NODE_EXEC=() NODE_KEEP=()
+
+# ==============================================================================
+# 유틸
+# ==============================================================================
+die() { printf 'subd: %s\n' "$1" >&2; exit "${2:-2}"; }
+is_pint() { [[ ${1-} =~ ^[1-9][0-9]*$ ]]; }
+
+need_val() {
+    # $1=플래그 이름, $2=값(없을 수 있음)
+    [[ ${2-} != "" && ${2-} != -* ]] || die "$1 requires a value"
+}
+
+default_jobs() {
+    local n
+    n=$( { nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null; } | head -1 )
+    is_pint "${n:-}" || n=2
+    # git 작업은 대개 I/O·네트워크 바운드라 코어 수보다 높게 잡는다.
+    n=$(( n * 4 ))
+    (( n < 4 )) && n=4
+    (( n > 16 )) && n=16
+    printf '%s' "$n"
+}
+
+setup_color() {
+    local on=false
+    case $COLOR_MODE in
+        always) on=true ;;
+        never)  on=false ;;
+        auto)   [[ -t 1 && -z ${NO_COLOR-} ]] && on=true ;;
+        *)      die "--color must be one of: auto, always, never" ;;
+    esac
+    if $on; then
+        C_DIR=$'\033[1;34m'; C_ERR=$'\033[0;31m'; C_DIM=$'\033[2m'; C_RST=$'\033[0m'
+    fi
+}
+
+cleanup() {
+    [[ -n $WORK && -d $WORK ]] && rm -rf -- "$WORK"
+    return 0
+}
+
+on_interrupt() {
+    local pids
+    pids=$(jobs -p 2>/dev/null)
+    # shellcheck disable=SC2086  # 여러 PID 를 개별 인자로 넘기기 위한 의도적 분리
+    [[ -n $pids ]] && kill $pids 2>/dev/null
+    cleanup
+    exit 130
+}
+
+show_help() {
+    cat << 'EOF'
+subd - Subdirectory Command Runner
+
+Usage:
+  subd [OPTIONS] -- COMMAND [ARGS...]
+  subd [OPTIONS] -s 'SHELL COMMAND'
+
+순회 옵션:
+  -d, --depth N        순회 깊이 (기본값: 1)
+  -c, --continuous     1부터 depth 까지 모든 레벨에서 명령 실행
+  -a, --hidden         숨김 디렉토리 포함
+      --only-git       .git 이 있는 디렉토리에서만 실행 (--prune 자동 적용)
+  -x, --exclude PAT    디렉토리 제외 (basename 또는 경로 glob, 반복 지정 가능)
+      --no-default-exclude
+                       기본 제외 목록(node_modules, dist, target ...) 비활성화
+      --prune          실행 대상이 없는 가지는 트리에서 숨김
+
+실행 옵션:
+  -j, --jobs N         병렬 실행 (동시 N개)
+      --parallel [N]   -j 와 동일. N 생략 시 자동 결정 (코어수x4, 4~16)
+      --timeout N      디렉토리별 제한 시간 (초)
+  -s, --shell 'CMD'    파이프/&&/리다이렉션 등 셸 문법이 필요할 때 사용
+  -i, --interactive    셸 alias/function 이 필요할 때만 사용 (느림)
+      --raw            -i 모드의 프롬프트 노이즈 필터를 끔
+      --dry-run        실행 없이 대상 디렉토리만 표시
+
+출력 옵션:
+      --color WHEN     auto(기본) | always | never
+  -v, --verbose        출력 없는 성공도 표시하고 마지막에 요약 출력
+  -h, --help           도움말
+  -V, --version        버전
+
+종료 코드:
+  0 전부 성공 / 1 하나 이상 실패 / 2 사용법 오류 / 3 대상 없음 / 130 중단
+
+명령에 주입되는 환경변수:
+  SUBD_DIR   현재 디렉토리 절대경로
+  SUBD_NAME  현재 디렉토리 이름 (basename)
+  SUBD_REL   시작 지점 기준 상대경로
+
+Examples:
+  subd -- git status                    # depth 1 에서 git status
+  subd --only-git --parallel -- git status --short
+  subd --only-git -j 8 -- git pull      # 26개 repo 병렬 pull
+  subd --only-git -s 'git pull && git gone'   # 디렉토리마다 두 명령 모두 실행
+  subd -d 2 --prune -- npm test         # depth 2 에서만, 빈 가지 숨김
+  subd --dry-run --only-git -- git push # 대상 확인 후 실행
+  subd -- printf '[%s]\n' 'hello world' # 인용이 그대로 보존됨
+
+주의: `subd -- git pull && git gone` 의 && 는 subd 가 아니라 바깥 셸이 해석합니다.
+      디렉토리마다 두 명령을 모두 실행하려면 -s 를 쓰세요.
+EOF
+}
+
+# ==============================================================================
+# 옵션 파싱
+# ==============================================================================
+parse_options() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -d|--depth)
+                need_val "$1" "${2-}"
+                is_pint "$2" || die "--depth must be a positive integer (got '$2')"
+                DEPTH=$2; shift 2 ;;
+            -c|--continuous) CONTINUOUS=true; shift ;;
+            -a|--hidden)     SHOW_HIDDEN=true; shift ;;
+            --only-git)      ONLY_GIT=true; PRUNE=true; shift ;;
+            --prune)         PRUNE=true; shift ;;
+            -x|--exclude)
+                need_val "$1" "${2-}"
+                EXCLUDES+=("$2"); shift 2 ;;
+            --no-default-exclude) USE_DEFAULT_EXCLUDES=false; shift ;;
+            -j|--jobs)
+                need_val "$1" "${2-}"
+                is_pint "$2" || die "$1 must be a positive integer (got '$2')"
+                JOBS=$2; shift 2 ;;
+            --parallel)
+                if is_pint "${2-}"; then JOBS=$2; shift 2
+                else JOBS=$(default_jobs); shift; fi ;;
+            --timeout)
+                need_val "$1" "${2-}"
+                is_pint "$2" || die "--timeout must be a positive integer (got '$2')"
+                TIMEOUT=$2; shift 2 ;;
+            -s|--shell)
+                need_val "$1" "${2-}"
+                SHELL_MODE=$2; SHELL_MODE_SET=true; shift 2 ;;
+            -i|--interactive) INTERACTIVE=true; shift ;;
+            --raw)            RAW=true; shift ;;
+            --dry-run)        DRY_RUN=true; shift ;;
+            -v|--verbose)     VERBOSE=true; shift ;;
+            --color)
+                need_val "$1" "${2-}"
+                COLOR_MODE=$2; shift 2 ;;
+            --color=*)        COLOR_MODE=${1#*=}; shift ;;
+            -h|--help)        show_help; exit 0 ;;
+            -V|--version)     printf 'subd %s\n' "$SUBD_VERSION"; exit 0 ;;
+            --)
+                shift; COMMAND=("$@"); return 0 ;;
+            -*)
+                printf 'subd: unknown option %s\n' "$1" >&2
+                printf "Use 'subd --help' for usage information\n" >&2
+                exit 2 ;;
+            *)
+                printf 'subd: use -- to separate options from the command\n' >&2
+                printf '  subd -d 2 -- git status\n' >&2
+                printf "  subd -s 'git pull && git gone'\n" >&2
+                exit 2 ;;
+        esac
+    done
+    return 0
+}
+
+validate_options() {
+    if $SHELL_MODE_SET && (( ${#COMMAND[@]} > 0 )); then
+        die "-s/--shell and '-- COMMAND' are mutually exclusive"
+    fi
+    if ! $SHELL_MODE_SET && (( ${#COMMAND[@]} == 0 )); then
+        printf 'subd: no command specified\n' >&2
+        printf '  subd -- git status\n' >&2
+        exit 2
+    fi
+    if $RAW && ! $INTERACTIVE; then
+        printf 'subd: --raw has no effect without -i (no filtering is applied by default)\n' >&2
+    fi
+    if (( TIMEOUT > 0 )) && ! command -v timeout > /dev/null 2>&1; then
+        die "--timeout requires the 'timeout' command (coreutils)"
+    fi
+}
+
+# ==============================================================================
+# 디렉토리 수집
+# ==============================================================================
+is_excluded() {
+    local path=$1 base=${1##*/} pat
+    for pat in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
+        # shellcheck disable=SC2053  # glob 매칭이 의도한 동작
+        [[ $base == $pat ]] && return 0
+        # shellcheck disable=SC2053
+        [[ $path == $pat ]] && return 0
+    done
+    return 1
+}
+
+should_execute_at() {
+    local depth=$1
+    if $CONTINUOUS; then
+        (( depth >= 1 && depth <= DEPTH ))
+    else
+        (( depth == DEPTH ))
+    fi
+}
+
+collect() {
+    # $1=부모 경로, $2=부모 인덱스, $3=자식 깊이
+    local parent=$1 pidx=$2 depth=$3
+    (( depth > DEPTH )) && return 0
+
+    local -a find_opts=(-mindepth 1 -maxdepth 1 -type d)
+    $SHOW_HIDDEN || find_opts+=(-not -name '.*')
+
+    local -a kids=()
+    local child
+    while IFS= read -r -d '' child; do
+        is_excluded "$child" && continue
+        kids+=("$child")
+    done < <(find "$parent" "${find_opts[@]}" -print0 2>/dev/null | sort -z)  # 로케일 collation: ls/tree 와 같은 순서
+
+    local idx ex
+    for child in ${kids[@]+"${kids[@]}"}; do
+        idx=$NODE_N; NODE_N=$((NODE_N + 1))
+        NODE_PATH[idx]=$child
+        NODE_KIDS[idx]=""
+        NODE_KIDS[pidx]+=" $idx"
+
+        ex=0
+        if should_execute_at "$depth"; then ex=1; fi
+        if (( ex )) && $ONLY_GIT && [[ ! -e $child/.git ]]; then ex=0; fi
+        NODE_EXEC[idx]=$ex
+
+        collect "$child" "$idx" $((depth + 1))
+    done
+    return 0
+}
+
+# 실행 대상이 자기 자신 또는 후손에 있는 노드만 keep
+compute_keep() {
+    local i c k
+    for (( i = NODE_N - 1; i >= 0; i-- )); do
+        k=${NODE_EXEC[i]}
+        if (( ! k )); then
+            for c in ${NODE_KIDS[i]}; do
+                if (( NODE_KEEP[c] )); then k=1; break; fi
+            done
+        fi
+        NODE_KEEP[i]=$k
+    done
+}
+
+is_visible() {
+    local i=$1
+    $PRUNE || return 0
+    (( NODE_KEEP[i] ))
+}
+
+# ==============================================================================
+# 실행
+# ==============================================================================
+quote_argv() {
+    local out='' a
+    for a in "$@"; do
+        out+="$(printf '%q' "$a") "
+    done
+    printf '%s' "$out"
+}
+
+run_in_dir() {
+    # $1=디렉토리. stdout 에 (stdout+stderr) 병합 출력, 반환값은 명령의 종료 코드.
+    local dir=$1
+    local -a pre=()
+    (( TIMEOUT > 0 )) && pre=(timeout --foreground "${TIMEOUT}s")
+
+    (
+        cd -- "$dir" || exit 126
+        SUBD_DIR=$PWD
+        SUBD_NAME=${dir##*/}
+        SUBD_REL=${dir#./}
+        export SUBD_DIR SUBD_NAME SUBD_REL
+
+        if $INTERACTIVE; then
+            # alias/function 해석을 위해 셸 재파싱이 필요하다.
+            # %q 로 인용하므로 재파싱이 무손실이고, 단순 단어는 인용되지 않아
+            # 첫 단어의 alias 확장이 그대로 동작한다.
+            local cmd_str
+            if $SHELL_MODE_SET; then cmd_str=$SHELL_MODE
+            else cmd_str=$(quote_argv "${COMMAND[@]}"); fi
+            exec ${pre[@]+"${pre[@]}"} "${SHELL:-/bin/bash}" -i -c "$cmd_str"
+        elif $SHELL_MODE_SET; then
+            exec ${pre[@]+"${pre[@]}"} "${SHELL:-/bin/bash}" -c "$SHELL_MODE"
+        else
+            # 셸을 거치지 않는 직접 exec — 가장 빠르고 인용이 완전히 보존된다.
+            exec ${pre[@]+"${pre[@]}"} "${COMMAND[@]}"
+        fi
+    ) < /dev/null 2>&1
+}
+
+# -i 모드 노이즈 제거. ANSI 를 지운 사본으로 매칭하고, 출력은 원본 그대로 유지한다.
+filter_noise() {
+    awk -v re="$NOISE_RE" '
+        {
+            clean = $0
+            gsub(/\033\[[0-9;]*[A-Za-z]/, "", clean)
+            if (clean ~ re) next
+            print
+        }
+    '
+}
+
+# 노이즈 제거 후 남는 연속 빈 줄을 한 줄로 압축 (-i 모드에서만 사용)
+squeeze_blanks() {
+    awk '
+        /^[[:space:]]*$/ { pending = 1; next }
+        { if (pending && seen) print ""; pending = 0; seen = 1; print }
+    '
+}
+
+# 앞뒤 빈 줄만 제거하고 내부 빈 줄은 보존 (git log/diff 포매팅 유지)
+trim_blank_edges() {
+    awk '
+        { L[n++] = $0 }
+        END {
+            s = 0; e = n - 1
+            while (s < n  && L[s] ~ /^[[:space:]]*$/) s++
+            while (e >= s && L[e] ~ /^[[:space:]]*$/) e--
+            for (i = s; i <= e; i++) print L[i]
+        }
+    '
+}
+
+exec_node() {
+    local i=$1 out rc
+
+    if $DRY_RUN; then
+        : > "$WORK/$i.out"
+        printf '0' > "$WORK/$i.rc"
+        return 0
+    fi
+
+    out=$(run_in_dir "${NODE_PATH[i]}")
+    rc=$?
+
+    if $INTERACTIVE && ! $RAW; then
+        out=$(printf '%s\n' "$out" | filter_noise | squeeze_blanks)
+    fi
+    # $(...) 가 이미 뒤쪽 개행을 걷어내므로 대개 트림할 것이 없다.
+    # 그 경우 디렉토리마다 awk 를 fork 하지 않고 넘어간다.
+    if [[ -n $out && $out != [[:space:]]* && $out != *[[:space:]] ]]; then
+        :
+    else
+        out=$(printf '%s\n' "$out" | trim_blank_edges)
+    fi
+
+    printf '%s' "$out" > "$WORK/$i.out"
+    printf '%s' "$rc"  > "$WORK/$i.rc"
+    return 0
+}
+
+run_parallel() {
+    local -a targets=()
+    local i
+    for (( i = 1; i < NODE_N; i++ )); do
+        (( NODE_EXEC[i] )) || continue
+        is_visible "$i" || continue
+        targets+=("$i")
+    done
+    (( ${#targets[@]} == 0 )) && return 0
+
+    local running=0
+    for i in ${targets[@]+"${targets[@]}"}; do
+        if $HAVE_WAIT_N; then
+            # 한 슬롯이 비는 대로 다음 작업을 넣는다 (bash 4.3+)
+            while (( running >= JOBS )); do
+                wait -n 2>/dev/null
+                running=$((running - 1))
+            done
+        elif (( running >= JOBS )); then
+            # 구버전 bash: 슬롯 단위로 기다릴 수 없어 한 배치를 통째로 비운다
+            wait
+            running=0
+        fi
+        exec_node "$i" &
+        running=$((running + 1))
+    done
+    wait
+    return 0
+}
+
+# ==============================================================================
+# 출력
+# ==============================================================================
+emit_output() {
+    local i=$1 pfx=$2 out rc line
+
+    if $DRY_RUN; then
+        printf '%s%s(dry-run)%s\n' "$pfx" "$C_DIM" "$C_RST"
+        return 0
+    fi
+
+    out=$(<"$WORK/$i.out")
+    rc=$(<"$WORK/$i.rc")
+
+    if [[ -n $out ]]; then
+        while IFS= read -r line || [[ -n $line ]]; do
+            if (( rc != 0 )); then
+                printf '%s%s%s%s\n' "$pfx" "$C_ERR" "$line" "$C_RST"
+            else
+                printf '%s%s\n' "$pfx" "$line"
+            fi
+        done <<< "$out"
+    elif (( rc != 0 )); then
+        printf '%s%s(exit %s, no output)%s\n' "$pfx" "$C_ERR" "$rc" "$C_RST"
+    elif $VERBOSE; then
+        printf '%s%s(ok, no output)%s\n' "$pfx" "$C_DIM" "$C_RST"
+    fi
+    return 0
+}
+
+render() {
+    # $1=노드 인덱스, $2=프리픽스
+    local idx=$1 pfx=$2
+    local -a kids=() shown=()
+    # shellcheck disable=SC2206  # 인덱스는 정수라 word splitting 이 의도된 동작
+    kids=( ${NODE_KIDS[idx]} )
+
+    local c
+    for c in ${kids[@]+"${kids[@]}"}; do
+        is_visible "$c" || continue
+        shown+=("$c")
+    done
+
+    local n=${#shown[@]} i=0 last conn cpfx npfx
+    for c in ${shown[@]+"${shown[@]}"}; do
+        i=$((i + 1))
+        last=0; (( i == n )) && last=1
+
+        if (( last )); then
+            conn='└── '; cpfx="$pfx    "; npfx="$pfx    "
+        else
+            conn='├── '; cpfx="$pfx│   "; npfx="$pfx│   "
+        fi
+
+        printf '%s%s%s%s/%s\n' "$pfx" "$conn" "$C_DIR" "${NODE_PATH[c]##*/}" "$C_RST"
+
+        if (( NODE_EXEC[c] )); then
+            $PRE_EXECUTED || exec_node "$c"
+            emit_output "$c" "$cpfx"
+        fi
+
+        render "$c" "$npfx"
+
+        if (( ! last )) && (( NODE_EXEC[c] )); then
+            printf '%s│\n' "$pfx"
+        fi
+    done
+    return 0
+}
+
+summarize() {
+    local i rc total=0 failed=0
+    for (( i = 1; i < NODE_N; i++ )); do
+        (( NODE_EXEC[i] )) || continue
+        is_visible "$i" || continue
+        [[ -f $WORK/$i.rc ]] || continue
+        total=$((total + 1))
+        rc=$(<"$WORK/$i.rc")
+        (( rc != 0 )) && failed=$((failed + 1))
+    done
+
+    if (( total == 0 )); then
+        printf 'subd: no matching directories\n' >&2
+        return 3
+    fi
+    if $DRY_RUN; then
+        printf 'subd: %d dir(s) would run (dry-run)\n' "$total" >&2
+        return 0
+    fi
+    if (( failed > 0 )) || $VERBOSE; then
+        printf 'subd: %d dir(s) run, %d failed\n' "$total" "$failed" >&2
+    fi
+    (( failed == 0 ))
+}
+
+# ==============================================================================
+# 메인
+# ==============================================================================
+main() {
+    parse_options "$@"
+    validate_options
+    setup_color
+
+    if $USE_DEFAULT_EXCLUDES; then
+        EXCLUDES+=("${DEFAULT_EXCLUDES[@]}")
+    fi
+
+    trap cleanup EXIT
+    trap on_interrupt INT TERM
+    WORK=$(mktemp -d "${TMPDIR:-/tmp}/subd.XXXXXXXX") || die "cannot create temp dir" 1
+
+    NODE_PATH[0]="."; NODE_KIDS[0]=""; NODE_EXEC[0]=0
+    NODE_N=1
+    collect "." 0 1
+    compute_keep
+
+    if (( JOBS > 1 )); then
+        run_parallel
+        PRE_EXECUTED=true
+    fi
+
+    printf '.\n'
+    render 0 ""
+
+    summarize
+}
+
+main "$@"

@@ -89,6 +89,13 @@ while IFS= read -r file; do
     embed_file "$file"
 done < <(find "$SCRIPT_DIR/configs" -type f | LC_ALL=C sort)
 
+# Scripts that the `scripts` component links onto PATH.
+if [[ -d "$SCRIPT_DIR/bin" ]]; then
+    while IFS= read -r file; do
+        embed_file "$file"
+    done < <(find "$SCRIPT_DIR/bin" -type f | LC_ALL=C sort)
+fi
+
 # Runtime/capture helpers used by the AI-agent modules.
 for helper_dir in "$SCRIPT_DIR/scripts/claude" "$SCRIPT_DIR/scripts/codex"; do
     [[ -d "$helper_dir" ]] || continue

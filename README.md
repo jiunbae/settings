@@ -108,6 +108,7 @@ Components:
   codex         Codex CLI/App config, hooks, and notify chain
   claude        Claude Code settings, hooks, skill index, memory, MCP
   cship         cship + Starship (fast Claude Code statusline)
+  scripts       Personal CLI scripts linked into ~/.local/bin
 ```
 
 ## Components
@@ -369,7 +370,10 @@ settings/
 │   ├── hammerspoon.sh     #   Hammerspoon (macOS-only)
 │   ├── codex.sh           #   Codex CLI/App config
 │   ├── claude.sh          #   Claude Code settings, skills and memory
-│   └── cship.sh           #   cship + Starship statusline
+│   ├── cship.sh           #   cship + Starship statusline
+│   └── scripts.sh         #   Personal CLI scripts → ~/.local/bin
+├── bin/                    # Personal CLI scripts (linked onto PATH)
+│   └── subd               #   Run a command across subdirectories
 ├── worker/                 # Cloudflare Worker (settings.jiun.dev)
 │   ├── index.js           #   Proxy raw GitHub content
 │   └── wrangler.toml      #   Wrangler configuration

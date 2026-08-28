@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Symlink every entry of a source directory into a target directory.
+set -uo pipefail
+
+usage() {
+    echo "Usage: $(basename "$0") <source-dir> <target-dir> [--absolute]" >&2
+}
+
+source_dir="${1-}"
+target_dir="${2-}"
+mode="${3-}"
+absolute=false
+
+if [[ -z "$source_dir" || -z "$target_dir" ]]; then
+    usage
+    exit 2
+fi
+
+case "$mode" in
+    --absolute) absolute=true ;;
+    "")         ;;
+    *)          echo "Unknown option: $mode" >&2; usage; exit 2 ;;
+esac
+
+if [[ ! -d "$source_dir" ]]; then
+    echo "Error: not a directory: $source_dir" >&2
+    exit 2
+fi
+
+# `realpath --relative-to` is GNU coreutils only; macOS has no realpath at all
+# in the base system, and its BSD build lacks the flag. Compute the relative
+# path here so both platforms behave the same.
+relpath() {
+    local target=$1 base=$2 up=""
+    while [[ "$target/" != "$base"/* ]]; do
+        base=$(dirname "$base")
+        up="../$up"
+        [[ "$base" == "/" ]] && break
+    done
+    local rest=${target#"$base"}
+    rest=${rest#/}
+    printf '%s' "${up}${rest}"
+}
+
+abspath() {
+    local dir base
+    dir=$(dirname "$1")
+    base=$(basename "$1")
+    printf '%s/%s' "$(cd "$dir" && pwd -P)" "$base"
+}
+
+mkdir -p "$target_dir"
+
+absolute_target_dir=$(cd "$target_dir" && pwd -P)
+
+created=0
+failed=0
+shopt -s nullglob
+
+for file in "$source_dir"/*; do
+    filename=$(basename "$file")
+    absolute_file=$(abspath "$file")
+
+    if $absolute; then
+        link_target=$absolute_file
+    else
+        link_target=$(relpath "$absolute_file" "$absolute_target_dir")
+    fi
+
+    if ln -s "$link_target" "$target_dir/$filename" 2>/dev/null; then
+        created=$((created + 1))
+    else
+        echo "Error: could not link $filename (already exists?)" >&2
+        failed=$((failed + 1))
+    fi
+done
+
+shopt -u nullglob
+
+if (( created == 0 && failed == 0 )); then
+    echo "No entries in $source_dir; nothing to link."
+    exit 0
+fi
+
+echo "Created $created symbolic link(s) in $target_dir"
+
+if (( failed > 0 )); then
+    echo "$failed entry/entries could not be linked." >&2
+    exit 1
+fi
