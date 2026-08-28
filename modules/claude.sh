@@ -275,7 +275,7 @@ install_claude_skills() {
 
     if (( missing > 0 )); then
         log_warn "$missing skill(s) missing from their source repo — clone or update:"
-        log_warn "  $HOME/workspace/agents  (github.com/rtzr/agents)"
+        log_warn "  $HOME/workspace/agents  (private shared-skill repo)"
         log_warn "  $AGENT_SKILLS_REPO  (github.com/jiunbae/agent-skills)"
     fi
 

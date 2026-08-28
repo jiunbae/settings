@@ -28,23 +28,20 @@ source "${ZINIT_HOME}/zinit.zsh"
 zinit ice depth=1
 zinit light romkatv/powerlevel10k
 
+typeset -U path fpath PATH
+
 # Completion settings (case-insensitive, partial matching)
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
 zstyle ':completion:*' menu select
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 
+[[ -d ~/.grok/completions/zsh ]] && fpath=(~/.grok/completions/zsh $fpath)
+
 # Completions - cached compinit (regenerate once per day)
 autoload -Uz compinit
 _zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/.zcompdump"
-# Get file modification day-of-year (macOS: stat -f, Linux: stat -c)
-if [[ -f "$_zcompdump" ]]; then
-  if [[ "$OSTYPE" == darwin* ]]; then
-    _zcompdump_day=$(stat -f '%Sm' -t '%j' "$_zcompdump" 2>/dev/null)
-  else
-    _zcompdump_day=$(date -d "$(stat -c '%y' "$_zcompdump" 2>/dev/null | cut -d' ' -f1)" +'%j' 2>/dev/null)
-  fi
-fi
-if [[ -f "$_zcompdump" && $(date +'%j') == "$_zcompdump_day" ]]; then
+# Regenerate at most once a day (glob qualifier: plain file, mtime < 24h)
+if [[ -n ${_zcompdump}(#qN.mh-24) ]]; then
   compinit -C -d "$_zcompdump"
 else
   compinit -i -d "$_zcompdump"
@@ -59,7 +56,7 @@ zinit wait lucid blockf for \
     OMZP::tmux
 
 # fzf-tab must load after compinit, use atload to replay compdefs
-zinit wait lucid atload"zicompinit; zicdreplay" for \
+zinit wait lucid atload"zicdreplay" for \
     Aloxaf/fzf-tab
 
 # Other plugins with turbo mode (deferred loading after prompt)
@@ -207,6 +204,14 @@ alias vim="nvim"
 alias vi="nvim"
 alias vimdiff="nvim -d"
 
+# Keep exact-path Codex trust in sync with disposable workspace-agent clones.
+codex() {
+  if [[ "$PWD" == "$HOME/workspace-agent" || "$PWD" == "$HOME/workspace-agent/"* ]]; then
+    "$HOME/.local/bin/codex-workspace-trust-sync" "$PWD" || return
+  fi
+  command codex "$@"
+}
+
 alias cx="codex --yolo"
 alias c="claude --dangerously-skip-permissions"
 alias oc="opencode"
@@ -324,14 +329,7 @@ if (( $+commands[uv] )); then
   _uv_comp="${XDG_CACHE_HOME:-$HOME/.cache}/.uv-completion.zsh"
   # Check if regeneration needed (once per day)
   _uv_regen=1
-  if [[ -f "$_uv_comp" ]]; then
-    if [[ "$OSTYPE" == darwin* ]]; then
-      _uv_comp_day=$(stat -f '%Sm' -t '%j' "$_uv_comp" 2>/dev/null)
-    else
-      _uv_comp_day=$(date -d "$(stat -c '%y' "$_uv_comp" 2>/dev/null | cut -d' ' -f1)" +'%j' 2>/dev/null)
-    fi
-    [[ $(date +'%j') == "$_uv_comp_day" ]] && _uv_regen=0
-  fi
+  [[ -n ${_uv_comp}(#qN.mh-24) ]] && _uv_regen=0
   if (( _uv_regen )); then
     uv generate-shell-completion zsh > "$_uv_comp" 2>/dev/null
   fi
@@ -345,14 +343,7 @@ fi
 if (( $+commands[agt] )); then
   _agt_comp="${XDG_CACHE_HOME:-$HOME/.cache}/.agt-completion.zsh"
   _agt_regen=1
-  if [[ -f "$_agt_comp" ]]; then
-    if [[ "$OSTYPE" == darwin* ]]; then
-      _agt_comp_day=$(stat -f '%Sm' -t '%j' "$_agt_comp" 2>/dev/null)
-    else
-      _agt_comp_day=$(date -d "$(stat -c '%y' "$_agt_comp" 2>/dev/null | cut -d' ' -f1)" +'%j' 2>/dev/null)
-    fi
-    [[ $(date +'%j') == "$_agt_comp_day" ]] && _agt_regen=0
-  fi
+  [[ -n ${_agt_comp}(#qN.mh-24) ]] && _agt_regen=0
   if (( _agt_regen )); then
     agt completions zsh > "$_agt_comp" 2>/dev/null
   fi
@@ -423,7 +414,7 @@ bw_with_session() {
 alias bwx='bw_with_session'
 
 # pnpm
-export PNPM_HOME="$HOME/Library/pnpm"
+export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
@@ -434,9 +425,6 @@ if [[ "$(uname)" == "Darwin" ]]; then
 else
   export AWS_VAULT_BACKEND=file
 fi
-
-# bun completions
-[ -s "/home/june/.bun/_bun" ] && source "/home/june/.bun/_bun"
 
 # Warm gpg-agent cache so signing works in headless contexts
 [ -r "$HOME/.gnupg/passphrase" ] && gpg --pinentry-mode loopback --passphrase-file "$HOME/.gnupg/passphrase" --batch --sign </dev/null >/dev/null 2>&1 &!
@@ -475,8 +463,8 @@ alias cck='claude_with_kimi_env'
 # GLM (Anthropic-compatible internal proxy)
 claude_with_glm_env() {
     [[ -f "$HOME/.envs/glm.env" ]] && source "$HOME/.envs/glm.env"
-    if [[ -z "${GLM_AUTH_TOKEN}" ]]; then
-        echo "GLM_AUTH_TOKEN is not set (expected in ~/.envs/glm.env)." >&2
+    if [[ -z "${GLM_AUTH_TOKEN}" || -z "${GLM_BASE_URL}" ]]; then
+        echo "GLM_AUTH_TOKEN and GLM_BASE_URL must be set in ~/.envs/glm.env." >&2
         return 1
     fi
     local _model="${GLM_MODEL:-glm-5.2-superglm}"
@@ -484,7 +472,7 @@ claude_with_glm_env() {
     command env \
         BASH_ENV="" \
         ENV="" \
-        ANTHROPIC_BASE_URL="${GLM_BASE_URL:-https://aws-proxy.internal.xylolabs.com/}" \
+        ANTHROPIC_BASE_URL="${GLM_BASE_URL}" \
         ANTHROPIC_API_KEY="" \
         CLAUDE_CODE_OAUTH_TOKEN="" \
         ANTHROPIC_AUTH_TOKEN="${GLM_AUTH_TOKEN}" \
@@ -504,3 +492,38 @@ claude_with_glm_env() {
 unalias cglm ccm 2>/dev/null
 unfunction claude_with_motif_env 2>/dev/null
 alias ccg='claude_with_glm_env'
+
+# >>> muxa managed (muxad-shellrc) >>>
+# Auto-start muxad if it isn't running. Generated by `muxa init`.
+# Backgrounded: the daemon start does not need to block the prompt.
+if command -v muxa >/dev/null 2>&1; then
+  ( muxa daemon start --quiet >/dev/null 2>&1 & ) >/dev/null 2>&1
+fi
+# <<< muxa managed (muxad-shellrc) <<<
+
+# >>> tmux-deathwatch >>>
+# Forensic watchdog: snapshots context when the tmux server dies.
+# (core dumps impossible in this container — see script header.)
+# The script self-guards with flock, so no pgrep probe is needed here; the
+# probe cost ~110ms per shell because this box runs ~1900 processes.
+# Remove: delete ~/.local/bin/tmux-deathwatch.sh + this block, then
+#         `pkill -f tmux-deathwatch.sh`.
+if [ -x "$HOME/.local/bin/tmux-deathwatch.sh" ]; then
+  ( nohup "$HOME/.local/bin/tmux-deathwatch.sh" >/dev/null 2>&1 & ) >/dev/null 2>&1
+fi
+# <<< tmux-deathwatch <<<
+
+# ── rbenv (Ruby version manager) ──
+# `rbenv init` is not needed: p10k only tests $commands[rbenv], and the workspace
+# tooling that needs Ruby prepends the shims dir itself. Shims on PATH is enough.
+export PATH="$HOME/.rbenv/bin:$HOME/.rbenv/shims:$PATH"
+
+# >>> grok installer >>>
+# fpath for _grok is set above, before compinit, so the completion registers.
+export PATH="$HOME/.grok/bin:$PATH"
+# <<< grok installer <<<
+
+################################
+# Machine-local additions. This file is a symlink into a PUBLIC repo, so anything
+# work-specific — and anything an installer wants to append — belongs here instead.
+[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local

@@ -1,10 +1,13 @@
+# Skip Ubuntu's /etc/zsh/zshrc global compinit; .zshrc runs its own cached one.
+skip_global_compinit=1
+
 # Private-by-default permissions for files created by shells and child tools.
 umask 077
 
 . "$HOME/.cargo/env"
 
 # nvm node default on PATH for non-interactive zsh — .zshrc only loads on interactive shells,
-# so child processes (callabo-set, Claude Code Bash tool, etc.) miss pnpm/node otherwise.
+# so child processes (workspace tooling, Claude Code Bash tool, etc.) miss pnpm/node otherwise.
 # Full nvm lazy-load stays in .zshrc; this is the minimum so `which pnpm` resolves.
 export NVM_DIR="$HOME/.nvm"
 if [[ -f "$NVM_DIR/alias/default" ]]; then

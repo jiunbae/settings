@@ -74,7 +74,9 @@ worker/.wrangler/
 
 # The global ~/.gitignore excludes *.manifest, which silently dropped this file
 # from a commit until a restore rehearsal caught it. It is generated state we
-# deliberately track: without it install.sh cannot rebuild the 46-skill farm.
+# deliberately track: without it install.sh cannot rebuild the skill farm. Only
+# skills from the public agent-skills repo are listed; private ones are restored
+# from their own repo and must not be catalogued here.
 !configs/claude/skills.manifest
 
 # Any Claude session whose project root is $HOME writes its memories straight
@@ -83,3 +85,15 @@ worker/.wrangler/
 # stay tracked — .gitignore does not apply to tracked files — while anything new
 # needs `git add -f`, which is the review step.
 configs/claude/memory/*.md
+
+# skill-index SKILL.md and triggers.json are generated from the live skill tree,
+# so they name every private skill installed on the machine. build.py stays
+# tracked and rebuilds them locally; categories.json holds the private labels.
+configs/claude/skill-index/SKILL.md
+configs/claude/skill-index/triggers.json
+configs/claude/skill-index/categories.json
+
+# MEMORY.md is the memory index: one line per memory, written automatically by
+# every session. The per-memory files above are ignored, but a tracked index
+# leaks the same content through their summaries, bypassing the add -f review.
+configs/claude/memory/MEMORY.md

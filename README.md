@@ -222,7 +222,8 @@ git clone git@github.com:jiunbae/settings.git ~/personal/settings
 git clone git@github.com:jiunbae/agent-skills.git ~/personal/agent-skills
 
 # 3. shared skill/static-doc repo, then lay down ~/.agents/
-git clone git@github.com:rtzr/agents.git ~/workspace/agents
+# private shared-skill repo — substitute your own remote
+git clone <private-agents-repo> ~/workspace/agents
 ~/workspace/agents/scripts/install-static.sh
 ~/workspace/agents/scripts/install-shims.sh
 
@@ -253,7 +254,7 @@ omp install --cli codex
 
 The three Git clones restore versioned configuration and scripts. They cannot
 restore credentials, dashboard tokens, or the personalized `agents/static` and
-`agents/callabo/static` files because those are deliberately gitignored. A
+`agents/<workspace>/static` files because those are deliberately gitignored. A
 matching file count under `~/.agents` is therefore only a topology check; verify
 the contents and resolve the install-static placeholder warning before use.
 
@@ -272,7 +273,7 @@ the contents and resolve the install-static placeholder warning before use.
 | Claude Code | `~/.claude/settings.json` | **symlink** → `configs/claude/settings.json` |
 | Claude Code | `~/.claude/hooks/*.sh` | **symlink** → `agent-skills/hooks/` |
 | Claude Code | `~/.claude/skills/skill-index` | **symlink** → `configs/claude/skill-index` |
-| Claude Code | `~/.claude/skills/<category>/<name>` | 46 symlinks rebuilt from `configs/claude/skills.manifest` |
+| Claude Code | `~/.claude/skills/<category>/<name>` | symlinks rebuilt from `configs/claude/skills.manifest` (public skills only; private ones are restored from their own repo) |
 | Claude Code | `~/.claude/projects/<slug>/memory` | **symlink** → `configs/claude/memory` |
 | Claude Code | MCP servers | `claude mcp add` (idempotent, run by the module) |
 | Codex | `~/.codex/config.toml` | **merge** — managed plugins/MCP/hooks + local trust, notify and UI state |
@@ -339,7 +340,7 @@ Claude Code needs nothing — `~/.claude/settings.json` *is* the repo file.
 | | Why |
 |---|---|
 | `~/.envs/*.env` | Secrets. Restore by hand; `~/.agents/*.md` documents which key each integration needs. |
-| `agents/{static,callabo/static}` personal files | Profile, endpoints and service-specific context. They are gitignored; restore from a secure backup or fill the generated samples. |
+| `agents/{static,<workspace>/static}` personal files | Profile, endpoints and service-specific context. They are gitignored; restore from a secure backup or fill the generated samples. |
 | `~/.claude.json` | MCP registrations sit next to per-project state Claude Code rewrites constantly. The `claude` module re-adds servers instead. |
 | `~/.claude/.credentials.json`, `~/.codex/auth.json` | OAuth tokens. Re-login on the new machine. |
 | `~/.config/muxa/config.toml` | Carries a dashboard auth token; restore it privately after installing muxa. |

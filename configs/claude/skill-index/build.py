@@ -21,17 +21,21 @@ SELF = "skill-index"
 TRIGGERS = ROOT / SELF / "triggers.json"
 OUT = ROOT / SELF / "SKILL.md"
 
-# Category display order and heading.
-CATEGORIES = {
-    "callabo": "Callabo 서비스",
-    "integration": "외부 서비스 연동",
-    "integrations": "외부 서비스 연동 (구)",
-    "pronaia": "Pronaia / ML",
+# Category display order and heading. Workspace-specific labels live in an
+# untracked categories.json next to this script, so no private vocabulary is
+# committed; unknown categories simply fall back to their directory name.
+CATEGORIES_FILE = ROOT / SELF / "categories.json"
+CATEGORIES: dict[str, str] = {
     "agents": "에이전트 워크플로우",
     "common": "공용",
     "context": "컨텍스트",
     "development": "개발",
 }
+if CATEGORIES_FILE.is_file():
+    try:
+        CATEGORIES = {**json.loads(CATEGORIES_FILE.read_text()), **CATEGORIES}
+    except (OSError, ValueError):
+        pass
 
 FRONTMATTER_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):(?:\s*(.*))?$")
 
@@ -129,9 +133,7 @@ def main() -> None:
 
     order = [c for c in CATEGORIES if c in by_cat] + sorted(set(by_cat) - set(CATEGORIES))
 
-    head_terms = ", ".join(
-        sorted({s["name"] for s in skills if s["category"] in ("callabo", "integration")})
-    )
+    cat_list = ", ".join(CATEGORIES.get(c, c) for c in order)
 
     body = [
         "---",
@@ -139,13 +141,9 @@ def main() -> None:
         "description: >-",
         "  Catalog of the nested skills under ~/.claude/skills that Claude Code does not",
         "  auto-discover (they live one directory deeper than the harness scans). Load this",
-        "  whenever a task touches Callabo (auth, mongodb, notion, slack, records, insights,",
-        "  labels, amplitude, metabase, blog, image, voiceprint, speaker, transcription,",
-        "  member matching, poc analytics, competitor analysis, crm, product info, workspace",
-        "  health/audit, resolve, callabo-set), an integration (kibana/로그, linear/이슈,",
-        "  notion/노션, sentry/에러), Pronaia ML work (audio, triton, model sync, benchmark),",
-        "  or managing services and Obsidian notes — or whenever the user asks what skills",
-        "  exist. It maps each skill to its SKILL.md path so the right one can be read on",
+        f"  whenever a task touches one of the catalogued categories ({cat_list}),",
+        "  or whenever the user asks what skills exist.",
+        "  It maps each skill to its SKILL.md path so the right one can be read on",
         "  demand instead of loading all of them every session. Skills that already load at",
         "  depth 1 (korean-editor, rpf, grill-me, static-index, context-manager,",
         "  git-commit-pr, security-auditor, background-*) are NOT listed here — the harness",

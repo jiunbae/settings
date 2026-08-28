@@ -11,7 +11,7 @@ metadata:
 
 Historically (2026-07-27) it failed with HTTP 400 `Query too complex. Complexity: 24855. Maximum allowed complexity: 10000.` from the script's team-label *lookup* query, independent of label count.
 
-**Why:** kept as a record so the old failure isn't re-diagnosed from scratch — if `Query too complex` reappears after a CAL label-tree change, it is the lookup query, not the mutation, and splitting labels across calls will not help.
+**Why:** kept as a record so the old failure isn't re-diagnosed from scratch — if `Query too complex` reappears after a team label-tree change, it is the lookup query, not the mutation, and splitting labels across calls will not help.
 
 **How to apply:** helper first. Only on a `Query too complex` response, resolve IDs yourself and call `issueUpdate(labelIds:)` (replaces the full set, so include every label to keep):
 
