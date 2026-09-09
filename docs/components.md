@@ -2,7 +2,8 @@
 
 Per-component setup that does not belong on the landing page: the parts that need a
 decision, a secret, or a manual permission grant. Everything here was in the README
-before it was split; the text is unchanged.
+before it was split. Three single-row tables that had lost their headers are prose now;
+the rest is unchanged.
 
 | | |
 | :--- | :--- |

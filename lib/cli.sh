@@ -29,10 +29,10 @@ get_component_desc() {
         zellij)      echo "zellij (modern terminal multiplexer)" ;;
         rust)        echo "Rust toolchain + cargo-binstall" ;;
         uv)          echo "uv (fast Python package manager)" ;;
-        tools)       echo "CLI tools (eza, fd, ripgrep)" ;;
+        tools)       echo "CLI tools (eza, fd, ripgrep, fzf)" ;;
         tools-extra) echo "Extra CLI tools (delta, dust, procs, bottom)" ;;
         ssh)         echo "SSH config (copy only, not symlinked)" ;;
-        hishtory)    echo "hishtory (better shell history with S3 sync)" ;;
+        hishtory)    echo "hishtory (better shell history with self-hosted sync)" ;;
         hammerspoon) echo "Hammerspoon (macOS-only: window manager + keybindings)" ;;
         ghostty)     echo "Ghostty terminal config (macOS-only: Option-as-Alt so TUI Alt bindings work)" ;;
         codex)       echo "Codex CLI/App config, hooks, and notify chain" ;;

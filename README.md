@@ -68,14 +68,15 @@ git clone https://github.com/jiunbae/settings.git && cd settings
 | **Shell** | [zsh](https://www.zsh.org/) + [zinit](https://github.com/zdharma-continuum/zinit) + [Powerlevel10k](https://github.com/romkatv/powerlevel10k), with [autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) and [fast-syntax-highlighting](https://github.com/z-shell/fast-syntax-highlighting) · PowerShell 7 + [starship](https://starship.rs/) + [PSFzf](https://github.com/kelleyma49/PSFzf) on Windows |
 | **Editor** | [NeoVim](https://neovim.io/) + [LazyVim](https://www.lazyvim.org/), with the [tree-sitter CLI](https://github.com/tree-sitter/tree-sitter) for parsers |
 | **Multiplexer** | [tmux](https://github.com/tmux/tmux) + [TPM](https://github.com/tmux-plugins/tpm) · [zellij](https://zellij.dev/) · [rmux](https://github.com/Helvesec/rmux) on Windows |
-| **CLI tools** | [eza](https://github.com/eza-community/eza) `ls` · [fd](https://github.com/sharkdp/fd) `find` · [bat](https://github.com/sharkdp/bat) `cat` · [ripgrep](https://github.com/BurntSushi/ripgrep) `grep` · [fzf](https://github.com/junegunn/fzf) |
+| **CLI tools** | [eza](https://github.com/eza-community/eza) `ls` · [fd](https://github.com/sharkdp/fd) `find` · [ripgrep](https://github.com/BurntSushi/ripgrep) `grep` · [fzf](https://github.com/junegunn/fzf) |
 | **CLI extras** | [delta](https://github.com/dandavison/delta) `git diff` · [dust](https://github.com/bootandy/dust) `du` · [procs](https://github.com/dalance/procs) `ps` · [bottom](https://github.com/ClementTsang/bottom) `htop` |
 | **Toolchains** | [Rust](https://www.rust-lang.org/) + [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) · [uv](https://github.com/astral-sh/uv) · [fnm](https://github.com/Schniz/fnm) |
 | **AI agents** | Claude Code · Codex · [cship](https://github.com/stephenleo/cship) statusline — see [agent-state.md](docs/agent-state.md) |
 | **History** | [hishtory](https://github.com/ddworken/hishtory) — context, search, cross-device sync |
 | **macOS** | [Hammerspoon](https://www.hammerspoon.org/) — window, screen and keyboard automation |
 
-Every component is independent, safe to re-run, and has a `--dry-run`.
+Components install independently and are safe to re-run; `--dry-run` previews any
+combination of them without changing anything.
 
 ## Platform Support
 
@@ -105,9 +106,10 @@ Options:
   -c, --copy          Copy config files instead of symlink
   -l, --link          Create symlinks for config files (default)
   -v, --verbose       Enable verbose output
-  -n, --dry-run       Show what would be done
+  -n, --dry-run       Show what would be done without making changes
   --no-sudo           Skip commands that require sudo privileges
-  -h, --help          Show help message
+  -h, --help          Show this help message
+  --version           Show version
 
 Components:
   base          Basic packages (curl, wget, git, build-essential)
@@ -117,14 +119,15 @@ Components:
   zellij        zellij (modern terminal multiplexer)
   rust          Rust toolchain + cargo-binstall
   uv            uv (fast Python package manager)
-  tools         CLI tools (eza, fd, bat, ripgrep, fzf)
+  tools         CLI tools (eza, fd, ripgrep, fzf)
   tools-extra   Extra CLI tools (delta, dust, procs, bottom)
   ssh           SSH config (copy only, not symlinked)
-  hishtory      hishtory (better shell history with sync support)
+  hishtory      hishtory (better shell history with self-hosted sync)
   hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
+  ghostty       Ghostty terminal config (macOS-only: Option-as-Alt so TUI Alt bindings work)
   codex         Codex CLI/App config, hooks, and notify chain
-  claude        Claude Code settings, hooks, skill index, memory, MCP
-  cship         cship + Starship (fast Claude Code statusline)
+  claude        Claude Code settings, hooks, skill index, memory, MCP servers
+  cship         cship + Starship (fast Claude Code statusline, replaces ccstatusline)
   scripts       Personal CLI scripts linked into ~/.local/bin
 ```
 
