@@ -26,63 +26,88 @@
 $OutputEncoding = [System.Text.UTF8Encoding]::new()
 
 ################################
+# Interactive?
+# Everything below that exists to serve a human at a keyboard — line editing,
+# prediction, key handlers, the prompt — is worthless in a scripted shell: a CI step,
+# an agent's shell tool, `pwsh -File`. Those get the environment and skip the rest,
+# which is what keeps a scripted `pwsh -Command` cheap.
+#
+# Decide from HOW THE SHELL WAS LAUNCHED, not how its streams happen to be wired.
+# [Console]::IsOutputRedirected looks equivalent and is not: Windows OpenSSH gives a
+# child process pipes rather than a console, so a perfectly interactive `pwsh` over
+# ssh reports its output as redirected — and silently lost its prompt, its history
+# search and its key bindings. Launch arguments do not lie about intent.
+$script:Interactive = $true
+foreach ($arg in [Environment]::GetCommandLineArgs()) {
+    # Exact tokens only. Prefix matching would catch -ConfigurationName, -CustomPipeName
+    # and friends; -Login, -NoLogo and -NoProfile must all stay interactive.
+    if ($arg -match '^-(c|command|f|file|e|ec|encodedcommand|noninteractive)$') {
+        $script:Interactive = $false
+        break
+    }
+}
+
+################################
 # PSReadLine
-Import-Module PSReadLine
+# No Import-Module: an interactive host has already loaded PSReadLine by the time a
+# profile runs, and in any other case the first Set-PSReadLineOption would autoload
+# it anyway. The explicit import only paid ~66ms to do that work non-interactively,
+# where none of it is wanted.
+if ($script:Interactive) {
+    # History (zsh: HIST_IGNORE_DUPS, HIST_FIND_NO_DUPS, INC_APPEND_HISTORY,
+    #               HISTSIZE/SAVEHIST=500000)
+    # SHARE_HISTORY has no direct equivalent — SaveIncrementally appends as you go,
+    # so a second shell sees earlier commands, but not live in-session sharing.
+    Set-PSReadLineOption -HistoryNoDuplicates
+    Set-PSReadLineOption -HistorySaveStyle SaveIncrementally
+    Set-PSReadLineOption -MaximumHistoryCount 500000
+    Set-PSReadLineOption -HistorySearchCursorMovesToEnd
 
-# History (zsh: HIST_IGNORE_DUPS, HIST_FIND_NO_DUPS, INC_APPEND_HISTORY,
-#               HISTSIZE/SAVEHIST=500000)
-# SHARE_HISTORY has no direct equivalent — SaveIncrementally appends as you go,
-# so a second shell sees earlier commands, but not live in-session sharing.
-Set-PSReadLineOption -HistoryNoDuplicates
-Set-PSReadLineOption -HistorySaveStyle SaveIncrementally
-Set-PSReadLineOption -MaximumHistoryCount 500000
-Set-PSReadLineOption -HistorySearchCursorMovesToEnd
-
-# zsh: HIST_IGNORE_SPACE. Replacing the handler also replaces PSReadLine's
-# built-in sensitive-value filter, so keep an equivalent guard: anything that
-# looks like a secret stays in memory and never reaches the history file.
-Set-PSReadLineOption -AddToHistoryHandler {
-    param([string]$line)
-    if ($line -match '^\s') {
-        return [Microsoft.PowerShell.AddToHistoryOption]::SkipAdding
+    # zsh: HIST_IGNORE_SPACE. Replacing the handler also replaces PSReadLine's
+    # built-in sensitive-value filter, so keep an equivalent guard: anything that
+    # looks like a secret stays in memory and never reaches the history file.
+    Set-PSReadLineOption -AddToHistoryHandler {
+        param([string]$line)
+        if ($line -match '^\s') {
+            return [Microsoft.PowerShell.AddToHistoryOption]::SkipAdding
+        }
+        if ($line -match '(?i)(password|passwd|secret|token|api[_-]?key|apikey|credential|connectionstring|bw_session)\s*[=:]') {
+            return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly
+        }
+        return [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile
     }
-    if ($line -match '(?i)(password|passwd|secret|token|api[_-]?key|apikey|credential|connectionstring|bw_session)\s*[=:]') {
-        return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly
-    }
-    return [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile
+
+    # zsh: bindkey -e
+    Set-PSReadLineOption -EditMode Emacs
+
+    # zsh: WORDCHARS='' — treat every special char as a word boundary so
+    # ESC+Backspace and Ctrl+W stop at punctuation instead of eating a whole path.
+    Set-PSReadLineOption -WordDelimiters ' /\()"''-_=+:;,.[]{}<>|!?*&^%$#@~`'
+
+    # zsh: zsh-autosuggestions (ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7')
+    # The one thing above that throws rather than degrades when the console turns out
+    # not to support virtual terminal processing after all. Everything else here is
+    # harmless in that case, so catch this and carry on instead of printing red.
+    try {
+        Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+        Set-PSReadLineOption -PredictionViewStyle InlineView
+        Set-PSReadLineOption -Colors @{ InlinePrediction = "$([char]27)[90m" }
+    } catch { }
+
+    # zsh: zstyle ':completion:*' menu select
+    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+
+    # zsh: bindkey '^[[A' / '^[[B' history-search-backward / forward
+    Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
+    Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+
+    # zsh: bindkey Home / End / Delete / Ctrl+Right / Ctrl+Left
+    Set-PSReadLineKeyHandler -Key Home            -Function BeginningOfLine
+    Set-PSReadLineKeyHandler -Key End             -Function EndOfLine
+    Set-PSReadLineKeyHandler -Key Delete          -Function DeleteChar
+    Set-PSReadLineKeyHandler -Key Ctrl+RightArrow -Function ForwardWord
+    Set-PSReadLineKeyHandler -Key Ctrl+LeftArrow  -Function BackwardWord
 }
-
-# zsh: bindkey -e
-Set-PSReadLineOption -EditMode Emacs
-
-# zsh: WORDCHARS='' — treat every special char as a word boundary so ESC+Backspace
-# and Ctrl+W stop at punctuation instead of eating a whole path.
-Set-PSReadLineOption -WordDelimiters ' /\()"''-_=+:;,.[]{}<>|!?*&^%$#@~`'
-
-# zsh: zsh-autosuggestions (ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7')
-# Prediction needs a real VT-capable console: it throws when stdout is redirected
-# (a piped `pwsh -Command`, a CI step, an agent's shell tool), which would print a
-# red error on every such invocation. $Host.UI.SupportsVirtualTerminal stays true in
-# that case, so test the redirection directly.
-if (-not [Console]::IsOutputRedirected) {
-    Set-PSReadLineOption -PredictionSource HistoryAndPlugin
-    Set-PSReadLineOption -PredictionViewStyle InlineView
-    Set-PSReadLineOption -Colors @{ InlinePrediction = "$([char]27)[90m" }
-}
-
-# zsh: zstyle ':completion:*' menu select (+ fzf-tab, wired below if PSFzf is present)
-Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-
-# zsh: bindkey '^[[A' / '^[[B' history-search-backward / forward
-Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
-Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-
-# zsh: bindkey Home / End / Delete / Ctrl+Right / Ctrl+Left
-Set-PSReadLineKeyHandler -Key Home            -Function BeginningOfLine
-Set-PSReadLineKeyHandler -Key End             -Function EndOfLine
-Set-PSReadLineKeyHandler -Key Delete          -Function DeleteChar
-Set-PSReadLineKeyHandler -Key Ctrl+RightArrow -Function ForwardWord
-Set-PSReadLineKeyHandler -Key Ctrl+LeftArrow  -Function BackwardWord
 
 ################################
 # Directory stack
@@ -106,7 +131,23 @@ function mkcd {
 }
 
 ################################
-# PATH (zsh: $HOME/bin:$HOME/.local/bin:$HOME/.scripts)
+# PATH
+# Pick up anything added to the registry PATH since this process tree started.
+# Windows only hands a process the PATH that existed when it was created, and an
+# installer that writes the Machine PATH (winget puts starship, bottom and Neovim
+# there) is invisible to every shell descended from an older session. Over ssh that
+# session can be days old, so "just open a new terminal" does not help: the new
+# terminal is a child of the same stale cmd.exe, the tools look absent, and the
+# features that depend on them — the prompt included — silently do not load.
+#
+# Append rather than prepend, so entries this process added on purpose keep winning.
+foreach ($scope in 'Machine', 'User') {
+    foreach ($dir in ([Environment]::GetEnvironmentVariable('Path', $scope) -split ';')) {
+        if ($dir -and ($env:PATH -split ';' -notcontains $dir)) { $env:PATH += ";$dir" }
+    }
+}
+
+# zsh: $HOME/bin:$HOME/.local/bin:$HOME/.scripts
 $script:PathPrepend = @(
     "$HOME\bin"
     "$HOME\.local\bin"
@@ -114,7 +155,9 @@ $script:PathPrepend = @(
     "$HOME\.cargo\bin"
 )
 foreach ($p in $script:PathPrepend) {
-    if ((Test-Path $p) -and ($env:PATH -split ';' -notcontains $p)) {
+    # [IO.Directory]::Exists over Test-Path: four Test-Path calls measured ~128ms in a
+    # cold session, most of it first-cmdlet discovery overhead, against ~0 for the API.
+    if ([System.IO.Directory]::Exists($p) -and ($env:PATH -split ';' -notcontains $p)) {
         $env:PATH = "$p;$env:PATH"
     }
 }
@@ -125,34 +168,65 @@ foreach ($p in $script:PathPrepend) {
 # cannot find: a miss walks all 42 PATH directories against every PATHEXT. With
 # two absent tools that alone was over half this profile's load time. Index the
 # PATH once with raw directory enumeration instead — ~120ms for the whole set.
-$script:PathExe = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+# Enumerating every file in every PATH directory walked 13,688 entries here, almost
+# all of them DLLs; restricting the pattern to what Windows will actually execute
+# leaves 993 and cuts the pass from ~200ms to ~66ms. Keep the resolved path too -
+# Import-CachedInit below needs the binary's mtime.
 # Exists() first: a stale PATH entry is normal (this machine has two) and letting
 # EnumerateFiles throw on it would leave an entry in $Error on every shell start.
+$script:ToolPath = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($dir in ($env:PATH -split ';')) {
     if (-not $dir -or -not [System.IO.Directory]::Exists($dir)) { continue }
-    try {
-        foreach ($file in [System.IO.Directory]::EnumerateFiles($dir)) {
-            [void]$script:PathExe.Add([System.IO.Path]::GetFileNameWithoutExtension($file))
-        }
-    } catch { }   # unreadable directory
+    foreach ($pattern in '*.exe', '*.com', '*.cmd', '*.bat', '*.ps1') {
+        try {
+            foreach ($file in [System.IO.Directory]::EnumerateFiles($dir, $pattern)) {
+                $name = [System.IO.Path]::GetFileNameWithoutExtension($file)
+                # First hit wins, so the dictionary follows PATH precedence.
+                if (-not $script:ToolPath.ContainsKey($name)) { $script:ToolPath[$name] = $file }
+            }
+        } catch { }   # unreadable directory
+    }
 }
 
-# Executables on PATH only — not cmdlets, functions or aliases, which is exactly
+# Executables on PATH only - not cmdlets, functions or aliases, which is exactly
 # what the checks below mean by "is this tool installed".
 function Test-Tool {
     param([Parameter(Mandatory)][string]$Name)
-    $script:PathExe.Contains($Name)
+    $script:ToolPath.ContainsKey($Name)
+}
+
+# Shell-init scripts (starship, zoxide, fnm, uv) are identical on every launch, so
+# running the generator per shell spends a process spawn - two, for starship, whose
+# `init powershell` only emits a line that re-runs starship with --print-full-init -
+# to print bytes we already had. Cache to TEMP and invalidate on the tool's own
+# mtime, which is what an upgrade changes.
+function Import-CachedInit {
+    param(
+        [Parameter(Mandatory)][string]$Tool,
+        [Parameter(Mandatory)][scriptblock]$Generate
+    )
+    $cache = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "pwsh-init-$Tool.ps1")
+    $fresh = [System.IO.File]::Exists($cache) -and
+             [System.IO.File]::GetLastWriteTimeUtc($cache) -gt
+             [System.IO.File]::GetLastWriteTimeUtc($script:ToolPath[$Tool])
+    if (-not $fresh) {
+        $generated = & $Generate | Out-String
+        if ($generated.Trim()) { [System.IO.File]::WriteAllText($cache, $generated) }
+    }
+    if ([System.IO.File]::Exists($cache)) { . $cache }
 }
 
 ################################
 # Environment
 $env:EDITOR = 'nvim'
 $env:PNPM_HOME = if ($env:PNPM_HOME) { $env:PNPM_HOME } else { "$env:LOCALAPPDATA\pnpm" }
-if ((Test-Path $env:PNPM_HOME) -and ($env:PATH -split ';' -notcontains $env:PNPM_HOME)) {
+# .NET rather than Test-Path, for the same reason as the PATH block above: these were
+# the first cmdlets in the session and cost ~175ms between them.
+if ([System.IO.Directory]::Exists($env:PNPM_HOME) -and ($env:PATH -split ';' -notcontains $env:PNPM_HOME)) {
     $env:PATH = "$env:PNPM_HOME;$env:PATH"
 }
 $env:BUN_INSTALL = "$HOME\.bun"
-if (Test-Path "$env:BUN_INSTALL\bin") { $env:PATH = "$env:BUN_INSTALL\bin;$env:PATH" }
+if ([System.IO.Directory]::Exists("$env:BUN_INSTALL\bin")) { $env:PATH = "$env:BUN_INSTALL\bin;$env:PATH" }
 
 # zsh sets keychain on Darwin, file elsewhere. Windows has no keychain backend.
 $env:AWS_VAULT_BACKEND = 'file'
@@ -163,8 +237,8 @@ $env:AWS_VAULT_BACKEND = 'file'
 # that would otherwise be inherited by every child process.
 function Import-EnvFile {
     param([Parameter(Mandatory)][string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) { return $false }
-    foreach ($line in Get-Content -LiteralPath $Path) {
+    if (-not [System.IO.File]::Exists($Path)) { return $false }
+    foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
         if ($line -match '^\s*(#|$)') { continue }
         $kv = $line -replace '^\s*export\s+', ''
         $i = $kv.IndexOf('=')
@@ -179,30 +253,18 @@ function Import-EnvFile {
 ################################
 # Modern CLI Tools
 # Guarded the same way as .zshrc's $+commands checks, so installing a tool later
-# lights up its aliases with no edit here. ls and ps must have their built-in
-# aliases removed first — aliases outrank functions in PowerShell's resolution.
+# lights up its aliases with no edit here.
+#
+# Split by whether the name SHADOWS something that already exists. The additive
+# names below are new words — nothing can be expecting them to mean anything else —
+# so they are defined unconditionally and work in scripts and agent shells too.
 if (Test-Tool eza) {
-    Remove-Alias ls -Force -ErrorAction SilentlyContinue
-    function ls { eza --icons @args }
     function ll { eza -la --icons --git @args }
     function la { eza -a --icons @args }
     function lt { eza -T --icons @args }
 }
 
-if (Test-Tool fd) { function find { fd @args } }
-if (Test-Tool rg) { function grep { rg @args } }
 if (Test-Tool delta) { $env:GIT_PAGER = 'delta' }
-if (Test-Tool dust) { function du { dust @args } }
-
-if (Test-Tool procs) {
-    Remove-Alias ps -Force -ErrorAction SilentlyContinue
-    function ps { procs @args }
-}
-
-if (Test-Tool btm) {
-    function top { btm @args }
-    function htop { btm @args }
-}
 
 if (Test-Tool nvim) {
     function vim { nvim @args }
@@ -210,22 +272,70 @@ if (Test-Tool nvim) {
     function vimdiff { nvim -d @args }
 }
 
+# The shadowing ones are interactive-only, and this is a correctness line, not a
+# performance one. `ps` as procs returns text where Get-Process returns objects, so
+# any `ps | Where-Object Name -eq ...` in a script breaks; `find` and `grep` as fd and
+# rg take different flags than anything calling them would expect. At a prompt those
+# are exactly what is wanted, which is also why .zshrc — sourced by interactive zsh
+# alone — was never in a position to affect a script in the first place.
+# Remove-Alias first: aliases outrank functions in PowerShell's command resolution.
+if ($script:Interactive) {
+    if (Test-Tool eza) {
+        Remove-Alias ls -Force -ErrorAction SilentlyContinue
+        function ls { eza --icons @args }
+    }
+    if (Test-Tool procs) {
+        Remove-Alias ps -Force -ErrorAction SilentlyContinue
+        function ps { procs @args }
+    }
+    if (Test-Tool fd) { function find { fd @args } }
+    if (Test-Tool rg) { function grep { rg @args } }
+    if (Test-Tool dust) { function du { dust @args } }
+    if (Test-Tool btm) {
+        function top { btm @args }
+        function htop { btm @args }
+    }
+}
+
 ################################
 # fzf (zsh: ~/.fzf.zsh + Aloxaf/fzf-tab)
 # PSFzf is the closest analogue: Ctrl+T file picker, Alt+C directory jump, Ctrl+R
-# over history, and Tab expansion standing in for fzf-tab.
-# Install with: Install-Module PSFzf -Scope CurrentUser
+# over history. Install with: Install-Module PSFzf -Scope CurrentUser
 #
-# Importing it costs ~400ms, the largest single item left in this profile, and all
-# of it buys interactive key handlers. A redirected shell — a script, a CI step, an
-# agent's shell tool — has no use for them, so skip the import there.
-if ((Test-Tool fzf) -and -not [Console]::IsInputRedirected -and
+# Importing it costs ~396ms, by far the largest item in this profile, and every bit
+# of it buys three key handlers that most shells never press. So register stubs that
+# import on first press and then hand off to PSFzf's own handler - its
+# Invoke-FzfPsReadlineHandler* functions are exported, which is what makes the
+# hand-off possible without knowing the scriptblock PSFzf would have bound.
+#
+# -TabExpansion is deliberately not enabled: it rebinds Tab to TabCompleteNext
+# (cycling), and fzf only engages on a `**` token. MenuComplete above is the closer
+# match to the `zstyle menu select` being ported here, and Ctrl+T already covers
+# fuzzy file insertion.
+if ($script:Interactive -and (Test-Tool fzf) -and
     (Get-Module PSFzf -ListAvailable -ErrorAction Ignore)) {
+    $global:PsFzfHandlers = [ordered]@{
+        'Ctrl+t' = 'Invoke-FzfPsReadlineHandlerProvider'
+        'Ctrl+r' = 'Invoke-FzfPsReadlineHandlerHistory'
+        'Alt+c'  = 'Invoke-FzfPsReadlineHandlerSetLocation'
+    }
+    foreach ($chord in @($global:PsFzfHandlers.Keys)) {
+        # The handler name is baked into each stub rather than looked up from $key at
+        # press time: the handler's $key is a [ConsoleKeyInfo], whose ToString() is
+        # "System.ConsoleKeyInfo", not a chord name, so a lookup by key cannot work.
+        $stub = @"
+if (-not (Get-Module PSFzf)) {
     Import-Module PSFzf -ErrorAction SilentlyContinue
-    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' `
-                    -PSReadlineChordReverseHistory 'Ctrl+r' `
-                    -PSReadlineChordSetLocation 'Alt+c' `
-                    -TabExpansion
+    foreach (`$c in @(`$global:PsFzfHandlers.Keys)) {
+        Set-PSReadLineKeyHandler -Chord `$c -ScriptBlock ([scriptblock]::Create(`$global:PsFzfHandlers[`$c]))
+    }
+}
+$($global:PsFzfHandlers[$chord])
+"@
+        Set-PSReadLineKeyHandler -Chord $chord `
+            -BriefDescription "PSFzf $chord (loads on first press)" `
+            -ScriptBlock ([scriptblock]::Create($stub))
+    }
 }
 
 ################################
@@ -233,7 +343,7 @@ if ((Test-Tool fzf) -and -not [Console]::IsInputRedirected -and
 # PowerShell cannot express without taking over CommandNotFoundAction (already
 # claimed by the PowerToys WinGet module).
 if (Test-Tool zoxide) {
-    Invoke-Expression (& { (zoxide init powershell --cmd z | Out-String) })
+    Import-CachedInit zoxide { zoxide init powershell --cmd z }
 }
 
 ################################
@@ -242,17 +352,15 @@ if (Test-Tool zoxide) {
 # `--use-on-cd` switches versions per directory, so the lazy-load shims that
 # .zshrc defines for node/npm/npx/pnpm/nvm/tsx are unnecessary.
 if (Test-Tool fnm) {
-    fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression
+    Import-CachedInit fnm { fnm env --use-on-cd --shell powershell }
 }
 
 ################################
 # uv — cached completion (zsh: regenerate at most once a day)
-if (Test-Tool uv) {
-    $uvComp = Join-Path ([System.IO.Path]::GetTempPath()) 'uv-completion.ps1'
-    $stale = -not (Test-Path $uvComp) -or
-             ((Get-Item $uvComp).LastWriteTime -lt (Get-Date).AddHours(-24))
-    if ($stale) { uv generate-shell-completion powershell > $uvComp 2>$null }
-    if (Test-Path $uvComp) { . $uvComp }
+# 736KB of generated completion, and it only registers tab completion, so a
+# redirected shell pays ~67ms to parse something it can never use.
+if ($script:Interactive -and (Test-Tool uv)) {
+    Import-CachedInit uv { uv generate-shell-completion powershell }
 }
 
 ################################
@@ -373,14 +481,21 @@ if (Test-Tool rmux) {
 # starship prompt (replaces Powerlevel10k)
 # STARSHIP_CONFIG is pinned so this never picks up ~/.config/starship.toml,
 # which belongs to the cship statusline and is not a shell prompt.
-if (Test-Tool starship) {
-    $starshipConfig = Join-Path $PSScriptRoot 'starship.toml'
-    if (Test-Path $starshipConfig) { $env:STARSHIP_CONFIG = $starshipConfig }
-    Invoke-Expression (& starship init powershell)
+# Interactive only, and not just to save the ~160ms: starship's init registers an
+# Enter key handler and calls Set-PSReadLineOption, which drags PSReadLine into a
+# shell that the guard above just finished keeping it out of. Note the 160ms is
+# mostly starship's own doing - its init spawns starship once more to fetch the
+# continuation prompt, which caching the init cannot avoid.
+if ($script:Interactive -and (Test-Tool starship)) {
+    $starshipConfig = [System.IO.Path]::Combine($PSScriptRoot, 'starship.toml')
+    if ([System.IO.File]::Exists($starshipConfig)) { $env:STARSHIP_CONFIG = $starshipConfig }
+    # --print-full-init is what `init powershell` shells out to anyway, so asking for
+    # it directly is one process instead of two, and the cache makes it none.
+    Import-CachedInit starship { starship init powershell --print-full-init }
 }
 
 ################################
 # Machine-local additions. This file is tracked in a PUBLIC repo, so anything
 # work-specific — and anything an installer wants to append — belongs here.
-$localProfile = Join-Path (Split-Path -Parent $PROFILE) 'profile.local.ps1'
-if (Test-Path $localProfile) { . $localProfile }
+$localProfile = [System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($PROFILE), 'profile.local.ps1')
+if ([System.IO.File]::Exists($localProfile)) { . $localProfile }
