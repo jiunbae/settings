@@ -135,6 +135,9 @@ Components:
 | [TPM](https://github.com/tmux-plugins/tpm) | Tmux plugin manager |
 | [zellij](https://zellij.dev/) | Terminal multiplexer (alternative) |
 | [Windows Terminal](https://aka.ms/terminal) | Modern terminal for Windows |
+| [rmux](https://github.com/Helvesec/rmux) | tmux-compatible multiplexer, native on Windows |
+| [starship](https://starship.rs/) | Cross-shell prompt (PowerShell; replaces Powerlevel10k) |
+| [PSFzf](https://github.com/kelleyma49/PSFzf) | fzf bindings for PSReadLine (PowerShell; stands in for fzf-tab) |
 
 ### AI Coding Agents
 | Component | Description |
@@ -387,6 +390,8 @@ settings/
 │   ├── .zshrc
 │   ├── .p10k.zsh
 │   ├── .tmux.conf         #   tmux configuration
+│   ├── .rmux.conf         #   rmux configuration (Windows)
+│   ├── powershell/         #   PowerShell profile + starship prompt (Windows)
 │   ├── zellij/            #   zellij config + layouts
 │   ├── nvim/              #   NeoVim + LazyVim config
 │   ├── hishtory/          #   hishtory config template
@@ -479,6 +484,87 @@ Configuration for Windows Terminal is available in `configs/windows-terminal/set
 
 > [!TIP]
 > This configuration uses **JetBrainsMonoNL Nerd Font**. Make sure it's installed on your Windows system for the best experience.
+
+## RMUX Configuration (Windows)
+
+[rmux](https://github.com/Helvesec/rmux) is a tmux-compatible multiplexer that runs
+natively on Windows, where `install.sh` cannot go — `lib/platform.sh` only detects
+Linux and Darwin. `configs/.rmux.conf` is the subset of `configs/.tmux.conf` that
+works there: mouse, copy-mode, splits, `hjkl` navigation/resize and the Korean
+two-set prefix mappings. Plugins (TPM, catppuccin), the `uname`-based `if-shell`
+blocks and the muxa popups are omitted.
+
+### How to apply
+
+1. `winget install rmux`
+2. Copy `configs/.rmux.conf` to `%USERPROFILE%\.rmux.conf`
+3. Start a session: `rmux new-session -A -s main`
+
+rmux reads `%XDG_CONFIG_HOME%\rmux\rmux.conf`, `%USERPROFILE%\.rmux.conf`,
+`%APPDATA%\rmux\rmux.conf` and `%RMUX_CONFIG_FILE%`. With none of them present it
+falls back to parsing a `tmux.conf`, but only from the standard paths — a bare
+Windows box has no `~/.tmux.conf`, so nothing is loaded and every option stays at
+its default.
+
+> [!TIP]
+> `mouse` is **off** by default in rmux, so wheel scrolling and the scrollback are
+> unreachable until `set-option -g mouse on` is loaded — the most common symptom of
+> a missing config. To check a running server: `rmux show-options -g mouse`.
+> `prefix + R` reloads `~/.rmux.conf`.
+
+## PowerShell Configuration (Windows)
+
+`configs/powershell/profile.ps1` is `.zshrc` ported to PowerShell 7, for the same
+reason as `.rmux.conf`: `install.sh` cannot run on Windows. `configs/powershell/starship.toml`
+is the prompt that replaces Powerlevel10k, laid out to match the p10k config in
+`configs/.p10k.zsh`.
+
+There is no zinit equivalent and none is needed — PSReadLine 2.4 ships prediction
+and syntax highlighting natively, which is what `zsh-autosuggestions` and
+`fast-syntax-highlighting` were loaded for. The history options, the whole `bindkey`
+block, `AUTO_PUSHD`/`cd -`, the `$+commands` tool aliases, `mkcd`, the agent
+wrappers and the Korean two-set prefix policy all carry over.
+
+### How to apply
+
+1. Install the tools:
+   ```powershell
+   winget install --id Starship.Starship --id eza-community.eza --id sharkdp.fd `
+     --id BurntSushi.ripgrep.MSVC --id sharkdp.bat --id dandavison.delta `
+     --id bootandy.dust --id dalance.procs --id Clement.bottom --id junegunn.fzf `
+     --id ajeetdsouza.zoxide --id Neovim.Neovim --id Schniz.fnm --id jqlang.jq
+   Install-Module PSFzf -Scope CurrentUser
+   ```
+2. Point `$PROFILE` at the repo copy — Windows symlinks need elevation or Developer
+   Mode, so dot-source instead of linking:
+   ```powershell
+   @'
+   $repoProfile = "$env:USERPROFILE\workspace\settings\configs\powershell\profile.ps1"
+   if (Test-Path $repoProfile) { . $repoProfile }
+   '@ | Set-Content $PROFILE
+   ```
+3. Put machine-local additions in `profile.local.ps1` next to `$PROFILE`. The repo
+   profile sources it last, the same way `.zshrc` sources `~/.zshrc.local` — this
+   repo is public.
+
+### What does not port
+
+| `.zshrc` | Why |
+| :--- | :--- |
+| p10k instant prompt | No equivalent; starship renders in ~20ms unprimed |
+| `hishtory` | Supports bash/zsh/fish only, so history is PSReadLine-local |
+| `umask 077` | Windows uses ACLs |
+| `GPG_TTY` / `updatestartuptty` | pinentry-qt draws a GUI dialog |
+| `AUTO_CD` | Needs `CommandNotFoundAction`, already claimed by PowerToys. `zoxide`'s `z` covers the same ground |
+| `SHARE_HISTORY` | `SaveIncrementally` appends as you go, but no live in-session sharing |
+| nvm lazy-load shims | `fnm --use-on-cd` is already lazy |
+| `arch -arch` aliases | macOS only |
+
+> [!TIP]
+> Probe installed tools with `Test-Tool`, not `Get-Command`. A `Get-Command` miss
+> walks every PATH directory against every PATHEXT — ~720ms for the first absent
+> tool on a 42-entry PATH, which was more than half this profile's load time.
+> `Test-Tool` reads a HashSet built from one pass over PATH (~120ms for all of them).
 
 ## Troubleshooting
 
