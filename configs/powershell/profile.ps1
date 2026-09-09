@@ -475,6 +475,58 @@ if (Test-Tool rmux) {
     function ra { rmux attach-session -t @args }
     function rl { rmux list-sessions }
     function rx { rmux kill-session -t @args }
+
+    # The t* names from the oh-my-zsh tmux plugin, backed by rmux. This mirrors the
+    # block configs/.zshrc sets up in the same spirit, so the same shortcuts work on
+    # every machine — including `ts` meaning `new-session -s` and `to` meaning
+    # `new-session -A -s`, which is the plugin's split and not an obvious one.
+    #
+    # Both call shapes the plugin accepted: a bare name (`ta work`) gets the name flag
+    # inserted, anything starting with a dash (`ta -t work`) is passed straight through.
+    # Every argument is passed by name. Positionally, PowerShell reads a value like
+    # '-t' as an attempt to name a parameter and the binding fails outright.
+    function Invoke-RmuxSession {
+        param(
+            [string]$Action,
+            [string]$NameFlag,
+            [string]$ExtraFlag,
+            [string[]]$Rest
+        )
+        $argv = @($Action)
+        if ($ExtraFlag) { $argv += $ExtraFlag }
+        if ($Rest -and $Rest.Count -gt 0 -and $Rest[0] -notlike '-*') { $argv += $NameFlag }
+        if ($Rest) { rmux @argv @Rest } else { rmux @argv }
+    }
+
+    function ta   { Invoke-RmuxSession -Action attach-session -NameFlag '-t' -ExtraFlag ''   -Rest $args }
+    function tad  { Invoke-RmuxSession -Action attach-session -NameFlag '-t' -ExtraFlag '-d' -Rest $args }
+    function ts   { Invoke-RmuxSession -Action new-session    -NameFlag '-s' -ExtraFlag ''   -Rest $args }
+    function to   { Invoke-RmuxSession -Action new-session    -NameFlag '-s' -ExtraFlag '-A' -Rest $args }
+    function tkss { Invoke-RmuxSession -Action kill-session   -NameFlag '-t' -ExtraFlag ''   -Rest $args }
+    function tl   { rmux list-sessions @args }
+    function tksv { rmux kill-server @args }
+
+    # tds: one stable session per directory. .zshrc derives the suffix with `cksum`,
+    # which has no PowerShell equivalent worth reimplementing bit-for-bit; sessions are
+    # per-machine anyway, so this uses a truncated MD5 of the path instead. Same
+    # property — same directory, same session — different name than on zsh.
+    function tds {
+        $leaf = Split-Path -Leaf $PWD.Path
+        # At a drive root the leaf is the root itself ("C:\"), and rmux does not reject
+        # a name containing ':' — it silently rewrites it ("C:\-abc" becomes "C_\\-abc"),
+        # leaving a session that `tkss` cannot find under the name you asked for. Reduce
+        # a root to its drive letter and replace anything else rmux would rewrite.
+        if (-not $leaf -or $leaf -match '^[A-Za-z]:\\?$') { $leaf = $PWD.Drive.Name }
+        $leaf = $leaf -replace '[^\w.-]', '_'
+
+        $md5 = [System.Security.Cryptography.MD5]::Create()
+        try {
+            $hash = $md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($PWD.Path))
+        } finally { $md5.Dispose() }
+        $digest = -join ($hash[0..3] | ForEach-Object { $_.ToString('x2') })
+
+        rmux new-session -A -s ("{0}-{1}" -f $leaf, $digest)
+    }
 }
 
 ################################
