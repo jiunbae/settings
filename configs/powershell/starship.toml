@@ -1,0 +1,167 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Shell prompt for PowerShell — the Powerlevel10k replacement.
+#
+# NOT the same file as configs/cship/starship.toml: that one is consumed only
+# through cship's Starship passthrough for the Claude Code statusline and lives at
+# ~/.config/starship.toml. profile.ps1 pins STARSHIP_CONFIG to this file so the
+# two never collide.
+#
+# Layout mirrors the p10k lean config in configs/.p10k.zsh:
+#   left  : os_icon · dir · vcs · newline · prompt_char
+#   right : status · command_execution_time · background_jobs · virtualenv ·
+#           nvm · rbenv · kubecontext · aws · context · time
+# p10k's remaining right-prompt modules (asdf, goenv, phpenv, nordvpn, …) were
+# inert on this machine, so they are not reproduced.
+#
+# Requires a Nerd Font, same as POWERLEVEL9K_MODE=nerdfont-complete.
+
+add_newline = true          # POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
+
+format = """
+$os\
+$directory\
+$git_branch\
+$git_status\
+$git_state\
+$line_break\
+$character"""
+
+right_format = """
+$status\
+$cmd_duration\
+$jobs\
+$python\
+$nodejs\
+$ruby\
+$kubernetes\
+$aws\
+$username\
+$hostname\
+$time"""
+
+# ── os_icon ──
+[os]
+disabled = false
+format = "[$symbol]($style) "
+style = "bold blue"
+
+[os.symbols]
+Windows = ""          # nf-custom-windows
+Macos = ""
+Linux = ""
+
+# ── dir ──
+[directory]
+style = "bold cyan"
+truncation_length = 3
+truncate_to_repo = true
+truncation_symbol = "…/"
+read_only = " "
+format = "[$path]($style)[$read_only]($read_only_style) "
+
+# ── vcs ──
+[git_branch]
+symbol = " "
+style = "bold magenta"
+format = "[$symbol$branch]($style)"
+
+[git_status]
+style = "bold magenta"
+format = "[ $all_status$ahead_behind]($style)"
+conflicted = "~"
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇅${ahead_count}${behind_count}"
+untracked = "?${count}"
+stashed = "*${count}"
+modified = "!${count}"
+staged = "+${count}"
+renamed = "»${count}"
+deleted = "-${count}"
+
+[git_state]
+style = "bold yellow"
+format = '\([$state( $progress_current/$progress_total)]($style)\) '
+
+# ── prompt_char ──
+# Green when the last command succeeded, red when it failed — p10k's
+# POWERLEVEL9K_PROMPT_CHAR behaviour.
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vicmd_symbol = "[❮](bold green)"
+
+# ── status ──
+[status]
+disabled = false
+symbol = "✘ "
+format = "[$symbol$status]($style) "
+style = "bold red"
+map_symbol = true
+
+# ── command_execution_time ──
+[cmd_duration]
+min_time = 2_000
+format = "[ $duration]($style) "
+style = "yellow"
+
+# ── background_jobs ──
+[jobs]
+symbol = " "
+format = "[$symbol$number]($style) "
+style = "bold blue"
+number_threshold = 1
+
+# ── language / tool versions ──
+[python]
+symbol = " "
+format = '[$symbol$version( \($virtualenv\))]($style) '
+style = "yellow"
+detect_extensions = []
+detect_files = ["pyproject.toml", "requirements.txt", ".python-version", "uv.lock"]
+
+[nodejs]
+symbol = " "
+format = "[$symbol$version]($style) "
+style = "green"
+detect_files = ["package.json", ".node-version", ".nvmrc"]
+
+[ruby]
+symbol = " "
+format = "[$symbol$version]($style) "
+style = "red"
+detect_files = ["Gemfile", ".ruby-version"]
+
+[kubernetes]
+disabled = false
+symbol = "⎈ "
+format = '[$symbol$context( \($namespace\))]($style) '
+style = "cyan"
+
+[aws]
+symbol = " "
+format = '[$symbol$profile( \($region\))]($style) '
+style = "bold yellow"
+
+# ── context (user@host) ──
+# p10k only shows this over SSH or as root; starship's equivalent is
+# show_always = false, which hides it for a local interactive session.
+[username]
+show_always = false
+style_user = "yellow"
+style_root = "bold red"
+format = "[$user]($style)"
+
+[hostname]
+ssh_only = true
+ssh_symbol = "  "
+style = "yellow"
+format = "[@$hostname]($style) "
+
+# ── time ──
+[time]
+disabled = false
+time_format = "%H:%M:%S"
+style = "bright-black"
+format = "[$time]($style)"
