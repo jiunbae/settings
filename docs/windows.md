@@ -232,3 +232,9 @@ is where the time goes.
 | `cloud-upload DIR -To sub` | Upload a folder, changed files only |
 | `cloud-upload DIR -DryRun` | List what would be uploaded |
 | `cloud-upload FILE -Share -Expire 7` | Public link to the clipboard, expiring in 7 days |
+
+`-Share` accepts exactly one file or folder (after wildcard expansion) and shares
+that item's remote path, including when its files are already uploaded. Multiple
+inputs are rejected before uploading; run each separately to create separate links.
+A folder link includes its existing remote contents. `-DryRun` also works with
+`-Sync` and never creates a public link.

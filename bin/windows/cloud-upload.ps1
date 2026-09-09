@@ -92,6 +92,20 @@ function Remote-Url([string]$relative) {
   return "$dav/" + (($parts | ForEach-Object { Enc $_ }) -join '/')
 }
 
+# Resolve once, before any transfer. A public link must name one explicit input,
+# never a common parent that may contain unrelated uploads.
+$inputs = @(
+  foreach ($p in $Path) {
+    $items = @(Resolve-Path -Path $p -ErrorAction SilentlyContinue)
+    if ($items.Count -eq 0) { Die "경로를 찾을 수 없음: $p" }
+    foreach ($it in $items) { Get-Item -LiteralPath $it.Path }
+  }
+)
+if ($Share -and $inputs.Count -ne 1) {
+  Die "-Share 는 파일 또는 폴더 하나만 지정하세요. 여러 경로는 각각 실행하세요."
+}
+$shareTarget = if ($Share) { "/$root/$($inputs[0].Name)" }
+
 $uploaded = [Collections.Generic.List[string]]::new()
 $skipped  = [Collections.Generic.List[string]]::new()
 $failed   = [Collections.Generic.List[string]]::new()
@@ -188,37 +202,31 @@ if ($Sync) {
   if (-not $rclone) { Die "-Sync 에는 rclone 이 필요합니다. winget install Rclone.Rclone" }
   if ((& rclone listremotes 2>$null) -notcontains "nc:") { Die "rclone 원격 'nc' 가 없습니다. Setup-Nextcloud.ps1 재실행." }
 
-  foreach ($p in $Path) {
-    foreach ($it in @(Resolve-Path -Path $p -ErrorAction SilentlyContinue)) {
-      $fs = Get-Item -LiteralPath $it.Path
-      $dst = if ($fs.PSIsContainer) { "nc:$root/$($fs.Name)" } else { "nc:$root" }
-      $src = if ($fs.PSIsContainer) { $fs.FullName } else { $fs.DirectoryName }
-      Write-Host "[sync] $($fs.FullName)  ->  /$($dst.Substring(3))" -ForegroundColor Cyan
-      if ($fs.PSIsContainer) {
-        & rclone copy $src $dst --transfers $Transfers --checkers $Transfers --progress --stats-one-line --stats 1s
-      } else {
-        & rclone copy $src $dst --include $fs.Name --transfers $Transfers --progress --stats-one-line --stats 1s
-      }
-      if ($LASTEXITCODE -ne 0) { $failed.Add($fs.Name) } else { $uploaded.Add($fs.Name) }
+  $copyOptions = @()
+  if ($DryRun) { $copyOptions += '--dry-run' }
+  foreach ($fs in $inputs) {
+    $dst = if ($fs.PSIsContainer) { "nc:$root/$($fs.Name)" } else { "nc:$root" }
+    $src = if ($fs.PSIsContainer) { $fs.FullName } else { $fs.DirectoryName }
+    Write-Host "[sync] $($fs.FullName)  ->  /$($dst.Substring(3))" -ForegroundColor Cyan
+    if ($fs.PSIsContainer) {
+      & rclone copy $src $dst --transfers $Transfers --checkers $Transfers --progress --stats-one-line --stats 1s @copyOptions
+    } else {
+      & rclone copy $src $dst --include $fs.Name --transfers $Transfers --progress --stats-one-line --stats 1s @copyOptions
     }
+    if ($LASTEXITCODE -ne 0) { $failed.Add($fs.Name) } else { $uploaded.Add($fs.Name) }
   }
 }
 else {
   # ---- 대상 수집 (폴더는 재귀 전개) -----------------------------------
   $jobs = [Collections.Generic.List[object]]::new()
-  foreach ($p in $Path) {
-    $items = @(Resolve-Path -Path $p -ErrorAction SilentlyContinue)
-    if ($items.Count -eq 0) { Die "경로를 찾을 수 없음: $p" }
-    foreach ($it in $items) {
-      $fs = Get-Item -LiteralPath $it.Path
-      if ($fs.PSIsContainer) {
-        foreach ($f in Get-ChildItem -LiteralPath $fs.FullName -File -Recurse) {
-          $sub = $f.FullName.Substring($fs.FullName.Length).TrimStart('\') -replace '\\', '/'
-          $jobs.Add(@{ Local = $f.FullName; Rel = "$root/$($fs.Name)/$sub"; Info = $f })
-        }
-      } else {
-        $jobs.Add(@{ Local = $fs.FullName; Rel = "$root/$($fs.Name)"; Info = $fs })
+  foreach ($fs in $inputs) {
+    if ($fs.PSIsContainer) {
+      foreach ($f in Get-ChildItem -LiteralPath $fs.FullName -File -Recurse) {
+        $sub = $f.FullName.Substring($fs.FullName.Length).TrimStart('\') -replace '\\', '/'
+        $jobs.Add(@{ Local = $f.FullName; Rel = "$root/$($fs.Name)/$sub"; Info = $f })
       }
+    } else {
+      $jobs.Add(@{ Local = $fs.FullName; Rel = "$root/$($fs.Name)"; Info = $fs })
     }
   }
   if ($jobs.Count -eq 0) { Die "업로드할 파일이 없습니다." }
@@ -253,7 +261,7 @@ else {
   if ($jobs.Count -eq 0) {
     $sw.Stop()
     Write-Host ("최신 상태입니다. 전송할 것 없음 ({0:N2}s)" -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green
-    exit 0
+    if (-not $Share -or $DryRun) { exit 0 }
   }
 
   foreach ($j in $jobs) { $totalSize += $j.Info.Length }
@@ -382,15 +390,11 @@ $skipMsg = if ($skipped.Count -gt 0) { ", 스킵 $($skipped.Count)건" } else { 
 Write-Host ("완료: {0}건{1}  ({2:N1}s{3})" -f $uploaded.Count, $skipMsg, $secs, $rate) -ForegroundColor Green
 
 # ---- 공개 링크 --------------------------------------------------------
-if ($Share -and ($uploaded.Count + $skipped.Count) -gt 0) {
-  $one = if ($uploaded.Count -eq 1 -and $skipped.Count -eq 0) { $uploaded[0] }
-         elseif ($uploaded.Count -eq 0 -and $skipped.Count -eq 1) { $skipped[0] }
-         else { $null }
-  $target = if ($one -and -not $Sync) { "/$one" } else { "/$root" }
+if ($Share -and -not $DryRun -and $failed.Count -eq 0 -and ($uploaded.Count + $skipped.Count) -gt 0) {
   $curlArgs = @(
     "-s", "-n", "-H", "OCS-APIRequest: true",
     "-X", "POST", "$server/ocs/v2.php/apps/files_sharing/api/v1/shares?format=json",
-    "--data-urlencode", "path=$target",
+    "--data-urlencode", "path=$shareTarget",
     "--data-urlencode", "shareType=3",
     "--data-urlencode", "permissions=1"
   )
