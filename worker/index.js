@@ -1,6 +1,14 @@
 /**
  * Cloudflare Worker — settings.jiun.dev
  *
+ * NOT DEPLOYED. settings.jiun.dev is served by GitHub Pages from the `gh-pages`
+ * branch; Cloudflare only proxies the domain. Live responses carry GitHub/Fastly
+ * headers and never the `x-repo` header this file sets, and
+ * `gh api repos/jiunbae/settings/pages` reports `source: { branch: gh-pages }`.
+ * Keeping this as a record of the alternative; if it is ever deployed, note that
+ * BRANCH below pins a branch name and that raw.githubusercontent.com URLs are not
+ * redirected after a branch rename.
+ *
  * Proxies the bootstrap installer from GitHub raw content.
  *
  * Usage:

@@ -25,7 +25,11 @@ name: Release
 on:
   push:
     branches:
+      # Both listed so the default branch can be renamed without a release gap:
+      # GitHub does not rewrite workflow triggers on rename, and a trigger naming a
+      # branch that no longer exists simply never fires.
       - master
+      - main
     tags:
       - 'v*'
     paths-ignore:

@@ -379,7 +379,7 @@ settings/
 │   └── scripts.sh         #   Personal CLI scripts → ~/.local/bin
 ├── bin/                    # Personal CLI scripts (linked onto PATH)
 │   └── subd               #   Run a command across subdirectories
-├── worker/                 # Cloudflare Worker (settings.jiun.dev)
+├── worker/                 # Cloudflare Worker — written, never deployed (see below)
 │   ├── index.js           #   Proxy raw GitHub content
 │   └── wrangler.toml      #   Wrangler configuration
 ├── scripts/                # Build scripts
@@ -403,6 +403,27 @@ settings/
 └── .github/workflows/      # CI/CD
     └── release.yml         #   Auto-release on tag
 ```
+
+## How settings.jiun.dev is served
+
+**GitHub Pages, from the `gh-pages` branch** — not the Cloudflare Worker in `worker/`.
+That Worker was written but never deployed; the live responses carry
+`x-github-request-id` and Fastly's `via: 1.1 varnish`, and none of the `x-repo` header
+`worker/index.js` sets on every 200. `gh api repos/jiunbae/settings/pages` confirms
+`source: { branch: gh-pages, path: / }`. Cloudflare only proxies the domain.
+
+`gh-pages` holds three files: `CNAME`, `bootstrap.sh`, and `index.html` — where
+`index.html` is a byte-identical copy of `bootstrap.sh`, which is what makes
+`curl -LsSf https://settings.jiun.dev | bash` work with no path.
+
+> [!IMPORTANT]
+> `bootstrap.sh` therefore exists **twice**: the real one here on the default branch,
+> and the copy on `gh-pages` that is actually served. Nothing syncs them — no workflow
+> in `.gitea/`, `.github/` or `scripts/` references `gh-pages`. The copy went stale for
+> over five months once (live: 2026-02-22, repo: 2026-07-31), which meant the live
+> installer was missing the guard that refuses to `git reset --hard` over uncommitted
+> local changes. **After changing `bootstrap.sh`, copy it to both `bootstrap.sh` and
+> `index.html` on `gh-pages`.**
 
 ## Platform Support
 
