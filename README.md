@@ -65,7 +65,7 @@ git clone https://github.com/jiunbae/settings.git && cd settings
 
 | Area | Components |
 | :--- | :--- |
-| **Shell** | [zsh](https://www.zsh.org/) + [zinit](https://github.com/zdharma-continuum/zinit) + [Powerlevel10k](https://github.com/romkatv/powerlevel10k) · PowerShell 7 + [starship](https://starship.rs/) + [PSFzf](https://github.com/kelleyma49/PSFzf) on Windows |
+| **Shell** | [zsh](https://www.zsh.org/) + [zinit](https://github.com/zdharma-continuum/zinit) + [Powerlevel10k](https://github.com/romkatv/powerlevel10k), with [autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) and [fast-syntax-highlighting](https://github.com/z-shell/fast-syntax-highlighting) · PowerShell 7 + [starship](https://starship.rs/) + [PSFzf](https://github.com/kelleyma49/PSFzf) on Windows |
 | **Editor** | [NeoVim](https://neovim.io/) + [LazyVim](https://www.lazyvim.org/), with the [tree-sitter CLI](https://github.com/tree-sitter/tree-sitter) for parsers |
 | **Multiplexer** | [tmux](https://github.com/tmux/tmux) + [TPM](https://github.com/tmux-plugins/tpm) · [zellij](https://zellij.dev/) · [rmux](https://github.com/Helvesec/rmux) on Windows |
 | **CLI tools** | [eza](https://github.com/eza-community/eza) `ls` · [fd](https://github.com/sharkdp/fd) `find` · [bat](https://github.com/sharkdp/bat) `cat` · [ripgrep](https://github.com/BurntSushi/ripgrep) `grep` · [fzf](https://github.com/junegunn/fzf) |
@@ -110,8 +110,22 @@ Options:
   -h, --help          Show help message
 
 Components:
-  base zsh nvim tmux zellij rust uv tools tools-extra
-  ssh hishtory hammerspoon codex claude cship scripts
+  base          Basic packages (curl, wget, git, build-essential)
+  zsh           Zsh + zinit + Powerlevel10k
+  nvim          NeoVim + LazyVim
+  tmux          tmux + TPM (terminal multiplexer)
+  zellij        zellij (modern terminal multiplexer)
+  rust          Rust toolchain + cargo-binstall
+  uv            uv (fast Python package manager)
+  tools         CLI tools (eza, fd, bat, ripgrep, fzf)
+  tools-extra   Extra CLI tools (delta, dust, procs, bottom)
+  ssh           SSH config (copy only, not symlinked)
+  hishtory      hishtory (better shell history with sync support)
+  hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
+  codex         Codex CLI/App config, hooks, and notify chain
+  claude        Claude Code settings, hooks, skill index, memory, MCP
+  cship         cship + Starship (fast Claude Code statusline)
+  scripts       Personal CLI scripts linked into ~/.local/bin
 ```
 
 ```bash
@@ -147,8 +161,10 @@ settings/
 │   ├── nvim/ zellij/ powershell/ windows-terminal/
 │   └── claude/ codex/ cship/ hishtory/
 ├── bin/                    # Personal CLI scripts, linked onto PATH
+│   └── windows/            #   Windows-only; install.sh never sees this dir
 ├── scripts/                # Build and maintenance helpers
 ├── docs/                   # The guides linked below
+├── .gitea/workflows/       # Releases run on the self-hosted Gitea runner
 └── worker/                 # Cloudflare Worker — written, never deployed
 ```
 
@@ -156,6 +172,7 @@ settings/
 
 | | |
 | :--- | :--- |
+| [components.md](docs/components.md) | hishtory sync, Hammerspoon permissions, the managed Codex config |
 | [windows.md](docs/windows.md) | rmux, PowerShell, NeoVim, Windows Terminal, Nextcloud upload |
 | [powershell.md](docs/powershell.md) | How the PowerShell profile went from 1354ms to 394ms |
 | [agent-state.md](docs/agent-state.md) | Restoring Claude Code / Codex state on a new machine |
