@@ -659,6 +659,26 @@ parsers.
 > `git restore configs/nvim/lazy-lock.json` if it looks short. A line-ending-only diff
 > is normal and expected: lazy writes LF, `core.autocrlf` checks out CRLF.
 
+### Repairing an existing lazy.nvim install
+
+The bootstrap in `lua/config/lazy.lua` runs only when `lazypath` does not exist, so
+fixing it does **not** heal a machine where lazy.nvim was already installed with a
+detached HEAD. Such an install keeps truncating `lazy-lock.json` on every `Lazy!`
+command. Check and repair:
+
+```sh
+cd "${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy/lazy.nvim"   # Windows: %LOCALAPPDATA%\nvim-data\lazy\lazy.nvim
+git rev-parse --abbrev-ref HEAD     # "HEAD" means detached — needs repairing
+git checkout -B main HEAD           # same commit, now on a branch
+```
+
+To find out whether a machine is affected at all, ask lazy.nvim which plugin it cannot
+name a branch for:
+
+```sh
+nvim --headless -c 'lua local G=require("lazy.manage.git") for _,p in pairs(require("lazy.core.config").plugins) do if p._.installed and not p._.is_local then local i=G.info(p.dir) if not i or not (i.branch or G.get_branch(p)) then print("no branch: "..p.name) end end end' -c 'qa!'
+```
+
 > [!NOTE]
 > LazyVim needs NeoVim 0.11 or newer (`modules/editor.sh` pins 0.11.2). Check with
 > `nvim --version`; a `nvim --version` that works proves only that the editor is
