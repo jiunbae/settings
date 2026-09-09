@@ -18,17 +18,16 @@ name: Release
 # publish half is skipped rather than failed.
 #
 # Note the mirror makes this workflow fire twice per release: once for the
-# master push that creates the tag, and again when the new tag syncs back from
-# GitHub. The second run finds the release already present and exits early.
+# push to the default branch that creates the tag, and again when the new tag syncs
+# back from GitHub. The second run finds the release already present and exits early.
 # The old GitHub workflow behaved the same way.
 
 on:
   push:
     branches:
-      # Both listed so the default branch can be renamed without a release gap:
-      # GitHub does not rewrite workflow triggers on rename, and a trigger naming a
-      # branch that no longer exists simply never fires.
-      - master
+      # Must match the branch name on the Gitea side, which mirrors GitHub's default.
+      # A trigger naming a branch that does not exist simply never fires, and GitHub
+      # does not rewrite workflow triggers when a branch is renamed.
       - main
     tags:
       - 'v*'
