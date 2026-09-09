@@ -19,14 +19,18 @@ if [[ ! -f "${ZINIT_HOME}/zinit.zsh" ]]; then
   return 1
 fi
 
-source "${ZINIT_HOME}/zinit.zsh"
+if (( ! $+functions[zinit] )); then
+  source "${ZINIT_HOME}/zinit.zsh"
+fi
 
 ################################
 # Plugins
 
 # Powerlevel10k theme (load immediately)
-zinit ice depth=1
-zinit light romkatv/powerlevel10k
+if [[ -z ${_SETTINGS_ZSH_PLUGINS_LOADED:-} ]]; then
+  zinit ice depth=1
+  zinit light romkatv/powerlevel10k
+fi
 
 typeset -U path fpath PATH
 
@@ -49,8 +53,10 @@ fi
 unset _zcompdump _zcompdump_day
 
 # Completion plugins (turbo mode with blockf to track fpath changes)
-zinit wait lucid blockf for \
-    zsh-users/zsh-completions
+if [[ -z ${_SETTINGS_ZSH_PLUGINS_LOADED:-} ]]; then
+  zinit wait lucid blockf for \
+      zsh-users/zsh-completions
+fi
 
 # Session shortcuts use rmux. Keep the positional-name and explicit-flag forms
 # of the old tmux plugin without loading its aliases or startup hooks.
@@ -86,16 +92,20 @@ _rmux_session_names() {
 compdef _rmux_session_names ta tad to tkss
 
 # fzf-tab must load after compinit, use atload to replay compdefs
-zinit wait lucid atload"zicdreplay" for \
-    Aloxaf/fzf-tab
+if [[ -z ${_SETTINGS_ZSH_PLUGINS_LOADED:-} ]]; then
+  zinit wait lucid atload"zicdreplay" for \
+      Aloxaf/fzf-tab
 
-# Other plugins with turbo mode (deferred loading after prompt)
-zinit wait lucid for \
-    atload"_zsh_autosuggest_start" \
-        zsh-users/zsh-autosuggestions \
-    z-shell/fast-syntax-highlighting \
-    OMZP::git \
-    unixorn/git-extra-commands
+  # Other plugins with turbo mode (deferred loading after prompt).
+  # Reloading these wrappers can break ZLE after the next command.
+  zinit wait lucid for \
+      atload"_zsh_autosuggest_start" \
+          zsh-users/zsh-autosuggestions \
+      z-shell/fast-syntax-highlighting \
+      OMZP::git \
+      unixorn/git-extra-commands
+  typeset -g _SETTINGS_ZSH_PLUGINS_LOADED=1
+fi
 
 ################################
 # Zsh options
