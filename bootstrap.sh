@@ -15,7 +15,6 @@ set -euo pipefail
 # Configuration
 # ==============================================================================
 REPO_URL="https://github.com/jiunbae/settings"
-REPO_NAME="settings"
 INSTALL_DIR="${SETTINGS_INSTALL_DIR:-$HOME/.settings}"
 
 # Colors
@@ -83,7 +82,13 @@ download_with_git() {
             log_warn "Discarding local changes because SETTINGS_FORCE_UPDATE=true"
         fi
         git fetch origin
-        git reset --hard origin/master
+        # Follow whatever the remote's default branch is called rather than naming it.
+        # GitHub does not redirect git operations that use an old branch name after a
+        # rename, so a hardcoded `origin/master` leaves every existing clone broken the
+        # moment the default branch is renamed. `set-head -a` re-asks the server and
+        # rewrites origin/HEAD, creating it if an older clone lacks it.
+        git remote set-head origin -a >/dev/null 2>&1 || true
+        git reset --hard origin/HEAD
     else
         git clone --depth 1 "$REPO_URL.git" "$INSTALL_DIR"
     fi
@@ -94,7 +99,9 @@ download_with_git() {
 download_with_tarball() {
     log_info "Downloading via tarball (git not available)..."
 
-    local tarball_url="$REPO_URL/archive/refs/heads/master.tar.gz"
+    # /archive/HEAD.tar.gz follows the repository's default branch, so this survives a
+    # branch rename where /archive/refs/heads/<name>.tar.gz would 404.
+    local tarball_url="$REPO_URL/archive/HEAD.tar.gz"
     local tmp_dir=$(mktemp -d)
 
     # Download
@@ -104,9 +111,19 @@ download_with_tarball() {
         wget -qO- "$tarball_url" | tar -xz -C "$tmp_dir"
     fi
 
+    # The HEAD tarball's single top-level directory is named after the commit sha
+    # (settings-<sha>), not the branch, so it has to be discovered rather than guessed.
+    local extracted
+    extracted=$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    if [[ -z "$extracted" ]]; then
+        log_error "Tarball did not contain a directory; download likely failed"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+
     # Move to install directory
     rm -rf "$INSTALL_DIR"
-    mv "$tmp_dir/$REPO_NAME-master" "$INSTALL_DIR"
+    mv "$extracted" "$INSTALL_DIR"
     rm -rf "$tmp_dir"
 
     log_success "Downloaded to $INSTALL_DIR"
