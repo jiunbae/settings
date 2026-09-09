@@ -49,11 +49,41 @@ fi
 unset _zcompdump _zcompdump_day
 
 # Completion plugins (turbo mode with blockf to track fpath changes)
-# Disable ZSH_TMUX_FIXTERM to avoid tmux.extra.conf error
-export ZSH_TMUX_FIXTERM=false
 zinit wait lucid blockf for \
-    zsh-users/zsh-completions \
-    OMZP::tmux
+    zsh-users/zsh-completions
+
+# Session shortcuts use rmux. Keep the positional-name and explicit-flag forms
+# of the old tmux plugin without loading its aliases or startup hooks.
+unalias ta tad tl to ts tkss tksv tds 2>/dev/null
+_rmux_session_command() {
+  local action=$1 name_flag=$2 extra_flag=$3
+  local -a args=("$action")
+  shift 3
+  [[ -n $extra_flag ]] && args+=("$extra_flag")
+  if [[ $# -gt 0 && $1 != -* ]]; then
+    command rmux "${args[@]}" "$name_flag" "$@"
+  else
+    command rmux "${args[@]}" "$@"
+  fi
+}
+ta()   { _rmux_session_command attach-session -t '' "$@" }
+tad()  { _rmux_session_command attach-session -t -d "$@" }
+ts()   { _rmux_session_command new-session -s '' "$@" }
+to()   { _rmux_session_command new-session -s -A "$@" }
+tl()   { command rmux list-sessions "$@" }
+tkss() { _rmux_session_command kill-session -t '' "$@" }
+tksv() { command rmux kill-server "$@" }
+tds() {
+  local digest
+  digest=$(printf '%s' "$PWD" | cksum)
+  command rmux new-session -A -s "${PWD:t}-${digest%% *}"
+}
+_rmux_session_names() {
+  local -a sessions
+  sessions=("${(@f)$(command rmux list-sessions -F '#{session_name}' 2>/dev/null)}")
+  compadd -- "${(@)sessions:#}"
+}
+compdef _rmux_session_names ta tad to tkss
 
 # fzf-tab must load after compinit, use atload to replay compdefs
 zinit wait lucid atload"zicdreplay" for \
@@ -117,6 +147,9 @@ mkcd() { mkdir -p "$1" && cd "$1" }
 ################################
 # Autosuggestions config
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=7'
+# Bind once via the zinit atload hook above. Rebinding after every command
+# conflicts with fast-syntax-highlighting and can make ZLE ignore further input.
+ZSH_AUTOSUGGEST_MANUAL_REBIND=1
 
 ################################
 # PATH
