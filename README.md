@@ -127,6 +127,7 @@ Components:
 |-----------|-------------|
 | [NeoVim](https://neovim.io/) | Hyperextensible Vim-based editor |
 | [LazyVim](https://www.lazyvim.org/) | Fast, modern Neovim setup powered by lazy.nvim |
+| [tree-sitter CLI](https://github.com/tree-sitter/tree-sitter) | Builds nvim-treesitter parsers (Windows: `npm i -g tree-sitter-cli`, no winget package) |
 
 ### Terminal
 | Component | Description |
@@ -616,6 +617,53 @@ The techniques, in order of what they were worth:
 > per-line costs, and inserting `[Stopwatch]` marks at each section header gives
 > per-section ones. Both were needed here: the line-level view found the PATH scan,
 > the section view found that starship was still spawning a second process.
+
+## NeoVim Configuration (Windows)
+
+`configs/nvim/` needs no Windows variant — nothing in it is POSIX-specific. What it
+needs is to be *found*: NeoVim reads `%LOCALAPPDATA%\nvim` on Windows, so installing
+the binary alone (`winget install Neovim.Neovim`) leaves a stock editor with no
+plugins and no keymaps, which looks like a working install until you notice `vim` has
+none of your bindings.
+
+### How to apply
+
+```powershell
+winget install --id Neovim.Neovim
+npm install -g tree-sitter-cli          # nvim-treesitter compiles parsers with it
+New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\nvim" `
+         -Target "$env:USERPROFILE\workspace\settings\configs\nvim"
+nvim --headless "+Lazy! install" +qa
+nvim --headless "+Lazy! restore" +qa
+```
+
+A **junction**, not a symlink: a directory junction needs no elevation and no
+Developer Mode, where `New-Item -ItemType SymbolicLink` needs one of them. It is the
+closest equivalent to the symlink `modules/editor.sh` makes at `~/.config/nvim`, and
+it keeps `lazy-lock.json` writable in place, so a plugin update on Windows shows up
+as a repo change exactly as it does on macOS and Linux.
+
+`Lazy! restore` after `Lazy! install` is what pins the 35 plugins to the commits in
+`lazy-lock.json` rather than to whatever is newest that day, so this machine matches
+the others.
+
+There is no winget package for the tree-sitter CLI; npm ships a prebuilt binary,
+where `cargo install tree-sitter-cli` would compile it. Without it `mason.nvim`
+reports `Failed to install tree-sitter-cli` and `nvim-treesitter` cannot build
+parsers.
+
+> [!WARNING]
+> `lazy-lock.json` is a tracked file reached through the junction, so lazy.nvim writes
+> into the repo. If lazy ever dies while writing it, the file is left truncated to
+> `{` — check `git status` in this repo after a plugin operation, and
+> `git restore configs/nvim/lazy-lock.json` if it looks short. A line-ending-only diff
+> is normal and expected: lazy writes LF, `core.autocrlf` checks out CRLF.
+
+> [!NOTE]
+> LazyVim needs NeoVim 0.11 or newer (`modules/editor.sh` pins 0.11.2). Check with
+> `nvim --version`; a `nvim --version` that works proves only that the editor is
+> installed, not that this config is loaded. To check that, run
+> `nvim --headless -c 'lua print(pcall(require, "lazyvim"))' -c 'qa!'`.
 
 ## Troubleshooting
 

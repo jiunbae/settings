@@ -7,7 +7,13 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
     { "git", "init", lazypath },
     { "git", "-C", lazypath, "remote", "add", "origin", lazyrepo },
     { "git", "-C", lazypath, "fetch", "--depth=1", "origin", lazyref },
-    { "git", "-C", lazypath, "checkout", "--detach", "FETCH_HEAD" },
+    -- `checkout -B main` rather than `--detach`: same pinned commit, but it leaves a
+    -- local branch behind. With a detached HEAD lazy.nvim has no branch to record for
+    -- itself, so writing the lockfile hits `assert(Git.get_branch(plugin))` in
+    -- lazy/manage/lock.lua and dies partway through — leaving lazy-lock.json
+    -- truncated to "{". Which is a tracked file, since the config directory is a
+    -- symlink (junction on Windows) into this repo.
+    { "git", "-C", lazypath, "checkout", "-B", "main", "FETCH_HEAD" },
   }
   for _, cmd in ipairs(commands) do
     local out = vim.fn.system(cmd)
