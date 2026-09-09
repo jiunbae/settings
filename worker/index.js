@@ -24,7 +24,7 @@
  */
 
 const REPO = "jiunbae/settings";
-const BRANCH = "master";
+const BRANCH = "main";
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/${BRANCH}`;
 
 // Cache TTL in seconds (5 minutes — balance between freshness and speed)
