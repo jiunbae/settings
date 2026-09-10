@@ -107,6 +107,80 @@ if ($script:Interactive) {
     Set-PSReadLineKeyHandler -Key Delete          -Function DeleteChar
     Set-PSReadLineKeyHandler -Key Ctrl+RightArrow -Function ForwardWord
     Set-PSReadLineKeyHandler -Key Ctrl+LeftArrow  -Function BackwardWord
+
+    # Ctrl+Enter — treat it as Enter.
+    #
+    # Windows OpenSSH/ConPTY renders a *pasted* LF as a Ctrl+Enter record
+    # (VK_RETURN, scan 0x1c, U+000A, LEFT_CTRL_PRESSED) rather than Ctrl+J, so every
+    # newline in a paste arrives here as Ctrl+Enter. EditMode Windows binds it to
+    # InsertLineAbove; EditMode Emacs binds nothing, and an unbound key is dropped
+    # without a sound — which is why a multi-line paste over ssh collapsed onto one
+    # line under a multiplexer.
+    #
+    # AcceptLine, because without bracketed paste a pasted newline *is* a newline
+    # typed at the prompt: three pasted lines should run as three commands, which is
+    # what the same paste does outside the multiplexer. AddLine would instead build
+    # one multi-line buffer, and there is no way to tell the two intents apart from
+    # a key record — PSReadLine never learns that a paste is in progress. Incomplete
+    # input still continues to the next line, exactly as Enter does.
+    Set-PSReadLineKeyHandler -Key Ctrl+Enter -Function AcceptLine
+
+    # Alt+V — paste the clipboard of whichever machine the terminal is on.
+    #
+    # PSReadLine has no bracketed paste: the shipped binary contains no ?2004, no
+    # 200~/201~, no OSC 52. So a terminal cannot announce "this is a paste, take it
+    # literally", and a multi-line paste arrives as plain keystrokes whose newlines
+    # become Enter. Locally that never showed, because EditMode Windows binds Ctrl+V
+    # to PSReadLine's own Paste, which reads the clipboard directly and skips the
+    # terminal. EditMode Emacs binds no paste key at all, so over ssh the paste is
+    # whatever the terminal typed for us.
+    #
+    # PSReadLine's Paste would read the clipboard of the box PSReadLine runs on —
+    # the wrong end of an ssh session. OSC 52 asks the terminal instead, which is
+    # the only standard way to reach the client's clipboard. Terminals gate it:
+    # Ghostty needs `clipboard-read = allow`. When nothing answers we fall back to
+    # the local clipboard, which is exactly what Paste would have done.
+    function Get-TerminalClipboard {
+        param([int]$TimeoutMs = 400)
+        if ([Console]::IsInputRedirected) { return $null }
+        while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) }
+        [Console]::Write("$([char]27)]52;c;?$([char]7)")   # ESC ] 52 ; c ; ? BEL
+
+        $sb = [Text.StringBuilder]::new()
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $state = 'wait-esc'
+        while ($sw.ElapsedMilliseconds -lt $TimeoutMs -and $state -ne 'done') {
+            if (-not [Console]::KeyAvailable) { Start-Sleep -Milliseconds 5; continue }
+            $ch = [Console]::ReadKey($true).KeyChar
+            if ($state -eq 'wait-esc') {
+                if ($ch -eq [char]27) { $state = 'in-osc' }
+            } elseif ($ch -eq [char]7) {
+                $state = 'done'
+            } elseif ($ch -eq '\' -and $sb.Length -gt 0 -and $sb[$sb.Length - 1] -eq [char]27) {
+                [void]$sb.Remove($sb.Length - 1, 1); $state = 'done'   # ST
+            } else {
+                [void]$sb.Append($ch)
+            }
+        }
+        if ($state -ne 'done') { return $null }
+
+        $raw = $sb.ToString()                    # ]52;c;<base64>
+        $i = $raw.LastIndexOf(';')
+        if ($i -lt 0) { return $null }
+        try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($raw.Substring($i + 1))) }
+        catch { $null }
+    }
+
+    Set-PSReadLineKeyHandler -Key Alt+v -BriefDescription PasteFromTerminal `
+        -Description 'Paste the terminal-side clipboard (OSC 52), falling back to the local one' `
+        -ScriptBlock {
+            $text = Get-TerminalClipboard
+            if ($null -eq $text) { $text = Get-Clipboard -Raw -ErrorAction SilentlyContinue }
+            if ([string]::IsNullOrEmpty($text)) { return }
+            # Newlines stay newlines: PSReadLine then edits it as a multi-line buffer
+            # instead of running each line, which is the whole point.
+            [Microsoft.PowerShell.PSConsoleReadLine]::Insert(($text -replace "`r`n", "`n" -replace "`r", "`n"))
+        }
 }
 
 ################################
