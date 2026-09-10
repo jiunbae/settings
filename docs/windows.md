@@ -112,6 +112,31 @@ wrappers and the Korean two-set prefix policy all carry over.
 > bare-shell baseline, down from 1183ms. The techniques and the numbers are in
 > [powershell.md](powershell.md).
 
+### Pasting over ssh (Alt+V)
+
+Pasting several lines into pwsh over ssh runs them as separate commands, or arrives
+as one line with the newlines gone. The terminal is not at fault — **PSReadLine has
+no bracketed paste**. Scanning the shipped binary (2.4.5) for `?2004`, `200~`,
+`201~`, `BracketedPaste` and `]52;` returns nothing for all five, so a terminal has
+no way to announce "this is a paste, take it literally" and the text arrives as
+ordinary keystrokes whose newlines are Enter.
+
+This never shows locally because `EditMode Windows` binds Ctrl+V to PSReadLine's own
+`Paste`, which reads the clipboard directly and never involves the terminal. This
+profile sets `EditMode Emacs` to match `.zshrc`'s `bindkey -e`, and Emacs mode binds
+no paste key at all — so over ssh you get whatever the terminal typed.
+
+Binding PSReadLine's `Paste` does not fix it either: it reads the clipboard of the
+machine PSReadLine runs on, which over ssh is the far end from the clipboard you
+copied into. `Alt+V` instead asks the *terminal* for its clipboard over OSC 52 and
+inserts the reply with newlines intact, leaving PSReadLine editing a multi-line
+buffer. If nothing answers within 400ms it falls back to the local clipboard, which
+is what `Paste` would have done anyway.
+
+Terminals gate OSC 52 reads. Ghostty needs `clipboard-read = allow`, which
+`configs/ghostty/config` already sets. A terminal that refuses simply takes the
+fallback path.
+
 ## NeoVim
 
 `configs/nvim/` needs no Windows variant — nothing in it is POSIX-specific. What it
