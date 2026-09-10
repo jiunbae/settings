@@ -231,9 +231,31 @@ is where the time goes.
 
 | | |
 | :--- | :--- |
-| `cloud-upload DIR -To sub` | Upload a folder, changed files only |
+| `cloud-upload DIR -To sub/nested` | Upload a folder, changed files only; `-To` takes a nested path and creates it |
 | `cloud-upload DIR -DryRun` | List what would be uploaded |
+| `cloud-upload DIR -Exclude *.tmp,__pycache__` | Skip matching entries |
 | `cloud-upload FILE -Share -Expire 7` | Public link to the clipboard, expiring in 7 days |
+
+### Exclude patterns
+
+`-Exclude` reads its patterns the way rclone's `--exclude` does. A pattern with no
+`/` is tested against every path segment, so `__pycache__` drops that directory
+wherever it sits; a pattern containing `/` is tested against the whole path relative
+to the input root, so `dist/*` only drops that one. `*` spans separators — PowerShell
+`-like` is plain string matching — so `dist/*` already covers `dist/sub/deep.js` and
+there is no separate `**`. Matching is case-insensitive, like the filesystem under it.
+
+Excluded directories are pruned during the walk rather than filtered afterwards, so
+the files inside are never enumerated. Over a 4020-file tree whose `node_modules`
+holds 4000 of them, `-Exclude node_modules` took 0.11s against 0.91s for the same
+run without it.
+
+Patterns may be written as one comma-separated argument (`-Exclude a,b`) or as a
+PowerShell array. Both spellings are needed: from a prompt the shell builds the
+array itself, but `bin\cloud-upload.cmd` and the *Send to* entry hand arguments to
+`pwsh -File`, which takes them literally and never applies array syntax — so the
+script splits on commas itself. The cost is that a pattern containing a literal
+comma cannot be expressed; no glob needs one.
 
 `-Share` accepts exactly one file or folder (after wildcard expansion) and shares
 that item's remote path, including when its files are already uploaded. Multiple
