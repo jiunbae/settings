@@ -61,7 +61,8 @@ its default.
 `configs/powershell/profile.ps1` is `.zshrc` ported to PowerShell 7, for the same
 reason as `.rmux.conf`: `install.sh` cannot run on Windows. `configs/powershell/starship.toml`
 is the prompt that replaces Powerlevel10k, laid out to match the p10k config in
-`configs/.p10k.zsh`.
+`configs/.p10k.zsh`. Its right half is right-aligned with starship's `fill` module
+rather than `right_format`, which PowerShell never renders — see below.
 
 There is no zinit equivalent and none is needed — PSReadLine 2.4 ships prediction
 and syntax highlighting natively, which is what `zsh-autosuggestions` and
@@ -96,6 +97,7 @@ wrappers and the Korean two-set prefix policy all carry over.
 | `.zshrc` | Why |
 | :--- | :--- |
 | p10k instant prompt | No equivalent; starship renders in ~20ms unprimed |
+| p10k right prompt | `right_format` is dead under PowerShell: `starship init powershell` never issues the `starship prompt --right` that fish and zsh get. The same segments are right-aligned with the `fill` module inside `format` instead |
 | `hishtory` | Supports bash/zsh/fish only, so history is PSReadLine-local |
 | `umask 077` | Windows uses ACLs |
 | `GPG_TTY` / `updatestartuptty` | pinentry-qt draws a GUI dialog |
