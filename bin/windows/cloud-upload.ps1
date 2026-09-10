@@ -9,6 +9,8 @@
   cloud-upload C:\build\dist -DryRun           # 무엇이 올라갈지만 확인
   cloud-upload C:\build\dist -Force            # 스킵 없이 전부 재업로드
   cloud-upload big.iso -Share -Expire 7        # 공개 링크를 클립보드로
+  cloud-upload C:\proj -Exclude *.tmp,__pycache__,.git     # 제외 패턴 (여러 개)
+  cloud-upload C:\proj -Exclude 'dist/*'       # '/' 가 있으면 상대경로 전체와 매칭
 
   자격 증명은 %USERPROFILE%\_netrc, 대상 정보는
   %USERPROFILE%\.cloud-upload.json 에서 읽습니다 (Setup-Nextcloud.ps1이 생성).
@@ -58,11 +60,22 @@ param(
   [switch]$Strict,
 
   # 실제로 올리지 않고 계획만 출력
-  [switch]$DryRun
+  [switch]$DryRun,
+
+  # 제외 패턴 (여러 개 가능): -Exclude *.tmp,__pycache__,'build/*'
+  [string[]]$Exclude
 )
 
 $ErrorActionPreference = "Stop"
 function Die($m) { Write-Host "cloud-upload: $m" -ForegroundColor Red; exit 1 }
+
+# -Exclude a,b arrives as two values from a PowerShell prompt but as the single
+# string "a,b" through bin\cloud-upload.cmd, because `pwsh -File` takes arguments
+# literally and never applies PowerShell's array syntax. The Explorer "Send to"
+# entry goes the same way. Splitting here makes one spelling work from both.
+# A pattern that genuinely contains a comma is not expressible — no glob needs one.
+$Exclude = @($Exclude | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } |
+             Where-Object { $_ -ne '' })
 
 # ---- 설정 로드 --------------------------------------------------------
 $cfgPath = Join-Path $env:USERPROFILE ".cloud-upload.json"
@@ -71,7 +84,11 @@ $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
 
 $server = $cfg.server.TrimEnd('/')
 $user   = $cfg.user
-$root   = if ($To) { $To.Trim('/') } else { $cfg.remoteDir.Trim('/') }
+# -To takes a nested path ("builds/nightly"). Backslashes are accepted because
+# that is what a Windows shell completes, and normalised here: left alone they
+# survive into a URL segment as %5C and the result depends on the server undoing
+# it, which also leaves the printed path mixing both separators.
+$root   = (($(if ($To) { $To } else { $cfg.remoteDir })) -replace '\\', '/').Trim('/')
 $dav    = "$server/remote.php/dav/files/$user"
 $davPath = ([uri]$dav).AbsolutePath.TrimEnd('/')    # /remote.php/dav/files/<user>
 
@@ -80,7 +97,7 @@ $curl = "$env:WINDIR\System32\curl.exe"
 if (-not (Test-Path $curl)) { $curl = (Get-Command curl.exe -ErrorAction Stop).Source }
 
 if (-not $Path -or $Path.Count -eq 0) {
-  Write-Host "사용법: cloud-upload <파일|폴더|와일드카드> [-To 하위폴더] [-Force] [-Strict] [-DryRun] [-Share] [-Expire 일수] [-Transfers N] [-Sync]"
+  Write-Host "사용법: cloud-upload <파일|폴더|와일드카드> [-To 경로] [-Exclude 패턴,...] [-Force] [-Strict] [-DryRun] [-Share] [-Expire 일수] [-Transfers N] [-Sync]"
   Write-Host "대상  : $server/  ->  /$root   (사용자: $user)"
   Write-Host "curl  : $curl"
   exit 0
@@ -92,11 +109,43 @@ function Remote-Url([string]$relative) {
   return "$dav/" + (($parts | ForEach-Object { Enc $_ }) -join '/')
 }
 
+# -Exclude, matched the way rclone's --exclude reads: a pattern with no "/" is
+# tested against every path segment, so `__pycache__` drops the directory wherever
+# it sits; a pattern with a "/" is tested against the whole path relative to the
+# input root. `*` spans separators (PowerShell -like is plain string matching), so
+# `build/*` covers `build/x/y` and there is no separate `**`. Matching is
+# case-insensitive, which is what the filesystem underneath already is.
+function Test-Excluded([string]$rel, [string[]]$patterns) {
+  if (-not $patterns) { return $false }
+  $segments = $null
+  foreach ($pat in $patterns) {
+    $p = ($pat -replace '\\', '/').Trim('/')
+    if ($p -eq '') { continue }
+    if ($p.Contains('/')) {
+      if ($rel -like $p) { return $true }
+    } else {
+      if ($null -eq $segments) { $segments = $rel -split '/' }
+      foreach ($s in $segments) { if ($s -like $p) { return $true } }
+    }
+  }
+  return $false
+}
+
+# Resolve-Path -Path reads [ ] as a wildcard character class, so a real file whose
+# name contains brackets ("[Full video] x.mp4") resolves to nothing. Keep wildcard
+# support (*.zip) and fall back to a literal lookup only when the pattern matched
+# nothing — a name that is both a valid pattern and a real file keeps the pattern.
+function Resolve-Targets([string]$p) {
+  $r = @(Resolve-Path -Path $p -ErrorAction SilentlyContinue)
+  if ($r.Count -eq 0) { $r = @(Resolve-Path -LiteralPath $p -ErrorAction SilentlyContinue) }
+  return $r
+}
+
 # Resolve once, before any transfer. A public link must name one explicit input,
 # never a common parent that may contain unrelated uploads.
 $inputs = @(
   foreach ($p in $Path) {
-    $items = @(Resolve-Path -Path $p -ErrorAction SilentlyContinue)
+    $items = Resolve-Targets $p
     if ($items.Count -eq 0) { Die "경로를 찾을 수 없음: $p" }
     foreach ($it in $items) { Get-Item -LiteralPath $it.Path }
   }
@@ -204,6 +253,18 @@ if ($Sync) {
 
   $copyOptions = @()
   if ($DryRun) { $copyOptions += '--dry-run' }
+  # -Exclude has to be translated for rclone, not forwarded. rclone's `*` stops
+  # at a '/' where Test-Excluded's spans them, and a bare name matches a *file*,
+  # so `--exclude __pycache__` - the example in this script's own help - excludes
+  # nothing at all. `<p>/**` adds the directory's contents, and `*` becomes `**`
+  # once a pattern spans segments. Checked against rclone 1.75.1: both paths now
+  # keep the same files for `dist/*`, `__pycache__` and `*.pyc`.
+  foreach ($pat in $Exclude) {
+    $p = ($pat -replace '\\', '/').Trim('/')
+    if ($p -eq '') { continue }
+    if ($p.Contains('/')) { $p = $p -replace '\*+', '**' }
+    $copyOptions += @('--exclude', $p, '--exclude', "$p/**")
+  }
   foreach ($fs in $inputs) {
     $dst = if ($fs.PSIsContainer) { "nc:$root/$($fs.Name)" } else { "nc:$root" }
     $src = if ($fs.PSIsContainer) { $fs.FullName } else { $fs.DirectoryName }
@@ -217,17 +278,45 @@ if ($Sync) {
   }
 }
 else {
-  # ---- 대상 수집 (폴더는 재귀 전개) -----------------------------------
+  # ---- 대상 수집 (폴더는 재귀 전개, -Exclude 는 내려가기 전에 걸러낸다) --
   $jobs = [Collections.Generic.List[object]]::new()
+  $excluded = 0
   foreach ($fs in $inputs) {
     if ($fs.PSIsContainer) {
-      foreach ($f in Get-ChildItem -LiteralPath $fs.FullName -File -Recurse) {
-        $sub = $f.FullName.Substring($fs.FullName.Length).TrimStart('\') -replace '\\', '/'
-        $jobs.Add(@{ Local = $f.FullName; Rel = "$root/$($fs.Name)/$sub"; Info = $f })
+      # Get-ChildItem -Recurse 로 다 훑고 나서 거르면, 걸러낼 폴더 안까지 이미
+      # 다 걸어간 뒤다. 직접 훑으면서 제외된 폴더는 아예 안 내려간다.
+      $stack = [Collections.Generic.Stack[object]]::new()
+      $stack.Push(@{ Path = $fs.FullName; Rel = '' })
+      while ($stack.Count -gt 0) {
+        $cur = $stack.Pop()
+        foreach ($e in Get-ChildItem -LiteralPath $cur.Path -ErrorAction SilentlyContinue) {
+          $sub = if ($cur.Rel) { "$($cur.Rel)/$($e.Name)" } else { $e.Name }
+          if (Test-Excluded $sub $Exclude) {
+            # 폴더 하나를 세면 그 안의 파일 수를 알 수 없으니, 항목 단위로 센다.
+            $excluded++
+            continue
+          }
+          if ($e.PSIsContainer) {
+            # Get-ChildItem -Recurse never followed junctions or symlinked
+            # directories; walking by hand has to refuse them explicitly. A link
+            # pointing at an ancestor otherwise re-uploads the whole tree under
+            # sub/loop/sub/loop/... until MAX_PATH quietly stops the walk.
+            if ($e.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+            $stack.Push(@{ Path = $e.FullName; Rel = $sub })
+          }
+          else { $jobs.Add(@{ Local = $e.FullName; Rel = "$root/$($fs.Name)/$sub"; Info = $e }) }
+        }
       }
+    } elseif (Test-Excluded $fs.Name $Exclude) {
+      $excluded++
     } else {
       $jobs.Add(@{ Local = $fs.FullName; Rel = "$root/$($fs.Name)"; Info = $fs })
     }
+  }
+  if ($excluded -gt 0) {
+    # $()로 감싸야 한다: 한글은 PowerShell 식별자로 유효해서 "$excluded개" 는
+    # $excluded 가 아니라 "$excluded개" 라는 이름의 (없는) 변수로 읽힌다.
+    Write-Host "[제외] 패턴에 걸린 항목 $($excluded)개" -ForegroundColor DarkGray
   }
   if ($jobs.Count -eq 0) { Die "업로드할 파일이 없습니다." }
 
@@ -293,6 +382,7 @@ else {
     for ($i = 0; $i -lt $ordered.Count; $i++) {
       [void]$mb.AppendLine("netrc")
       [void]$mb.AppendLine("silent")
+      [void]$mb.AppendLine("globoff")
       [void]$mb.AppendLine("output = `"NUL`"")
       [void]$mb.AppendLine("write-out = `"%{http_code}\n`"")
       [void]$mb.AppendLine("request = `"MKCOL`"")
@@ -327,7 +417,7 @@ else {
       $idx++
       $size = "{0:N1} MB" -f ($j.Info.Length / 1MB)
       Write-Host ("[{0}/{1}] {2}  ({3})" -f $idx, $jobs.Count, $j.Rel, $size) -ForegroundColor Cyan
-      & $curl -n --fail --progress-bar -H "X-OC-Mtime: $(Unix-Mtime $j.Info)" -T $j.Local (Remote-Url $j.Rel)
+      & $curl -n -g --fail --progress-bar -H "X-OC-Mtime: $(Unix-Mtime $j.Info)" -T $j.Local (Remote-Url $j.Rel)
       if ($LASTEXITCODE -ne 0) { $failed.Add($j.Rel) } else { $uploaded.Add($j.Rel) }
     }
   }
@@ -344,6 +434,7 @@ else {
       [void]$sb.AppendLine("netrc")
       [void]$sb.AppendLine("silent")
       [void]$sb.AppendLine("show-error")
+      [void]$sb.AppendLine("globoff")
       [void]$sb.AppendLine("write-out = `"%{http_code} %{url_effective}\n`"")
       [void]$sb.AppendLine("header = `"X-OC-Mtime: $(Unix-Mtime $jobs[$i].Info)`"")
       [void]$sb.AppendLine("upload-file = `"$local`"")
@@ -356,11 +447,12 @@ else {
     $done = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $n = 0
     & $curl -Z --parallel-max $Transfers -K $conf.FullName | ForEach-Object {
-      $parts = $_ -split '\s+', 2
-      if ($parts.Count -lt 2) { return }
-      $code = $parts[0]
-      $rel  = $byUrl[$parts[1].Trim()]
-      if (-not $rel) { $rel = $parts[1].Trim() }
+      # write-out 이 낸 "<코드> <URL>" 줄만 받는다. -Z 는 stdout/stderr 를
+      # 뒤섞어 내보내므로, 느슨하게 자르면 curl 에러 문구가 가짜 결과로 잡힌다.
+      if ($_ -notmatch '^\s*(\d{3})\s+(\S+)\s*$') { return }
+      $code = $matches[1]
+      $rel  = $byUrl[$matches[2]]
+      if (-not $rel) { $rel = $matches[2] }
       [void]$done.Add($rel)
       $n++
       if ($code -match '^2\d\d$') {
@@ -416,3 +508,4 @@ if ($Share -and -not $DryRun -and $failed.Count -eq 0 -and ($uploaded.Count + $s
 }
 
 if ($failed.Count -gt 0) { exit 1 }
+
