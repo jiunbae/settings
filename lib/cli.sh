@@ -11,7 +11,7 @@ readonly VERSION="2.0.0"
 # Available Components
 # ==============================================================================
 # Component list (bash 3.2 compatible - no associative arrays)
-readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory hammerspoon ghostty codex claude cship scripts)
+readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory macos fonts hammerspoon ghostty cmux git node codex claude cship scripts)
 
 # Basic components for --basic option
 readonly BASIC_COMPONENTS=(base zsh nvim tmux)
@@ -33,8 +33,13 @@ get_component_desc() {
         tools-extra) echo "Extra CLI tools (delta, dust, procs, bottom)" ;;
         ssh)         echo "SSH config (copy only, not symlinked)" ;;
         hishtory)    echo "hishtory (better shell history with self-hosted sync)" ;;
+        macos)       echo "macOS preferences (macOS-only: keyboard, shortcuts, Caps Lock->Control, Finder, menu bar)" ;;
+        fonts)       echo "Nerd Fonts + JetBrainsMonoHangul (macOS-only)" ;;
         hammerspoon) echo "Hammerspoon (macOS-only: window manager + keybindings)" ;;
         ghostty)     echo "Ghostty terminal config (macOS-only: Option-as-Alt so TUI Alt bindings work)" ;;
+        cmux)        echo "cmux terminal (macOS-only: reads the Ghostty config)" ;;
+        git)         echo "Git shared config, global ignore, commit signing (macOS-only)" ;;
+        node)        echo "nvm + Node.js 24 LTS + Codex and Claude Code CLIs (macOS-only)" ;;
         codex)       echo "Codex CLI/App config, hooks, and notify chain" ;;
         claude)      echo "Claude Code settings, hooks, skill index, memory, MCP servers" ;;
         cship)       echo "cship + Starship (fast Claude Code statusline, replaces ccstatusline)" ;;

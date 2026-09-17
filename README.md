@@ -70,10 +70,10 @@ git clone https://github.com/jiunbae/settings.git && cd settings
 | **Multiplexer** | [tmux](https://github.com/tmux/tmux) + [TPM](https://github.com/tmux-plugins/tpm) · [zellij](https://zellij.dev/) · [rmux](https://github.com/Helvesec/rmux) on Windows |
 | **CLI tools** | [eza](https://github.com/eza-community/eza) `ls` · [fd](https://github.com/sharkdp/fd) `find` · [ripgrep](https://github.com/BurntSushi/ripgrep) `grep` · [fzf](https://github.com/junegunn/fzf) |
 | **CLI extras** | [delta](https://github.com/dandavison/delta) `git diff` · [dust](https://github.com/bootandy/dust) `du` · [procs](https://github.com/dalance/procs) `ps` · [bottom](https://github.com/ClementTsang/bottom) `htop` |
-| **Toolchains** | [Rust](https://www.rust-lang.org/) + [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) · [uv](https://github.com/astral-sh/uv) · [fnm](https://github.com/Schniz/fnm) |
+| **Toolchains** | [Rust](https://www.rust-lang.org/) + [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) · [uv](https://github.com/astral-sh/uv) · [nvm](https://github.com/nvm-sh/nvm) on macOS, [fnm](https://github.com/Schniz/fnm) on Windows |
 | **AI agents** | Claude Code · Codex · [cship](https://github.com/stephenleo/cship) statusline — see [agent-state.md](docs/agent-state.md) |
 | **History** | [hishtory](https://github.com/ddworken/hishtory) — context, search, cross-device sync |
-| **macOS** | [Hammerspoon](https://www.hammerspoon.org/) — window, screen and keyboard automation |
+| **macOS** | Keyboard, shortcuts, Caps Lock → Control, Finder and menu bar preferences · Nerd Fonts · [Hammerspoon](https://www.hammerspoon.org/) · [cmux](https://www.cmux.dev/) · git config · nvm + Node LTS + Codex/Claude Code CLIs — see [macos.md](docs/macos.md) |
 
 Components install independently and are safe to re-run; `--dry-run` previews any
 combination of them without changing anything.
@@ -123,8 +123,13 @@ Components:
   tools-extra   Extra CLI tools (delta, dust, procs, bottom)
   ssh           SSH config (copy only, not symlinked)
   hishtory      hishtory (better shell history with self-hosted sync)
+  macos         macOS preferences (macOS-only: keyboard, shortcuts, Caps Lock->Control, Finder, menu bar)
+  fonts         Nerd Fonts + JetBrainsMonoHangul (macOS-only)
   hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
   ghostty       Ghostty terminal config (macOS-only: Option-as-Alt so TUI Alt bindings work)
+  cmux          cmux terminal (macOS-only: reads the Ghostty config)
+  git           Git shared config, global ignore, commit signing (macOS-only)
+  node          nvm + Node.js 24 LTS + Codex and Claude Code CLIs (macOS-only)
   codex         Codex CLI/App config, hooks, and notify chain
   claude        Claude Code settings, hooks, skill index, memory, MCP servers
   cship         cship + Starship (fast Claude Code statusline, replaces ccstatusline)
@@ -162,7 +167,8 @@ settings/
 ├── configs/                # The dotfiles themselves
 │   ├── .zshrc .p10k.zsh .tmux.conf .rmux.conf
 │   ├── nvim/ zellij/ powershell/ windows-terminal/
-│   └── claude/ codex/ cship/ hishtory/
+│   ├── claude/ codex/ cship/ hishtory/
+│   └── macos/ git/ ghostty/ cmux/
 ├── bin/                    # Personal CLI scripts, linked onto PATH
 │   └── windows/            #   Windows-only; install.sh never sees this dir
 ├── scripts/                # Build and maintenance helpers
@@ -175,6 +181,7 @@ settings/
 
 | | |
 | :--- | :--- |
+| [macos.md](docs/macos.md) | Keyboard, shortcuts, Finder, fonts, cmux and git on macOS |
 | [components.md](docs/components.md) | hishtory sync, Hammerspoon permissions, the managed Codex config |
 | [windows.md](docs/windows.md) | rmux, PowerShell, NeoVim, Windows Terminal, Nextcloud upload |
 | [powershell.md](docs/powershell.md) | How the PowerShell profile went from 1354ms to 394ms |
