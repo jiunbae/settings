@@ -38,8 +38,13 @@ source "$SCRIPT_DIR/modules/python.sh"
 source "$SCRIPT_DIR/modules/tools.sh"
 source "$SCRIPT_DIR/modules/ssh.sh"
 source "$SCRIPT_DIR/modules/hishtory.sh"
+source "$SCRIPT_DIR/modules/macos.sh"
+source "$SCRIPT_DIR/modules/fonts.sh"
 source "$SCRIPT_DIR/modules/hammerspoon.sh"
 source "$SCRIPT_DIR/modules/ghostty.sh"
+source "$SCRIPT_DIR/modules/cmux.sh"
+source "$SCRIPT_DIR/modules/git.sh"
+source "$SCRIPT_DIR/modules/node.sh"
 source "$SCRIPT_DIR/modules/codex.sh"
 source "$SCRIPT_DIR/modules/claude.sh"
 source "$SCRIPT_DIR/modules/cship.sh"
@@ -61,8 +66,13 @@ get_component_name() {
         tools-extra) echo "Extra CLI tools" ;;
         ssh)         echo "SSH config" ;;
         hishtory)    echo "hishtory (shell history)" ;;
+        macos)       echo "macOS preferences" ;;
+        fonts)       echo "Fonts (macOS)" ;;
         hammerspoon) echo "Hammerspoon (macOS automation)" ;;
         ghostty)     echo "Ghostty terminal config (macOS)" ;;
+        cmux)        echo "cmux terminal (macOS)" ;;
+        git)         echo "Git configuration (macOS)" ;;
+        node)        echo "Node.js + agent CLIs (macOS)" ;;
         codex)       echo "Codex CLI/App configuration" ;;
         claude)      echo "Claude Code configuration" ;;
         cship)       echo "cship (Claude Code statusline)" ;;
@@ -145,11 +155,26 @@ main() {
             hishtory)
                 install_hishtory
                 ;;
+            macos)
+                install_macos
+                ;;
+            fonts)
+                install_fonts
+                ;;
             hammerspoon)
                 install_hammerspoon
                 ;;
             ghostty)
                 install_ghostty
+                ;;
+            cmux)
+                install_cmux
+                ;;
+            git)
+                install_git
+                ;;
+            node)
+                install_node
                 ;;
             codex)
                 install_codex

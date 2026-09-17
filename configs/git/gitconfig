@@ -1,0 +1,24 @@
+# Shared git config, included from ~/.gitconfig by modules/git.sh.
+#
+# Machine-local and work-only settings (commit.gpgsign, credential helpers,
+# includeIf blocks for company repos) belong in ~/.gitconfig itself, never here.
+# The global ignore list is configs/git/ignore, linked to ~/.config/git/ignore,
+# git's default core.excludesFile location.
+
+[user]
+	name = Jiun Bae
+	email = jiunbae.623@gmail.com
+	signingkey = 5F8535C544F7BD66
+[core]
+	precomposeunicode = true
+	quotepath = false
+	autocrlf = input
+[gpg]
+	program = gpg
+[init]
+	defaultBranch = main
+[alias]
+	graph = log --graph --pretty=format:'%Cblue%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+	gone = ! git fetch -p && git for-each-ref --format '%(refname:short) %(upstream:track)' | awk '$2 == \"[gone]\" {print $1}' | xargs -r git branch -D
+[help]
+	autocorrect = 1
