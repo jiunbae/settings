@@ -70,7 +70,7 @@ git clone https://github.com/jiunbae/settings.git && cd settings
 | **Multiplexer** | [tmux](https://github.com/tmux/tmux) + [TPM](https://github.com/tmux-plugins/tpm) · [zellij](https://zellij.dev/) · [rmux](https://github.com/Helvesec/rmux) on Windows |
 | **CLI tools** | [eza](https://github.com/eza-community/eza) `ls` · [fd](https://github.com/sharkdp/fd) `find` · [ripgrep](https://github.com/BurntSushi/ripgrep) `grep` · [fzf](https://github.com/junegunn/fzf) |
 | **CLI extras** | [delta](https://github.com/dandavison/delta) `git diff` · [dust](https://github.com/bootandy/dust) `du` · [procs](https://github.com/dalance/procs) `ps` · [bottom](https://github.com/ClementTsang/bottom) `htop` |
-| **Toolchains** | [Rust](https://www.rust-lang.org/) + [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) · [uv](https://github.com/astral-sh/uv) · [fnm](https://github.com/Schniz/fnm) |
+| **Toolchains** | [Rust](https://www.rust-lang.org/) + [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) · [uv](https://github.com/astral-sh/uv) · [nvm](https://github.com/nvm-sh/nvm) on macOS, [fnm](https://github.com/Schniz/fnm) on Windows |
 | **AI agents** | Claude Code · Codex · [cship](https://github.com/stephenleo/cship) statusline — see [agent-state.md](docs/agent-state.md) |
 | **History** | [hishtory](https://github.com/ddworken/hishtory) — context, search, cross-device sync |
 | **macOS** | Keyboard, shortcuts, Caps Lock → Control, Finder and menu bar preferences · Nerd Fonts · [Hammerspoon](https://www.hammerspoon.org/) · [cmux](https://www.cmux.dev/) · git config · nvm + Node LTS + Codex/Claude Code CLIs — see [macos.md](docs/macos.md) |

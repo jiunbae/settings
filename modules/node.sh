@@ -63,14 +63,14 @@ install_node_nvm() {
     fi
 
     local source target="$NODE_NVM_DIR/nvm.sh"
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would link $target -> \$(brew --prefix nvm)/libexec/nvm.sh"
+    source="$(brew --prefix nvm 2>/dev/null)/libexec/nvm.sh"
+    if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
+        log_info "$target already linked"
         return 0
     fi
 
-    source="$(brew --prefix nvm)/libexec/nvm.sh"
-    if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
-        log_info "$target already linked"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would link $target -> $source"
         return 0
     fi
 
@@ -107,7 +107,7 @@ install_node_globals() {
 
     local pkg
     for pkg in "${NODE_GLOBAL_PACKAGES[@]}"; do
-        if [[ "$DRY_RUN" != "true" ]] && _node_run npm ls -g --depth=0 "$pkg" >/dev/null 2>&1; then
+        if _node_run npm ls -g --depth=0 "$pkg" >/dev/null 2>&1; then
             log_info "$pkg already installed"
             track_skipped "$pkg"
             continue

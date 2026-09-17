@@ -33,7 +33,7 @@ value first and only writes on a difference, so a re-run is a no-op.
 | `NSAutomaticSpellingCorrectionEnabled`, `WebAutomaticSpellingCorrectionEnabled` | `false` | No autocorrect. |
 | `NSAutomaticCapitalizationEnabled` | `true` | Sentence capitalization stays on. |
 | `AppleKeyboardUIMode` | `1` | Keyboard navigation mode as captured. |
-| `TISRomanSwitchState` | `0` | Caps Lock does not toggle ABC/Korean (it is Control anyway). |
+| `TISRomanSwitchState` | `0` | Input-source Caps Lock switch state as captured; moot once Caps Lock is Control. |
 
 Key repeat is read when an app launches — relaunch apps or log out to feel it.
 
@@ -60,14 +60,15 @@ hidutil property --set '{"UserKeyMapping":[]}'
 `configs/macos/DefaultKeyBinding.dict` is linked to
 `~/Library/KeyBindings/DefaultKeyBinding.dict`. It makes the `₩` key (what the
 backtick key types under the Korean input source) insert `` ` `` in Cocoa text fields.
-Relaunch an app to pick it up. Terminals and Electron apps do their own key handling
-and ignore it.
+Relaunch an app to pick it up. Terminal emulators and Electron apps generally do their
+own key handling and ignore it.
 
 ### System shortcuts
 
 `configs/macos/symbolichotkeys.tsv` is the source of truth. Each row is written into
 `com.apple.symbolichotkeys` with `defaults write … -dict-add`, so shortcuts not listed
-keep their defaults. `activateSettings -u` applies them without logging out.
+keep their defaults. `activateSettings -u` applies most of them without logging out;
+log out if one does not take effect.
 
 | Shortcut | Action | macOS default |
 |---|---|---|
@@ -104,7 +105,7 @@ ctrl 262144, option 524288, cmd 1048576 and fn 8388608, added together.
 | `AppleShowAllExtensions` | `true` | Finder shows every file extension. |
 | `AppleShowScrollBars` | `WhenScrolling` | Scroll bars only while scrolling. |
 | `NSQuitAlwaysKeepsWindows` | `true` | Reopening an app restores its windows. |
-| `-currentHost NSStatusItemSpacing` | `6` | Tighter menu bar icon spacing (default ≈ 16). |
+| `-currentHost NSStatusItemSpacing` | `6` | Tighter menu bar icon spacing. |
 | `-currentHost NSStatusItemSelectionPadding` | `12` | Tighter highlight padding. |
 
 Finder, SystemUIServer and ControlCenter are restarted when these change. Third-party
