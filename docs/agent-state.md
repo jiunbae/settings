@@ -22,6 +22,7 @@ git clone <private-agents-repo> ~/workspace/agents
 
 # 4. external runtimes used by the managed hooks (examples)
 #    Install and log in to Claude Code and Codex through their official installers.
+#    On macOS `./install.sh node` installs both (with nvm and Node 24).
 brew install open330/tap/muxa             # or follow muxa's platform instructions
 npm install -g oh-my-prompt               # provides omp
 
