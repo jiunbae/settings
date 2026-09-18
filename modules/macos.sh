@@ -57,6 +57,30 @@ readonly MACOS_UI_DEFAULTS=(
     "host:-g|NSStatusItemSelectionPadding|int|12"
 )
 
+# Which system items appear in the menu bar. Control Center's per-module
+# ints live in -currentHost: 2 = show when active, 8 = don't show. The
+# "NSStatusItem VisibleCC <item>" bools are what macOS 27 writes when an item
+# is toggled; false hides it even where the module int says otherwise.
+readonly MACOS_MENUBAR_DEFAULTS=(
+    "host:com.apple.controlcenter|BatteryShowPercentage|bool|true"
+    "host:com.apple.controlcenter|BatteryShowEnergyMode|bool|true"
+    "host:com.apple.controlcenter|Display|int|2"
+    "host:com.apple.controlcenter|VPN|int|2"
+    "host:com.apple.controlcenter|FocusModes|int|8"
+    "host:com.apple.controlcenter|NowPlaying|int|8"
+    "host:com.apple.controlcenter|SolariumBentoBox|int|8"
+    "host:com.apple.controlcenter|Spotlight|int|8"
+    "host:com.apple.controlcenter|Weather|int|8"
+    "com.apple.controlcenter|NSStatusItem VisibleCC FocusModes|bool|false"
+    "com.apple.Spotlight|NSStatusItem VisibleCC Item-0|bool|false"
+)
+
+# macOS 27 moved system menu bar items into MenuBarAgent. It starts at login
+# and reads the status item spacing then, so restarting ControlCenter and
+# SystemUIServer alone leaves system icons on the old spacing while app icons
+# pick up the new one. Older macOS has no MenuBarAgent; killall is a no-op there.
+readonly MACOS_MENUBAR_AGENT_PROCESS="MenuBarAgent"
+
 # Set by _macos_default when anything changed, so services are only restarted
 # when there is something for them to pick up.
 _MACOS_UI_CHANGED=false
@@ -270,6 +294,18 @@ install_macos_ui() {
     fi
 }
 
+install_macos_menubar() {
+    print_section "Menu bar system items"
+
+    if _macos_apply_list "${MACOS_MENUBAR_DEFAULTS[@]}"; then
+        _MACOS_UI_CHANGED=true
+        track_installed "Menu bar system items"
+    else
+        log_info "Menu bar system items already set"
+        track_skipped "Menu bar system items"
+    fi
+}
+
 install_macos_power() {
     print_section "Power: never sleep on AC"
 
@@ -306,6 +342,9 @@ _macos_refresh() {
     fi
     if [[ "$_MACOS_UI_CHANGED" == "true" ]]; then
         killall Finder SystemUIServer ControlCenter 2>/dev/null || true
+        # SIP refuses `launchctl kickstart` for this Apple agent, but it is a
+        # KeepAlive job running as the user, so launchd respawns it on exit.
+        killall "$MACOS_MENUBAR_AGENT_PROCESS" 2>/dev/null || true
         log_info "Menu bar spacing applies to apps as they relaunch (or after logout)"
     fi
     if [[ "$_MACOS_KEYS_CHANGED" == "true" ]]; then
@@ -331,6 +370,7 @@ install_macos() {
     install_macos_keybindings
     install_macos_capslock
     install_macos_ui
+    install_macos_menubar
     install_macos_power
     _macos_refresh
 
