@@ -58,38 +58,47 @@ SECRETS_TMPDIR=""
 # Dependencies
 # ==============================================================================
 
-# bw is a regular package like everything else in this repo: brew on macOS, and
-# npm on Debian/Ubuntu because Bitwarden ships no apt package.
-ensure_vault_cli() {
-    if command_exists bw && command_exists jq; then
-        return 0
-    fi
+# The Bitwarden CLI is pinned. Vaultwarden trails Bitwarden's server API, and a
+# newer client can fail against it outright: 2026.9.0 runs a "user key id
+# backfill" migration during login that POSTs to an endpoint Vaultwarden
+# (API level 2026.6.0 here) answers with 404, so login never yields a session.
+# 2026.8.0 is the newest version verified against vault.jiun.dev. Installed
+# from npm because Homebrew only carries the latest release.
+VAULT_CLI_VERSION="${SETTINGS_BW_CLI_VERSION:-2026.8.0}"
 
+ensure_vault_cli() {
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would install: bitwarden-cli, jq"
+        command_exists bw && command_exists jq || \
+            log_info "[DRY-RUN] Would install: @bitwarden/cli@$VAULT_CLI_VERSION, jq"
         return 0
     fi
 
     command_exists jq || pkg_install jq
 
-    if ! command_exists bw; then
-        case "$PKG_MANAGER" in
-            brew)
-                pkg_install bitwarden-cli
-                ;;
-            *)
-                # No apt package exists for the Bitwarden CLI.
-                if command_exists npm; then
-                    run_with_spinner "Installing @bitwarden/cli" npm install -g @bitwarden/cli
-                else
-                    log_error "Bitwarden CLI not found and npm is unavailable."
-                    log_info "Run './install.sh node' first, or install bw manually."
-                    return 1
-                fi
-                ;;
-        esac
+    if command_exists bw; then
+        local have
+        have="$(bw --version 2>/dev/null | tail -n 1)"
+        if [[ "$have" != "$VAULT_CLI_VERSION" ]]; then
+            log_warn "bw $have is not the verified $VAULT_CLI_VERSION; newer clients can fail against Vaultwarden."
+            log_info "If login fails: bw logout; replace it with npm install -g @bitwarden/cli@$VAULT_CLI_VERSION"
+        fi
+        return 0
     fi
 
+    if command_exists npm; then
+        run_with_spinner "Installing @bitwarden/cli@$VAULT_CLI_VERSION" \
+            npm install -g "@bitwarden/cli@$VAULT_CLI_VERSION"
+    elif [[ "$PKG_MANAGER" == "brew" ]]; then
+        log_warn "npm not found — installing the latest bitwarden-cli from Homebrew (unpinned)."
+        log_info "Run './install.sh node' first to get the pinned $VAULT_CLI_VERSION."
+        pkg_install bitwarden-cli
+    else
+        log_error "Bitwarden CLI not found and npm is unavailable."
+        log_info "Run './install.sh node' first, or install bw manually."
+        return 1
+    fi
+
+    hash -r
     command_exists bw || { log_error "Bitwarden CLI installation failed"; return 1; }
 }
 
