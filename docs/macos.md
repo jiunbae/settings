@@ -4,7 +4,7 @@ Six macOS-only components. On Linux and WSL each one logs a skip and returns.
 
 | Component | What it does |
 |---|---|
-| `macos` | Keyboard, system shortcuts, Caps Lock → Control, Finder/window/menu bar preferences, AC sleep |
+| `macos` | Keyboard, system shortcuts, Caps Lock → Control, appearance, Finder, Dock, trackpad, menu bar, sleep |
 | `fonts` | Nerd Fonts and the Hangul-merged JetBrains Mono used by the terminal config |
 | `hammerspoon` | Hammerspoon.app + `init.lua` — see [components.md](components.md#hammerspoon) |
 | `cmux` | cmux.app, the Ghostty config it reads, and its theme |
@@ -28,32 +28,26 @@ value first and only writes on a difference, so a re-run is a no-op.
 | `KeyRepeat` | `1` | Repeat rate. Faster than the UI's fastest setting (2). |
 | `InitialKeyRepeat` | `11` | Delay before repeat. Shorter than the UI's shortest (15). |
 | `ApplePressAndHoldEnabled` | `false` | Holding a key repeats it instead of opening the accent popup. |
-| `com.apple.keyboard.fnState` | `true` | F1–F12 act as function keys; media keys need fn. |
+| `com.apple.keyboard.fnState` | `false` | F1–F12 are media keys; hold fn for F1–F12. |
 | `NSAutomatic{Dash,Period,Quote}SubstitutionEnabled` | `false` | No smart dashes, double-space period or curly quotes. |
 | `NSAutomaticSpellingCorrectionEnabled`, `WebAutomaticSpellingCorrectionEnabled` | `false` | No autocorrect. |
-| `NSAutomaticCapitalizationEnabled` | `true` | Sentence capitalization stays on. |
-| `AppleKeyboardUIMode` | `1` | Keyboard navigation mode as captured. |
+| `NSAutomaticCapitalizationEnabled` | `false` | No automatic capitalization. |
+| `AppleKeyboardUIMode` | `0` | Keyboard navigation (Tab through every control) off. |
 | `TISRomanSwitchState` | `0` | Input-source Caps Lock switch state as captured; moot once Caps Lock is Control. |
 
 Key repeat is read when an app launches — relaunch apps or log out to feel it.
 
 ### Caps Lock → Control
 
-A LaunchAgent, `~/Library/LaunchAgents/dev.jiun.capslock-to-control.plist`, runs
-`hidutil property --set` at login and the module applies it once immediately.
+Written the way System Settings › Keyboard › Modifier Keys stores it: one
+`-currentHost` key per keyboard, `com.apple.keyboard.modifiermapping.<vendor>-<product>-0`,
+for every keyboard attached when the module runs (Universal Control `V-*` proxies are
+skipped, other remaps on the same keyboard are kept). macOS applies these at login; the
+module also sets the mapping with `hidutil` so it works in the current session.
 
-System Settings stores this mapping per keyboard model (vendor/product id), so it does
-not carry over to a different Mac or a new external keyboard. The hidutil mapping
-applies to every keyboard. It does not show up under System Settings › Keyboard ›
-Modifier Keys.
-
-To undo:
-
-```bash
-launchctl bootout gui/$(id -u)/dev.jiun.capslock-to-control
-rm ~/Library/LaunchAgents/dev.jiun.capslock-to-control.plist
-hidutil property --set '{"UserKeyMapping":[]}'
-```
+A keyboard first connected later is not covered until the module runs again with it
+attached, or Caps Lock is set to Control for it in System Settings. Earlier versions
+used a `dev.jiun.capslock-to-control` LaunchAgent instead; the module removes it.
 
 ### Text key bindings
 
@@ -78,7 +72,7 @@ log out if one does not take effect.
 | ⌃K / ⌃⇧K | Application windows | ⌃↓ |
 | ⌃J / ⌃⇧J | Move one Space left | ⌃← |
 | ⌃L / ⌃⇧L | Move one Space right | ⌃→ |
-| ⌃\` / ⌃⇧\` | Show Desktop | F11 |
+| ⌃' / ⌃⇧' | Show Desktop | F11 |
 | ⌃; | Notification Center | — |
 | ⌥⇧A | Launchpad / Apps | — |
 | *(off)* | ⌘⇧Space previous input source, ⌘F5 VoiceOver, ⌥⌘F5 Accessibility controls | on |
@@ -86,7 +80,7 @@ log out if one does not take effect.
 > [!WARNING]
 > System shortcuts are taken before any app sees the key. ⌃H, ⌃J, ⌃K and ⌃L never
 > reach terminals, shells or editors (backspace, newline, kill-line and clear-screen in
-> readline), and ⌃\` never reaches VS Code's terminal toggle.
+> readline). Show Desktop is on ⌃' rather than ⌃\` so VS Code keeps its terminal toggle.
 
 To change a shortcut, set it in System Settings, then read the new value back into
 the table:
@@ -98,10 +92,15 @@ defaults export com.apple.symbolichotkeys - | plutil -p - | less
 The parameters are `ascii, keycode, modifiers`. The modifier mask is shift 131072,
 ctrl 262144, option 524288, cmd 1048576 and fn 8388608, added together.
 
-### Finder, windows, menu bar
+### Appearance, Finder, windows, menu bar
 
 | Preference | Value | Effect |
 |---|---|---|
+| `AppleInterfaceStyle` | *(removed)* | Light mode. Takes full effect after logging out. |
+| `ShowPathbar` | `true` | Finder path bar. |
+| `FXEnableExtensionChangeWarning` | `false` | No warning when renaming an extension. |
+| `FXRemoveOldTrashItems` | `true` | Empty items from the Trash after 30 days. |
+| `ShowRecentTags` | `false` | No recent tags in the Finder sidebar. |
 | `AppleShowAllExtensions` | `true` | Finder shows every file extension. |
 | `AppleShowScrollBars` | `WhenScrolling` | Scroll bars only while scrolling. |
 | `NSQuitAlwaysKeepsWindows` | `true` | Reopening an app restores its windows. |
@@ -118,6 +117,23 @@ spacing: `defaults -currentHost delete -g NSStatusItemSpacing` (and `…Selectio
 > only third-party icons tighten and the bar looks uneven. Through macOS 26 every icon
 > followed the setting. The values are kept on purpose: app icons stay tight, and system
 > icons pick them up again if a later release restores the old behavior.
+
+### Dock
+
+| Preference | Value |
+|---|---|
+| `tilesize` | `42` |
+| `magnification` | `false` |
+
+The Dock is restarted when either changes.
+
+### Trackpad
+
+Tap to click and three-finger drag, on the built-in trackpad and a Magic Trackpad
+(`com.apple.AppleMultitouchTrackpad`, `com.apple.driver.AppleBluetoothMultitouch.trackpad`,
+`-currentHost com.apple.mouse.tapBehavior`). Three-finger drag occupies three fingers, so
+the three-finger swipe gestures are off and Mission Control / Space switching use four.
+Log out and back in for the trackpad to pick these up.
 
 ### Menu bar system items
 
@@ -136,9 +152,30 @@ and Spotlight are additionally set to `false` there.
 
 ### Power
 
-`sudo pmset -c sleep 0`: the system never sleeps on AC power. Battery sleep is left as
-is. The step needs sudo. With `--no-sudo`, or without cached sudo credentials, it
-prints the command to run by hand.
+| Power | `pmset` |
+|---|---|
+| AC | `sleep 0` — never idle-sleeps |
+| Battery | `sleep 3` — sleeps after 3 minutes (skipped on Macs without a battery) |
+
+Needs sudo: from a terminal it prompts, otherwise it prints the `sudo pmset …` commands
+to run by hand. `powermode` (High Power) is left alone, so a machine that uses it keeps it.
+
+#### Lid closed
+
+`pmset sleep` does not cover the lid: a MacBook sleeps when it closes — dropping SSH —
+unless it is in clamshell mode with an external display. Keeping it awake on AC is left
+to Amphetamine, configured in the app (its preferences live in its sandbox container):
+
+- a Trigger with the *Power Adapter* condition (connected), with *Allow system sleep when
+  display is closed* off
+- **Power Protect** installed from Amphetamine's settings (Apple Silicon laptops; admin
+  password, adds `/etc/sudoers.d/amphetamine_PowerProtect`)
+
+### Default shell
+
+`zsh` sets the login shell to `/bin/zsh` on macOS. It used to take the first `zsh` on
+`PATH`, which on a machine with Homebrew's zsh made `/opt/homebrew/bin/zsh` the login
+shell.
 
 ## `fonts`
 

@@ -5,7 +5,8 @@
 #
 # modifiers: shift 131072, ctrl 262144, option 524288, cmd 1048576, fn 8388608 (summed)
 # ascii 65535 = no character (function/arrow keys); 65535,65535,0 = no key assigned.
-# Captured from june-mbp. IDs not listed here keep the macOS default.
+# Captured from june-mbp; Show Desktop follows jiun-mbp (ctrl+' leaves ctrl+` to
+# editors such as VS Code). IDs not listed here keep the macOS default.
 7	1	65535,120,8650752	Move focus to menu bar (ctrl+F2)
 8	1	65535,99,8650752	Move focus to Dock (ctrl+F3)
 9	1	65535,118,8650752	Move focus to active or next window (ctrl+F4)
@@ -27,8 +28,8 @@
 34	1	104,4,393216	Mission Control, slow (ctrl+shift+H)
 33	1	107,40,262144	Application windows (ctrl+K)
 35	1	107,40,393216	Application windows, slow (ctrl+shift+K)
-36	1	96,50,262144	Show Desktop (ctrl+`)
-37	1	96,50,393216	Show Desktop, slow (ctrl+shift+`)
+36	1	39,39,262144	Show Desktop (ctrl+')
+37	1	39,39,393216	Show Desktop, slow (ctrl+shift+')
 59	0	65535,96,9437184	Turn VoiceOver on/off (cmd+F5, off)
 60	0	32,49,1179648	Select previous input source (cmd+shift+space, off)
 61	1	32,49,1048576	Select next input source (cmd+space)
