@@ -108,9 +108,31 @@ ctrl 262144, option 524288, cmd 1048576 and fn 8388608, added together.
 | `-currentHost NSStatusItemSpacing` | `6` | Tighter menu bar icon spacing. |
 | `-currentHost NSStatusItemSelectionPadding` | `12` | Tighter highlight padding. |
 
-Finder, SystemUIServer and ControlCenter are restarted when these change. Third-party
-menu bar apps adopt the spacing when they relaunch. To go back to the default spacing:
-`defaults -currentHost delete -g NSStatusItemSpacing` (and `…SelectionPadding`).
+Finder, SystemUIServer and ControlCenter are restarted when these change.
+Third-party menu bar apps adopt the spacing when they relaunch. To go back to the default
+spacing: `defaults -currentHost delete -g NSStatusItemSpacing` (and `…SelectionPadding`).
+
+> [!WARNING]
+> **On macOS 27 Apple's own menu bar icons ignore both keys.** System items are drawn by
+> the new `MenuBarAgent`, which does not apply them even after logging out and back in, so
+> only third-party icons tighten and the bar looks uneven. Through macOS 26 every icon
+> followed the setting. The values are kept on purpose: app icons stay tight, and system
+> icons pick them up again if a later release restores the old behavior.
+
+### Menu bar system items
+
+Which system items show in the menu bar, captured from the old machine.
+
+| Item | Setting |
+|---|---|
+| Battery | percentage and energy mode shown |
+| Display, VPN | shown only while active (`2`) |
+| Focus, Now Playing, Spotlight, Weather, `SolariumBentoBox` | hidden (`8`) |
+
+Control Center keeps a per-module int under `-currentHost com.apple.controlcenter`
+(`2` show when active, `8` don't show). macOS 27 also writes an
+`NSStatusItem VisibleCC <item>` bool when an item is toggled, and that bool wins, so Focus
+and Spotlight are additionally set to `false` there.
 
 ### Power
 
