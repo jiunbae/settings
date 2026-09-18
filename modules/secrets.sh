@@ -112,6 +112,25 @@ _prompt() {
     printf -v "$var" '%s' "$value"
 }
 
+# Full login (email, master password, verification code). Sets BW_SESSION.
+_vault_login() {
+    local email password code
+    log_info "Vault login — master password and verification code required"
+    _prompt email    "  Email: "
+    _prompt password "  Master password: " true
+    _prompt code     "  Verification code (TOTP, blank if disabled): "
+
+    if [[ -n "$code" ]]; then
+        BW_SESSION="$(BW_PASSWORD="$password" bw login "$email" \
+            --passwordenv BW_PASSWORD \
+            --method "$VAULT_2FA_METHOD" --code "$code" --raw)" || BW_SESSION=""
+    else
+        BW_SESSION="$(BW_PASSWORD="$password" bw login "$email" \
+            --passwordenv BW_PASSWORD --raw)" || BW_SESSION=""
+    fi
+    password=""
+}
+
 vault_unlock() {
     local status
     status="$(bw status 2>/dev/null | jq -r '.status' 2>/dev/null || echo unauthenticated)"
@@ -137,25 +156,22 @@ vault_unlock() {
     local password
     case "$status" in
         unauthenticated)
-            local email code
-            log_info "Vault login — master password and verification code required"
-            _prompt email    "  Email: "
-            _prompt password "  Master password: " true
-            _prompt code     "  Verification code (TOTP, blank if disabled): "
-
-            if [[ -n "$code" ]]; then
-                BW_SESSION="$(BW_PASSWORD="$password" bw login "$email" \
-                    --passwordenv BW_PASSWORD \
-                    --method "$VAULT_2FA_METHOD" --code "$code" --raw)"
-            else
-                BW_SESSION="$(BW_PASSWORD="$password" bw login "$email" \
-                    --passwordenv BW_PASSWORD --raw)"
-            fi
+            _vault_login
             ;;
         locked)
             log_info "Vault is locked"
             _prompt password "  Master password: " true
-            BW_SESSION="$(BW_PASSWORD="$password" bw unlock --passwordenv BW_PASSWORD --raw)"
+            BW_SESSION="$(BW_PASSWORD="$password" bw unlock --passwordenv BW_PASSWORD --raw 2>/dev/null)" || BW_SESSION=""
+            if [[ -z "$BW_SESSION" ]]; then
+                # A saved login the server no longer accepts (expired or revoked
+                # refresh token) fails here with invalid_grant, and bw then crashes
+                # instead of saying so. A wrong password lands here too. Either way
+                # a fresh login is the way out.
+                log_warn "Unlock failed — saved login rejected by the server, or wrong password. Logging in again."
+                bw logout >/dev/null 2>&1 || true
+                bw config server "$VAULT_SERVER" >/dev/null
+                _vault_login
+            fi
             ;;
         unlocked)
             if [[ -z "${BW_SESSION:-}" ]]; then
