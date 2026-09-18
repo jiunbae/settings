@@ -194,29 +194,41 @@ vault_unlock() {
 # Manifest application
 # ==============================================================================
 
+# _vault_item <name> — the item whose name is exactly <name>, as JSON.
+# `bw get item <name>` is a search, so a second item whose name merely contains
+# <name> (env:foo next to env:foo-staging) would make it fail with "More than
+# one result". The list is fetched once per run and matched locally.
+VAULT_ITEMS_CACHE=""
+_vault_item() {
+    local name=$1 json
+    [[ -n "$VAULT_ITEMS_CACHE" ]] || VAULT_ITEMS_CACHE="$(bw list items)"
+    json="$(printf '%s' "$VAULT_ITEMS_CACHE" | jq -c --arg n "$name" 'map(select(.name == $n)) | .[0] // empty')"
+    [[ -n "$json" ]] || { log_error "Vault item not found: $name"; return 1; }
+    printf '%s' "$json"
+}
+
 # _fetch <item> <source-spec> <outfile>
 _fetch() {
-    local item=$1 src=$2 out=$3
+    local item=$1 src=$2 out=$3 json
+    json="$(_vault_item "$item")" || return 1
 
     case "$src" in
         notes)
-            bw get item "$item" | jq -r '.notes // empty' > "$out"
+            jq -r '.notes // empty' <<< "$json" > "$out"
             ;;
         sshkey)
-            bw get item "$item" | jq -r '.sshKey.privateKey // empty' > "$out"
+            jq -r '.sshKey.privateKey // empty' <<< "$json" > "$out"
             ;;
         password)
-            bw get password "$item" > "$out"
+            jq -r '.login.password // empty' <<< "$json" > "$out"
             ;;
         field:*)
-            bw get item "$item" \
-                | jq -r --arg n "${src#field:}" \
-                    '(.fields // []) | map(select(.name == $n)) | .[0].value // empty' > "$out"
+            jq -r --arg n "${src#field:}" \
+                '(.fields // []) | map(select(.name == $n)) | .[0].value // empty' <<< "$json" > "$out"
             ;;
         attachment:*)
-            local id
-            id="$(bw get item "$item" | jq -r '.id')"
-            bw get attachment "${src#attachment:}" --itemid "$id" --output "$out" >/dev/null
+            bw get attachment "${src#attachment:}" --itemid "$(jq -r '.id' <<< "$json")" \
+                --output "$out" >/dev/null
             ;;
         *)
             log_error "Unknown source spec: $src"
@@ -255,7 +267,7 @@ apply_manifest() {
     print_section "Restoring Secrets"
 
     local manifest
-    manifest="$(bw get item "$VAULT_MANIFEST" | jq -r '.notes // empty')"
+    manifest="$(_vault_item "$VAULT_MANIFEST" | jq -r '.notes // empty')"
     if [[ -z "$manifest" ]]; then
         log_error "Manifest item '$VAULT_MANIFEST' has no notes"
         return 1
