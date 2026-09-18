@@ -66,6 +66,9 @@ fi
 # defined at all, which reports "command not found: ta" instead of running the
 # wrong multiplexer or a bare "rmux: not found".
 unalias ta tad tl to ts tkss tksv tds 2>/dev/null
+# Re-detect from scratch: re-sourcing .zshrc after uninstalling one of them
+# would otherwise keep the previous choice.
+unset _SETTINGS_MUX
 if (( $+commands[rmux] )); then
   typeset -g _SETTINGS_MUX=rmux
 elif (( $+commands[tmux] )); then
