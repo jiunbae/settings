@@ -75,6 +75,12 @@ readonly MACOS_MENUBAR_DEFAULTS=(
     "com.apple.Spotlight|NSStatusItem VisibleCC Item-0|bool|false"
 )
 
+# Lid-closed-on-AC daemon. It runs as root, so the script is copied to a
+# root-owned path instead of being run from the user-writable repo.
+readonly MACOS_LID_LABEL="dev.jiun.ac-lid-awake"
+readonly MACOS_LID_SCRIPT="/usr/local/libexec/ac-lid-awake"
+readonly MACOS_LID_PLIST="/Library/LaunchDaemons/$MACOS_LID_LABEL.plist"
+
 # Set by _macos_default when anything changed, so services are only restarted
 # when there is something for them to pick up.
 _MACOS_UI_CHANGED=false
@@ -328,6 +334,68 @@ install_macos_power() {
     log_success "System sleep disabled on AC power"
 }
 
+install_macos_lid_awake() {
+    print_section "Lid closed on AC: stay awake"
+
+    local root_dir
+    root_dir=$(get_root_dir)
+    local source="$root_dir/configs/macos/ac-lid-awake.sh"
+    local tmp_plist
+    tmp_plist=$(mktemp)
+    cat > "$tmp_plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$MACOS_LID_LABEL</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>$MACOS_LID_SCRIPT</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+    if cmp -s "$source" "$MACOS_LID_SCRIPT" && cmp -s "$tmp_plist" "$MACOS_LID_PLIST" && \
+       launchctl print "system/$MACOS_LID_LABEL" >/dev/null 2>&1; then
+        rm -f "$tmp_plist"
+        log_info "ac-lid-awake daemon already installed"
+        track_skipped "ac-lid-awake daemon"
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        rm -f "$tmp_plist"
+        log_info "[DRY-RUN] Would install $MACOS_LID_SCRIPT and $MACOS_LID_PLIST (sudo)"
+        return 0
+    fi
+
+    # Needs root once. From a terminal validate_sudo prompts; without one
+    # (an agent, CI) it cannot, so say how to finish instead of failing.
+    if ! sudo -n true 2>/dev/null && { [[ ! -t 0 ]] || ! validate_sudo; }; then
+        rm -f "$tmp_plist"
+        log_warn "ac-lid-awake needs sudo — run in a terminal: ./install.sh macos"
+        track_skipped "ac-lid-awake daemon (needs sudo)"
+        return 0
+    fi
+
+    sudo install -d -o root -g wheel -m 755 "$(dirname "$MACOS_LID_SCRIPT")"
+    sudo install -o root -g wheel -m 755 "$source" "$MACOS_LID_SCRIPT"
+    sudo install -o root -g wheel -m 644 "$tmp_plist" "$MACOS_LID_PLIST"
+    rm -f "$tmp_plist"
+    sudo launchctl bootout "system/$MACOS_LID_LABEL" 2>/dev/null || true
+    sudo launchctl bootstrap system "$MACOS_LID_PLIST"
+
+    track_installed "ac-lid-awake daemon"
+    log_success "Lid closed on AC keeps the Mac awake; on battery it sleeps as usual"
+}
+
 _macos_refresh() {
     [[ "$DRY_RUN" == "true" ]] && return 0
 
@@ -363,6 +431,7 @@ install_macos() {
     install_macos_ui
     install_macos_menubar
     install_macos_power
+    install_macos_lid_awake
     _macos_refresh
 
     log_success "macOS preferences complete!"

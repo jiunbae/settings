@@ -4,7 +4,7 @@ Six macOS-only components. On Linux and WSL each one logs a skip and returns.
 
 | Component | What it does |
 |---|---|
-| `macos` | Keyboard, system shortcuts, Caps Lock → Control, Finder/window/menu bar preferences, AC sleep |
+| `macos` | Keyboard, system shortcuts, Caps Lock → Control, Finder/window/menu bar preferences, AC sleep, lid closed on AC |
 | `fonts` | Nerd Fonts and the Hangul-merged JetBrains Mono used by the terminal config |
 | `hammerspoon` | Hammerspoon.app + `init.lua` — see [components.md](components.md#hammerspoon) |
 | `cmux` | cmux.app, the Ghostty config it reads, and its theme |
@@ -136,9 +136,34 @@ and Spotlight are additionally set to `false` there.
 
 ### Power
 
-`sudo pmset -c sleep 0`: the system never sleeps on AC power. Battery sleep is left as
-is. The step needs sudo. With `--no-sudo`, or without cached sudo credentials, it
+`sudo pmset -c sleep 0`: the system never idle-sleeps on AC power. Battery sleep is left
+as is. The step needs sudo. With `--no-sudo`, or without cached sudo credentials, it
 prints the command to run by hand.
+
+#### Lid closed on AC
+
+`pmset sleep 0` does not cover closing the lid: a MacBook sleeps on lid close — dropping
+SSH and everything else on the network — unless an external display and power are
+connected (clamshell mode) or `SleepDisabled` is set. `SleepDisabled` has no per-power-source
+form, so the `dev.jiun.ac-lid-awake` LaunchDaemon follows the power source instead:
+
+| Power | Lid closed |
+|---|---|
+| AC | stays awake (`pmset -a disablesleep 1`) |
+| Battery | sleeps as usual (`disablesleep 0`); unplugging with the lid already closed sleeps immediately |
+
+The daemon runs as root, so `configs/macos/ac-lid-awake.sh` is copied to
+`/usr/local/libexec/ac-lid-awake` (root-owned) rather than run from the repo. It polls the
+power source every 5 seconds. Installing it needs sudo once; from a non-interactive
+shell the module skips it and says to run `./install.sh macos` in a terminal.
+
+To remove it:
+
+```bash
+sudo launchctl bootout system/dev.jiun.ac-lid-awake
+sudo rm /Library/LaunchDaemons/dev.jiun.ac-lid-awake.plist /usr/local/libexec/ac-lid-awake
+sudo pmset -a disablesleep 0
+```
 
 ## `fonts`
 
