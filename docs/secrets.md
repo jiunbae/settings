@@ -32,10 +32,17 @@ curl -LsSf https://settings.jiun.dev | bash -s -- --all
 cd ~/.settings && ./install.sh secrets
 ```
 
-Step 2 installs the Bitwarden CLI through the normal package manager
-(`brew install bitwarden-cli`; `npm i -g @bitwarden/cli` on Debian/Ubuntu, which
-has no apt package), then prompts for email, master password, and the TOTP
-verification code. Nothing else has to be installed by hand.
+Step 2 installs the Bitwarden CLI pinned to a version verified against the vault
+(`npm install -g @bitwarden/cli@2026.8.0`; override with `SETTINGS_BW_CLI_VERSION`),
+then prompts for email, master password, and the TOTP verification code.
+
+> [!WARNING]
+> Newer clients can break against Vaultwarden, which trails Bitwarden's API. `bw`
+> 2026.9.0 fails during login with `KeyIdBackfillError` (a 404 from an endpoint
+> Vaultwarden does not have). If an existing `bw` is a different version the module
+> warns; to switch: `bw logout`, remove it (`brew uninstall bitwarden-cli`), and let
+> the module install the pinned one. Keep a Homebrew copy from upgrading with
+> `brew pin bitwarden-cli`.
 
 ## App data
 
