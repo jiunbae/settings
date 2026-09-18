@@ -152,7 +152,9 @@ eza --version && rg --version      # sanity check
 
 The aliases come from `configs/.zshrc`: `ls`/`ll`/`la`/`lt` → eza, `find` → fd,
 `grep` → rg, `du` → dust, `ps` → procs, `top`/`htop` → btm, `vim`/`vi` → nvim, and
-`zs`/`za`/`zl` for zellij sessions. The PowerShell profile mirrors these, except that
+`zs`/`za`/`zl` for zellij sessions. The `ta`/`tl`/`ts`/`to`/`tds` session shortcuts run
+rmux where it is installed and tmux otherwise, and are left undefined when neither is.
+The PowerShell profile mirrors these, except that
 the ones shadowing an existing command stay interactive-only — see
 [windows.md](docs/windows.md#powershell).
 

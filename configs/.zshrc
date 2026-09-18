@@ -58,38 +58,51 @@ if [[ -z ${_SETTINGS_ZSH_PLUGINS_LOADED:-} ]]; then
       zsh-users/zsh-completions
 fi
 
-# Session shortcuts use rmux. Keep the positional-name and explicit-flag forms
-# of the old tmux plugin without loading its aliases or startup hooks.
+# Session shortcuts keep the positional-name and explicit-flag forms of the old
+# tmux plugin without loading its aliases or startup hooks. They follow whatever
+# multiplexer this machine has: rmux where it exists (Windows and the machines
+# that build it), otherwise tmux. The two share this command-line surface, so
+# only the binary name changes. With neither installed the shortcuts are not
+# defined at all, which reports "command not found: ta" instead of running the
+# wrong multiplexer or a bare "rmux: not found".
 unalias ta tad tl to ts tkss tksv tds 2>/dev/null
-_rmux_session_command() {
-  local action=$1 name_flag=$2 extra_flag=$3
-  local -a args=("$action")
-  shift 3
-  [[ -n $extra_flag ]] && args+=("$extra_flag")
-  if [[ $# -gt 0 && $1 != -* ]]; then
-    command rmux "${args[@]}" "$name_flag" "$@"
-  else
-    command rmux "${args[@]}" "$@"
-  fi
-}
-ta()   { _rmux_session_command attach-session -t '' "$@" }
-tad()  { _rmux_session_command attach-session -t -d "$@" }
-ts()   { _rmux_session_command new-session -s '' "$@" }
-to()   { _rmux_session_command new-session -s -A "$@" }
-tl()   { command rmux list-sessions "$@" }
-tkss() { _rmux_session_command kill-session -t '' "$@" }
-tksv() { command rmux kill-server "$@" }
-tds() {
-  local digest
-  digest=$(printf '%s' "$PWD" | cksum)
-  command rmux new-session -A -s "${PWD:t}-${digest%% *}"
-}
-_rmux_session_names() {
-  local -a sessions
-  sessions=("${(@f)$(command rmux list-sessions -F '#{session_name}' 2>/dev/null)}")
-  compadd -- "${(@)sessions:#}"
-}
-compdef _rmux_session_names ta tad to tkss
+if (( $+commands[rmux] )); then
+  typeset -g _SETTINGS_MUX=rmux
+elif (( $+commands[tmux] )); then
+  typeset -g _SETTINGS_MUX=tmux
+fi
+
+if [[ -n ${_SETTINGS_MUX:-} ]]; then
+  _mux_session_command() {
+    local action=$1 name_flag=$2 extra_flag=$3
+    local -a args=("$action")
+    shift 3
+    [[ -n $extra_flag ]] && args+=("$extra_flag")
+    if [[ $# -gt 0 && $1 != -* ]]; then
+      command $_SETTINGS_MUX "${args[@]}" "$name_flag" "$@"
+    else
+      command $_SETTINGS_MUX "${args[@]}" "$@"
+    fi
+  }
+  ta()   { _mux_session_command attach-session -t '' "$@" }
+  tad()  { _mux_session_command attach-session -t -d "$@" }
+  ts()   { _mux_session_command new-session -s '' "$@" }
+  to()   { _mux_session_command new-session -s -A "$@" }
+  tl()   { command $_SETTINGS_MUX list-sessions "$@" }
+  tkss() { _mux_session_command kill-session -t '' "$@" }
+  tksv() { command $_SETTINGS_MUX kill-server "$@" }
+  tds() {
+    local digest
+    digest=$(printf '%s' "$PWD" | cksum)
+    command $_SETTINGS_MUX new-session -A -s "${PWD:t}-${digest%% *}"
+  }
+  _mux_session_names() {
+    local -a sessions
+    sessions=("${(@f)$(command $_SETTINGS_MUX list-sessions -F '#{session_name}' 2>/dev/null)}")
+    compadd -- "${(@)sessions:#}"
+  }
+  compdef _mux_session_names ta tad to tkss
+fi
 
 # fzf-tab must load after compinit, use atload to replay compdefs
 if [[ -z ${_SETTINGS_ZSH_PLUGINS_LOADED:-} ]]; then
