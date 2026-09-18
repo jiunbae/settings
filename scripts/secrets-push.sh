@@ -99,9 +99,10 @@ collect_apps() {
     fi
 
     if [[ -d "$BARSHELF_DIR" ]]; then
-        # Quit the app first so it cannot write its old state back over the restore.
+        # Quit the app first so it cannot write its old state back over the restore,
+        # then start it again on the restored data.
         printf '%s\t%s\t%s\t%s\n' "app:barshelf" "barshelf.tar.gz" \
-            'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support"' \
+            'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' \
             barshelf >> "$APPS"
     fi
 }

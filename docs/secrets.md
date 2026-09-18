@@ -46,7 +46,7 @@ comes back by being piped into a command (`exec`) instead of written to a path.
 | Item | Attachment | Restore | Needs first |
 | --- | --- | --- | --- |
 | `app:aas` | `aas-bundle.json` from `aas export --all` (every account and credential) | `aas import -` | `brew install open330/tap/aas` |
-| `app:barshelf` | `barshelf.tar.gz` of `~/Library/Application Support/BarShelf` without `runtime/` and `cache/` | quits BarShelf, extracts into Application Support | BarShelf.app |
+| `app:barshelf` | `barshelf.tar.gz` of `~/Library/Application Support/BarShelf` without `runtime/` and `cache/` | quits BarShelf, extracts into Application Support, starts it again | BarShelf.app |
 
 - Push from a **Terminal on the Mac itself**. `aas export` reads the Claude credential
   from the login keychain, which an SSH session cannot open.
