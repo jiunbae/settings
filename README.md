@@ -134,6 +134,20 @@ Components:
   claude        Claude Code settings, hooks, skill index, memory, MCP servers
   cship         cship + Starship (fast Claude Code statusline, replaces ccstatusline)
   scripts       Personal CLI scripts linked into ~/.local/bin
+
+Opt-in components:
+  Excluded from --all and the interactive menu. Name them explicitly.
+  secrets       SSH/GPG keys and env files restored from the vault
+```
+
+`secrets` restores private material from a Bitwarden-compatible vault. The list of
+what to restore is a manifest kept *inside* the vault, so this public repository
+carries the restore engine and none of the inventory — see [docs/secrets.md](docs/secrets.md).
+
+```bash
+./install.sh secrets                                  # this vault
+SETTINGS_VAULT_SERVER=https://vault.example.com \
+  ./install.sh secrets                                # someone else's
 ```
 
 ```bash

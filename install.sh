@@ -49,6 +49,7 @@ source "$SCRIPT_DIR/modules/codex.sh"
 source "$SCRIPT_DIR/modules/claude.sh"
 source "$SCRIPT_DIR/modules/cship.sh"
 source "$SCRIPT_DIR/modules/scripts.sh"
+source "$SCRIPT_DIR/modules/secrets.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -77,6 +78,7 @@ get_component_name() {
         claude)      echo "Claude Code configuration" ;;
         cship)       echo "cship (Claude Code statusline)" ;;
         scripts)     echo "Personal CLI scripts" ;;
+        secrets)     echo "Secrets from vault" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -187,6 +189,9 @@ main() {
                 ;;
             scripts)
                 install_scripts
+                ;;
+            secrets)
+                install_secrets
                 ;;
             *)
                 progress_info "Unknown component: $component"
