@@ -137,7 +137,7 @@ Components:
 
 Opt-in components:
   Excluded from --all and the interactive menu. Name them explicitly.
-  secrets       SSH/GPG keys, env files and app data (aas, BarShelf) restored from the vault
+  secrets       SSH/GPG keys, env files and app data (aas, BarShelf, OTPeek) restored from the vault
 ```
 
 `secrets` restores private material from a Bitwarden-compatible vault. The list of

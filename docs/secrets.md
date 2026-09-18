@@ -2,7 +2,7 @@
 
 `./install.sh secrets` restores private material — SSH keys, GPG keys, `.env`
 files, host configs that are too sensitive for a public repo, and app state such as aas
-accounts and BarShelf data — from a
+accounts, BarShelf data and the OTPeek vault — from a
 Bitwarden-compatible vault (Bitwarden or a self-hosted Vaultwarden).
 
 It is **opt-in only**. `secrets` is deliberately absent from `COMPONENTS_ORDER`,
@@ -47,14 +47,16 @@ comes back by being piped into a command (`exec`) instead of written to a path.
 | --- | --- | --- | --- |
 | `app:aas` | `aas-bundle.json` from `aas export --all` (every account and credential) | `aas import -` | `brew install open330/tap/aas` |
 | `app:barshelf` | `barshelf.tar.gz` of `~/Library/Application Support/BarShelf` without `runtime/` and `cache/` | quits BarShelf, extracts into Application Support, starts it again | BarShelf.app |
+| `app:otpeek` | `otpeek.tar.gz`: the CLI config and the app-group vault `vault.otpvault` (still encrypted with the OTPeek master password) | extracts into `$HOME`, points `active_vault` at this home | `otpeek` CLI in `~/.cargo/bin` |
 
 - Push from a **Terminal on the Mac itself**. `aas export` reads the Claude credential
   from the login keychain, which an SSH session cannot open.
 - `aas import` restores the accounts but not which one is active; pick with
   `aas switch`, and run `aas shim install` if the bare `claude`/`codex` should follow it.
 - Re-pushing replaces the attachment and the manifest entry instead of adding copies.
-- **OTPeek** needs nothing here: its accounts sync through iCloud (CloudKit and iCloud
-  Keychain). Install it from TestFlight with the same Apple ID.
+- **OTPeek**: the app (TestFlight) and the `otpeek` CLI — which BarShelf's OTP widget
+  runs — share the one vault file. After restoring, run `otpeek unlock` once so the
+  master password is cached in the keychain; the widget cannot prompt for it.
 
 A new Mac, in order:
 
