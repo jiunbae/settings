@@ -33,7 +33,6 @@ readonly MACOS_ACTIVATE_SETTINGS="/System/Library/PrivateFrameworks/SystemAdmini
 # for "Control" in its per-keyboard modifier mapping.
 readonly MACOS_CAPSLOCK_SRC=30064771129
 readonly MACOS_CAPSLOCK_DST=30064771300
-readonly MACOS_CAPSLOCK_MAPPING='{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x7000000E4}]}'
 
 # "domain|key|type|value" — domain "-g" is NSGlobalDomain; a "host:" prefix
 # writes to -currentHost. Type "absent" deletes the key (value is ignored).
@@ -332,11 +331,12 @@ PY
             defaults -currentHost write -g "$key" -array "${items[@]}"
             log_info "Mapped Caps Lock -> Control on keyboard ${key##*.}"
         done <<< "$changes"
+        # macOS applies the stored mapping at login; nothing is forced into the
+        # running session, so the first run needs a log out and back in.
+        _MACOS_LOGOUT_NEEDED=true
         track_installed "Caps Lock -> Control"
     fi
 
-    # The stored mapping is read at login; apply it to this session too.
-    [[ "$DRY_RUN" == "true" ]] || /usr/bin/hidutil property --set "$MACOS_CAPSLOCK_MAPPING" >/dev/null
 }
 
 install_macos_ui() {
@@ -446,7 +446,7 @@ _macos_refresh() {
         log_info "Key repeat changes apply to apps as they relaunch (or after logout)"
     fi
     if [[ "$_MACOS_LOGOUT_NEEDED" == "true" ]]; then
-        log_info "Trackpad and appearance changes take full effect after logging out and back in"
+        log_info "Caps Lock, trackpad and appearance changes take full effect after logging out and back in"
     fi
 }
 

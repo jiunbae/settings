@@ -42,8 +42,9 @@ Key repeat is read when an app launches — relaunch apps or log out to feel it.
 Written the way System Settings › Keyboard › Modifier Keys stores it: one
 `-currentHost` key per keyboard, `com.apple.keyboard.modifiermapping.<vendor>-<product>-0`,
 for every keyboard attached when the module runs (Universal Control `V-*` proxies are
-skipped, other remaps on the same keyboard are kept). macOS applies these at login; the
-module also sets the mapping with `hidutil` so it works in the current session.
+skipped, other remaps on the same keyboard are kept). macOS applies these at login, so
+the first run needs a log out and back in; nothing is injected into the running session.
+`hidutil list` is used only to read the attached keyboards' vendor and product ids.
 
 A keyboard first connected later is not covered until the module runs again with it
 attached, or Caps Lock is set to Control for it in System Settings. Earlier versions
