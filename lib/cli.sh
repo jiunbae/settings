@@ -49,7 +49,7 @@ get_component_desc() {
         claude)      echo "Claude Code settings, hooks, skill index, memory, MCP servers" ;;
         cship)       echo "cship + Starship (fast Claude Code statusline, replaces ccstatusline)" ;;
         scripts)     echo "Personal CLI scripts linked into ~/.local/bin" ;;
-        secrets)     echo "SSH/GPG keys, env files and app data (aas, BarShelf) restored from the vault (opt-in, never in --all)" ;;
+        secrets)     echo "SSH/GPG keys, env files and app data (aas, BarShelf, OTPeek) restored from the vault (opt-in, never in --all)" ;;
         *)           echo "" ;;
     esac
 }

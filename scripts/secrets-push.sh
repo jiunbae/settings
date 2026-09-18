@@ -19,6 +19,7 @@
 # restored by piping into a command rather than writing a file:
 #   aas accounts             -> app:aas       aas-bundle.json  | aas import -
 #   BarShelf data            -> app:barshelf  barshelf.tar.gz  | tar -x into Application Support
+#   OTPeek CLI config+vault  -> app:otpeek    otpeek.tar.gz    | tar -x into $HOME, repoint the vault path
 # `aas export` reads the Claude credential from the login keychain, so run this
 # from a Terminal on the Mac itself, not over SSH.
 #
@@ -91,6 +92,10 @@ APPS="$(mktemp)"
 trap 'rm -f "$COLLECTED" "$APPS"' EXIT
 
 BARSHELF_DIR="$HOME/Library/Application Support/BarShelf"
+# OTPeek's app and CLI share one encrypted vault in the app group container; the
+# CLI finds it through active_vault in its config, an absolute path.
+OTPEEK_CONFIG="Library/Application Support/otpeek/config.toml"
+OTPEEK_VAULT="Library/Group Containers/group.com.otpeek.app/vault.otpvault"
 
 collect_apps() {
     if command_exists aas && aas list 2>/dev/null | grep -q '@'; then
@@ -105,6 +110,14 @@ collect_apps() {
             'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' \
             barshelf >> "$APPS"
     fi
+
+    if [[ -f "$HOME/$OTPEEK_CONFIG" && -f "$HOME/$OTPEEK_VAULT" ]]; then
+        # The vault is encrypted with the OTPeek master password; it stays that way
+        # in the attachment. active_vault is rewritten for the restoring user's home.
+        printf '%s\t%s\t%s\t%s\n' "app:otpeek" "otpeek.tar.gz" \
+            'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' \
+            otpeek >> "$APPS"
+    fi
 }
 
 # make_app_payload <kind> <out-file>
@@ -118,6 +131,9 @@ make_app_payload() {
             # runtime/ and cache/ are rebuilt by the app and hold nothing to keep.
             tar -czf "$out" -C "$HOME/Library/Application Support" \
                 --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf
+            ;;
+        otpeek)
+            tar -czf "$out" -C "$HOME" "$OTPEEK_CONFIG" "$OTPEEK_VAULT"
             ;;
         *)
             log_error "Unknown app payload: $kind"
