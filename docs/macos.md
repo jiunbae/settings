@@ -108,16 +108,16 @@ ctrl 262144, option 524288, cmd 1048576 and fn 8388608, added together.
 | `-currentHost NSStatusItemSpacing` | `6` | Tighter menu bar icon spacing. |
 | `-currentHost NSStatusItemSelectionPadding` | `12` | Tighter highlight padding. |
 
-Finder, SystemUIServer, ControlCenter and MenuBarAgent are restarted when these change.
+Finder, SystemUIServer and ControlCenter are restarted when these change.
 Third-party menu bar apps adopt the spacing when they relaunch. To go back to the default
 spacing: `defaults -currentHost delete -g NSStatusItemSpacing` (and `…SelectionPadding`).
 
-> [!NOTE]
-> **macOS 27 moved the system menu bar items into `MenuBarAgent`.** It starts at login and
-> reads the spacing once, so restarting ControlCenter and SystemUIServer — enough up to
-> macOS 26 — left the system icons on the old spacing while app icons took the new one.
-> SIP refuses `launchctl kickstart` for this agent, but it is a KeepAlive job running as
-> the user, so the module `killall`s it and launchd respawns it.
+> [!WARNING]
+> **On macOS 27 Apple's own menu bar icons ignore both keys.** System items are drawn by
+> the new `MenuBarAgent`, which does not apply them even after logging out and back in, so
+> only third-party icons tighten and the bar looks uneven. Through macOS 26 every icon
+> followed the setting. The values are kept on purpose: app icons stay tight, and system
+> icons pick them up again if a later release restores the old behavior.
 
 ### Menu bar system items
 

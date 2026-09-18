@@ -75,12 +75,6 @@ readonly MACOS_MENUBAR_DEFAULTS=(
     "com.apple.Spotlight|NSStatusItem VisibleCC Item-0|bool|false"
 )
 
-# macOS 27 moved system menu bar items into MenuBarAgent. It starts at login
-# and reads the status item spacing then, so restarting ControlCenter and
-# SystemUIServer alone leaves system icons on the old spacing while app icons
-# pick up the new one. Older macOS has no MenuBarAgent; killall is a no-op there.
-readonly MACOS_MENUBAR_AGENT_PROCESS="MenuBarAgent"
-
 # Set by _macos_default when anything changed, so services are only restarted
 # when there is something for them to pick up.
 _MACOS_UI_CHANGED=false
@@ -342,9 +336,6 @@ _macos_refresh() {
     fi
     if [[ "$_MACOS_UI_CHANGED" == "true" ]]; then
         killall Finder SystemUIServer ControlCenter 2>/dev/null || true
-        # SIP refuses `launchctl kickstart` for this Apple agent, but it is a
-        # KeepAlive job running as the user, so launchd respawns it on exit.
-        killall "$MACOS_MENUBAR_AGENT_PROCESS" 2>/dev/null || true
         log_info "Menu bar spacing applies to apps as they relaunch (or after logout)"
     fi
     if [[ "$_MACOS_KEYS_CHANGED" == "true" ]]; then
