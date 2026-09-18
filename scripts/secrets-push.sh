@@ -153,7 +153,8 @@ _folder_id() {
     if [[ -z "$id" ]]; then
         id="$(bw get template folder | jq --arg n "$VAULT_FOLDER" '.name = $n' \
               | bw encode | bw create folder | jq -r '.id')"
-        log_info "Created vault folder: $VAULT_FOLDER"
+        # stderr: this function's stdout is captured as the folder id.
+        log_info "Created vault folder: $VAULT_FOLDER" >&2
     fi
     printf '%s' "$id"
 }
@@ -305,7 +306,8 @@ done < "$APPS"
 # but not the exec entries this run just rewrote, or every push would add a copy.
 print_section "Manifest"
 PUSHED_ITEMS="$(jq -s '[.[].item]' < "$ENTRIES")"
-EXISTING_EXTRA="$(bw get item "$VAULT_MANIFEST" 2>/dev/null \
+MANIFEST_ID="$(_item_id "$VAULT_MANIFEST")"
+EXISTING_EXTRA="$([[ -n "$MANIFEST_ID" ]] && bw get item "$MANIFEST_ID" 2>/dev/null \
     | jq -r '.notes // empty' 2>/dev/null \
     | jq -c --argjson pushed "$PUSHED_ITEMS" \
         '.entries[]? | select(.exec != null) | select(.item as $i | $pushed | index($i) | not)' 2>/dev/null || true)"
