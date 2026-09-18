@@ -1,7 +1,8 @@
 # Secrets
 
 `./install.sh secrets` restores private material — SSH keys, GPG keys, `.env`
-files, host configs that are too sensitive for a public repo — from a
+files, host configs that are too sensitive for a public repo, and app state such as aas
+accounts and BarShelf data — from a
 Bitwarden-compatible vault (Bitwarden or a self-hosted Vaultwarden).
 
 It is **opt-in only**. `secrets` is deliberately absent from `COMPONENTS_ORDER`,
@@ -35,6 +36,33 @@ Step 2 installs the Bitwarden CLI through the normal package manager
 (`brew install bitwarden-cli`; `npm i -g @bitwarden/cli` on Debian/Ubuntu, which
 has no apt package), then prompts for email, master password, and the TOTP
 verification code. Nothing else has to be installed by hand.
+
+## App data
+
+`scripts/secrets-push.sh` also carries app state that is not a single file. Each
+goes up as an **attachment** — Bitwarden notes stop at about 10,000 characters — and
+comes back by being piped into a command (`exec`) instead of written to a path.
+
+| Item | Attachment | Restore | Needs first |
+| --- | --- | --- | --- |
+| `app:aas` | `aas-bundle.json` from `aas export --all` (every account and credential) | `aas import -` | `brew install open330/tap/aas` |
+| `app:barshelf` | `barshelf.tar.gz` of `~/Library/Application Support/BarShelf` without `runtime/` and `cache/` | quits BarShelf, extracts into Application Support | BarShelf.app |
+
+- Push from a **Terminal on the Mac itself**. `aas export` reads the Claude credential
+  from the login keychain, which an SSH session cannot open.
+- `aas import` restores the accounts but not which one is active; pick with
+  `aas switch`, and run `aas shim install` if the bare `claude`/`codex` should follow it.
+- Re-pushing replaces the attachment and the manifest entry instead of adding copies.
+- **OTPeek** needs nothing here: its accounts sync through iCloud (CloudKit and iCloud
+  Keychain). Install it from TestFlight with the same Apple ID.
+
+A new Mac, in order:
+
+```bash
+curl -LsSf https://settings.jiun.dev | bash -s -- --all   # public settings
+brew install open330/tap/aas                              # + install BarShelf.app
+cd ~/.settings && ./install.sh secrets                     # keys, envs, app data
+```
 
 ## Manifest format
 

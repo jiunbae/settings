@@ -15,6 +15,13 @@
 #   ~/.ssh/id_*              -> ssh:<name>          (+ "public" field from <name>.pub)
 #   ~/.ssh/config.d/*.conf   -> ssh:config-<name>   (skips files the repo tracks)
 #
+# App data, stored as attachments (Bitwarden notes stop at ~10k characters) and
+# restored by piping into a command rather than writing a file:
+#   aas accounts             -> app:aas       aas-bundle.json  | aas import -
+#   BarShelf data            -> app:barshelf  barshelf.tar.gz  | tar -x into Application Support
+# `aas export` reads the Claude credential from the login keychain, so run this
+# from a Terminal on the Mac itself, not over SSH.
+#
 # Everything is stored as a Secure Note. Bitwarden's native SSH Key item type
 # would also work for the key pairs, but the exact shape of its template could
 # not be verified against this vault, and a Secure Note behaves identically for
@@ -79,6 +86,46 @@ collect() {
     done
 }
 
+# App data. Each line: <item> <attachment-file-name> <restore-exec> <kind>
+APPS="$(mktemp)"
+trap 'rm -f "$COLLECTED" "$APPS"' EXIT
+
+BARSHELF_DIR="$HOME/Library/Application Support/BarShelf"
+
+collect_apps() {
+    if command_exists aas && aas list 2>/dev/null | grep -q '@'; then
+        printf '%s\t%s\t%s\t%s\n' "app:aas" "aas-bundle.json" \
+            'aas import -' aas >> "$APPS"
+    fi
+
+    if [[ -d "$BARSHELF_DIR" ]]; then
+        # Quit the app first so it cannot write its old state back over the restore.
+        printf '%s\t%s\t%s\t%s\n' "app:barshelf" "barshelf.tar.gz" \
+            'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support"' \
+            barshelf >> "$APPS"
+    fi
+}
+
+# make_app_payload <kind> <out-file>
+make_app_payload() {
+    local kind=$1 out=$2
+    case "$kind" in
+        aas)
+            aas export --all -o "$out" >/dev/null
+            ;;
+        barshelf)
+            # runtime/ and cache/ are rebuilt by the app and hold nothing to keep.
+            tar -czf "$out" -C "$HOME/Library/Application Support" \
+                --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf
+            ;;
+        *)
+            log_error "Unknown app payload: $kind"
+            return 1
+            ;;
+    esac
+    [[ -s "$out" ]]
+}
+
 # ==============================================================================
 # Vault upsert
 # ==============================================================================
@@ -139,13 +186,35 @@ upsert_note() {
     fi
 }
 
+# upsert_attachment <name> <file> <folder-id>
+# Replaces the attachment of the same file name, so re-pushing never stacks copies.
+upsert_attachment() {
+    local name=$1 file=$2 fid=$3
+    local id fname old
+    fname="$(basename "$file")"
+    id="$(_item_id "$name")"
+    if [[ -z "$id" ]]; then
+        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid"
+        _load_items
+        id="$(_item_id "$name")"
+    fi
+
+    for old in $(bw get item "$id" | jq -r --arg f "$fname" \
+                     '(.attachments // [])[] | select(.fileName == $f) | .id'); do
+        bw delete attachment "$old" --itemid "$id" >/dev/null
+    done
+    bw create attachment --file "$file" --itemid "$id" >/dev/null
+    log_success "attached $name/$fname"
+}
+
 # ==============================================================================
 # Main
 # ==============================================================================
 
 collect
+collect_apps
 
-if [[ ! -s "$COLLECTED" ]]; then
+if [[ ! -s "$COLLECTED" && ! -s "$APPS" ]]; then
     log_error "Nothing collected. Are ~/.envs and ~/.ssh populated?"
     exit 1
 fi
@@ -156,8 +225,11 @@ while IFS=$'\t' read -r src item dest mode pub; do
     printf '  %-26s %-8s %s%s\n' "$item" "$mode" "$dest" \
         "$([[ -n "$pub" ]] && echo "  (+public)")"
 done < "$COLLECTED"
+while IFS=$'\t' read -r item fname exec_cmd kind; do
+    printf '  %-26s %-8s %s\n' "$item" "attach" "$fname -> exec"
+done < "$APPS"
 echo
-log_info "$(wc -l < "$COLLECTED" | tr -d ' ') items, folder '$VAULT_FOLDER', manifest '$VAULT_MANIFEST'"
+log_info "$(cat "$COLLECTED" "$APPS" | wc -l | tr -d ' ') items, folder '$VAULT_FOLDER', manifest '$VAULT_MANIFEST'"
 
 if [[ "$PUSH" != "true" ]]; then
     echo
@@ -172,7 +244,9 @@ vault_unlock
 _load_items
 FOLDER_ID="$(_folder_id)"
 ENTRIES="$(mktemp)"
-trap 'rm -f "$COLLECTED" "$ENTRIES"' EXIT
+# App payloads are credentials too: stage them where only this user can read.
+PAYLOADS="$(umask 077; mktemp -d "${TMPDIR:-/tmp}/settings-push.XXXXXX")"
+trap 'rm -rf "$COLLECTED" "$APPS" "$ENTRIES" "$PAYLOADS"' EXIT
 
 print_section "Pushing"
 while IFS=$'\t' read -r src item dest mode pub; do
@@ -196,12 +270,28 @@ while IFS=$'\t' read -r src item dest mode pub; do
     fi
 done < "$COLLECTED"
 
+while IFS=$'\t' read -r item fname exec_cmd kind; do
+    payload="$PAYLOADS/$fname"
+    if ! (umask 077; make_app_payload "$kind" "$payload"); then
+        log_warn "skipped  $item (could not produce $fname)"
+        continue
+    fi
+    upsert_attachment "$item" "$payload" "$FOLDER_ID"
+    rm -f "$payload"
+
+    jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" \
+        '{item: $item, source: $src, exec: $exec}' >> "$ENTRIES"
+done < "$APPS"
+
 # GPG is not collected from disk - exporting a secret key needs the passphrase,
-# so those two items are maintained by hand. Preserve them if already present.
+# so those two items are maintained by hand. Preserve them if already present,
+# but not the exec entries this run just rewrote, or every push would add a copy.
 print_section "Manifest"
+PUSHED_ITEMS="$(jq -s '[.[].item]' < "$ENTRIES")"
 EXISTING_EXTRA="$(bw get item "$VAULT_MANIFEST" 2>/dev/null \
     | jq -r '.notes // empty' 2>/dev/null \
-    | jq -c '.entries[]? | select(.exec != null)' 2>/dev/null || true)"
+    | jq -c --argjson pushed "$PUSHED_ITEMS" \
+        '.entries[]? | select(.exec != null) | select(.item as $i | $pushed | index($i) | not)' 2>/dev/null || true)"
 if [[ -n "$EXISTING_EXTRA" ]]; then
     printf '%s\n' "$EXISTING_EXTRA" >> "$ENTRIES"
     log_info "Preserved $(printf '%s\n' "$EXISTING_EXTRA" | wc -l | tr -d ' ') exec entries from the existing manifest"
