@@ -25,22 +25,25 @@ fi
 # ==============================================================================
 readonly MACOS_KEYBINDINGS_DIR="$HOME/Library/KeyBindings"
 readonly MACOS_LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+# Label of the hidutil LaunchAgent earlier versions installed; removed on sight.
 readonly MACOS_CAPSLOCK_LABEL="dev.jiun.capslock-to-control"
 readonly MACOS_ACTIVATE_SETTINGS="/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings"
 
 # Caps Lock (HID usage 0x39) -> Control. 0xE4 is what System Settings writes
 # for "Control" in its per-keyboard modifier mapping.
+readonly MACOS_CAPSLOCK_SRC=30064771129
+readonly MACOS_CAPSLOCK_DST=30064771300
 readonly MACOS_CAPSLOCK_MAPPING='{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x7000000E4}]}'
 
 # "domain|key|type|value" — domain "-g" is NSGlobalDomain; a "host:" prefix
-# writes to -currentHost.
+# writes to -currentHost. Type "absent" deletes the key (value is ignored).
 readonly MACOS_KEYBOARD_DEFAULTS=(
     "-g|KeyRepeat|int|1"
     "-g|InitialKeyRepeat|int|11"
     "-g|ApplePressAndHoldEnabled|bool|false"
-    "-g|com.apple.keyboard.fnState|bool|true"
-    "-g|AppleKeyboardUIMode|int|1"
-    "-g|NSAutomaticCapitalizationEnabled|bool|true"
+    "-g|com.apple.keyboard.fnState|bool|false"
+    "-g|AppleKeyboardUIMode|int|0"
+    "-g|NSAutomaticCapitalizationEnabled|bool|false"
     "-g|NSAutomaticDashSubstitutionEnabled|bool|false"
     "-g|NSAutomaticPeriodSubstitutionEnabled|bool|false"
     "-g|NSAutomaticQuoteSubstitutionEnabled|bool|false"
@@ -55,7 +58,36 @@ readonly MACOS_UI_DEFAULTS=(
     "-g|NSQuitAlwaysKeepsWindows|bool|true"
     "host:-g|NSStatusItemSpacing|int|6"
     "host:-g|NSStatusItemSelectionPadding|int|12"
+    "-g|AppleInterfaceStyle|absent|"
+    "com.apple.finder|ShowPathbar|bool|true"
+    "com.apple.finder|FXEnableExtensionChangeWarning|bool|false"
+    "com.apple.finder|FXRemoveOldTrashItems|bool|true"
+    "com.apple.finder|ShowRecentTags|bool|false"
 )
+
+readonly MACOS_DOCK_DEFAULTS=(
+    "com.apple.dock|tilesize|int|42"
+    "com.apple.dock|magnification|bool|false"
+)
+
+# Tap to click and three-finger drag, for the built-in trackpad and a Magic
+# Trackpad alike. Three-finger drag takes three fingers, so the three-finger
+# swipes are turned off and Mission Control / Space switching stay on four.
+readonly MACOS_TRACKPAD_DEFAULTS=(
+    "com.apple.AppleMultitouchTrackpad|Clicking|bool|true"
+    "com.apple.AppleMultitouchTrackpad|TrackpadThreeFingerDrag|bool|true"
+    "com.apple.AppleMultitouchTrackpad|TrackpadThreeFingerHorizSwipeGesture|int|0"
+    "com.apple.AppleMultitouchTrackpad|TrackpadThreeFingerVertSwipeGesture|int|0"
+    "com.apple.driver.AppleBluetoothMultitouch.trackpad|Clicking|bool|true"
+    "com.apple.driver.AppleBluetoothMultitouch.trackpad|TrackpadThreeFingerDrag|bool|true"
+    "com.apple.driver.AppleBluetoothMultitouch.trackpad|TrackpadThreeFingerHorizSwipeGesture|int|0"
+    "com.apple.driver.AppleBluetoothMultitouch.trackpad|TrackpadThreeFingerVertSwipeGesture|int|0"
+    "host:-g|com.apple.mouse.tapBehavior|int|1"
+)
+
+# pmset values: never idle-sleep on AC, sleep after 3 minutes on battery.
+readonly MACOS_PMSET_AC_SLEEP=0
+readonly MACOS_PMSET_BATTERY_SLEEP=3
 
 # Which system items appear in the menu bar. Control Center's per-module
 # ints live in -currentHost: 2 = show when active, 8 = don't show. The
@@ -79,6 +111,8 @@ readonly MACOS_MENUBAR_DEFAULTS=(
 # when there is something for them to pick up.
 _MACOS_UI_CHANGED=false
 _MACOS_KEYS_CHANGED=false
+_MACOS_DOCK_CHANGED=false
+_MACOS_LOGOUT_NEEDED=false
 
 # ==============================================================================
 # Helpers
@@ -95,6 +129,7 @@ _macos_default() {
 
     local want=$value current
     [[ "$type" == "bool" ]] && { [[ "$value" == "true" ]] && want=1 || want=0; }
+    [[ "$type" == "absent" ]] && want="<unset>"
     current=$(defaults ${host_flag[@]+"${host_flag[@]}"} read "$domain" "$key" 2>/dev/null) || current="<unset>"
 
     if [[ "$current" == "$want" ]]; then
@@ -108,6 +143,11 @@ _macos_default() {
     fi
 
     # ${arr[@]+...} keeps bash 3.2 (macOS /bin/bash) happy under set -u
+    if [[ "$type" == "absent" ]]; then
+        defaults ${host_flag[@]+"${host_flag[@]}"} delete "$domain" "$key"
+        log_info "Removed $domain $key (was $current)"
+        return 0
+    fi
     defaults ${host_flag[@]+"${host_flag[@]}"} write "$domain" "$key" "-$type" "$value"
     log_info "Set $domain $key: $current -> $value"
     return 0
@@ -227,52 +267,75 @@ install_macos_keybindings() {
 install_macos_capslock() {
     print_section "Caps Lock -> Control"
 
-    local plist="$MACOS_LAUNCH_AGENTS_DIR/$MACOS_CAPSLOCK_LABEL.plist"
-    local tmp
-    tmp=$(mktemp)
-
-    # hidutil mappings do not survive a reboot, so a LaunchAgent re-applies it
-    # at login. Unlike System Settings' per-keyboard mapping this covers every
-    # keyboard, including ones that have never been connected before.
-    # launchd will not load a symlinked plist, so it is written, not linked.
-    cat > "$tmp" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$MACOS_CAPSLOCK_LABEL</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/hidutil</string>
-        <string>property</string>
-        <string>--set</string>
-        <string>$MACOS_CAPSLOCK_MAPPING</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>
-EOF
-
-    if [[ -f "$plist" ]] && cmp -s "$tmp" "$plist"; then
-        rm -f "$tmp"
-        log_info "Caps Lock LaunchAgent already installed"
-        track_skipped "Caps Lock -> Control"
-    elif [[ "$DRY_RUN" == "true" ]]; then
-        rm -f "$tmp"
-        log_info "[DRY-RUN] Would install $plist and remap Caps Lock"
-        return 0
-    else
-        mkdir -p "$MACOS_LAUNCH_AGENTS_DIR"
-        mv "$tmp" "$plist"
-        launchctl bootout "gui/$(id -u)/$MACOS_CAPSLOCK_LABEL" 2>/dev/null || true
-        launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || true
-        track_installed "Caps Lock -> Control"
-        log_success "Installed $plist"
+    # Earlier versions re-applied a hidutil mapping from a LaunchAgent at login.
+    # The per-keyboard mapping below is what System Settings itself stores, so
+    # the agent is no longer needed.
+    local old_agent="$MACOS_LAUNCH_AGENTS_DIR/$MACOS_CAPSLOCK_LABEL.plist"
+    if [[ -f "$old_agent" ]]; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "[DRY-RUN] Would remove the old Caps Lock LaunchAgent"
+        else
+            launchctl bootout "gui/$(id -u)/$MACOS_CAPSLOCK_LABEL" 2>/dev/null || true
+            rm -f "$old_agent"
+            log_info "Removed the old Caps Lock LaunchAgent"
+        fi
     fi
 
-    # Apply now as well; bootstrap alone may race the first keypress.
+    # One -currentHost key per keyboard, named by vendor and product id — the
+    # form System Settings > Keyboard > Modifier Keys writes. Only keyboards
+    # attached right now are covered; for a new one, re-run this or set it in
+    # System Settings. Other remaps already on a keyboard are kept.
+    local changes
+    changes=$(python3 - "$MACOS_CAPSLOCK_SRC" "$MACOS_CAPSLOCK_DST" <<'PY'
+import plistlib, subprocess, sys
+src, dst = int(sys.argv[1]), int(sys.argv[2])
+listing = subprocess.run(
+    ["hidutil", "list", "--matching", '{"PrimaryUsagePage":1,"PrimaryUsage":6}'],
+    capture_output=True, text=True).stdout
+keyboards = []
+for line in listing.splitlines():
+    if line.startswith("Devices"):      # only the Services section is needed
+        break
+    cols = line.split()
+    if len(cols) < 9 or cols[0] == "VendorID" or cols[8].startswith("V-"):
+        continue                        # headers, and Universal Control proxies
+    key = "com.apple.keyboard.modifiermapping.%d-%d-0" % (int(cols[0], 16), int(cols[1], 16))
+    if key not in keyboards:
+        keyboards.append(key)
+raw = subprocess.run(["defaults", "-currentHost", "export", "-g", "-"], capture_output=True).stdout
+current = plistlib.loads(raw) if raw else {}
+entry = {"HIDKeyboardModifierMappingSrc": src, "HIDKeyboardModifierMappingDst": dst}
+for key in keyboards:
+    have = current.get(key, [])
+    if entry in have:
+        continue
+    keep = [m for m in have if m.get("HIDKeyboardModifierMappingSrc") != src]
+    items = keep + [entry]
+    xml = ["<dict><key>HIDKeyboardModifierMappingDst</key><integer>%d</integer>"
+           "<key>HIDKeyboardModifierMappingSrc</key><integer>%d</integer></dict>"
+           % (m["HIDKeyboardModifierMappingDst"], m["HIDKeyboardModifierMappingSrc"]) for m in items]
+    print(key + "\t" + "\t".join(xml))
+PY
+    ) || { log_error "Could not read keyboards or modifier mappings"; return 1; }
+
+    if [[ -z "$changes" ]]; then
+        log_info "Caps Lock already maps to Control on every attached keyboard"
+        track_skipped "Caps Lock -> Control"
+    elif [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would map Caps Lock -> Control for: $(cut -f1 <<< "$changes" | sed 's/.*modifiermapping\.//' | tr '\n' ' ')"
+        return 0
+    else
+        local key rest
+        local -a items
+        while IFS=$'\t' read -r key rest; do
+            IFS=$'\t' read -r -a items <<< "$rest"
+            defaults -currentHost write -g "$key" -array "${items[@]}"
+            log_info "Mapped Caps Lock -> Control on keyboard ${key##*.}"
+        done <<< "$changes"
+        track_installed "Caps Lock -> Control"
+    fi
+
+    # The stored mapping is read at login; apply it to this session too.
     [[ "$DRY_RUN" == "true" ]] || /usr/bin/hidutil property --set "$MACOS_CAPSLOCK_MAPPING" >/dev/null
 }
 
@@ -285,6 +348,30 @@ install_macos_ui() {
     else
         log_info "Finder / window / menu bar preferences already set"
         track_skipped "Finder / window / menu bar preferences"
+    fi
+}
+
+install_macos_dock() {
+    print_section "Dock"
+
+    if _macos_apply_list "${MACOS_DOCK_DEFAULTS[@]}"; then
+        _MACOS_DOCK_CHANGED=true
+        track_installed "Dock preferences"
+    else
+        log_info "Dock preferences already set"
+        track_skipped "Dock preferences"
+    fi
+}
+
+install_macos_trackpad() {
+    print_section "Trackpad"
+
+    if _macos_apply_list "${MACOS_TRACKPAD_DEFAULTS[@]}"; then
+        _MACOS_LOGOUT_NEEDED=true
+        track_installed "Trackpad preferences"
+    else
+        log_info "Trackpad preferences already set"
+        track_skipped "Trackpad preferences"
     fi
 }
 
@@ -301,31 +388,45 @@ install_macos_menubar() {
 }
 
 install_macos_power() {
-    print_section "Power: never sleep on AC"
+    print_section "Power: sleep on AC and battery"
 
-    # Only the AC profile (-c). On battery the system keeps its normal sleep.
-    local current
-    current=$(pmset -g custom 2>/dev/null | awk '/^AC Power:/{ac=1} ac && $1=="sleep"{print $2; exit}')
-    if [[ "$current" == "0" ]]; then
-        log_info "System sleep on AC already disabled"
-        track_skipped "pmset -c sleep 0"
+    # AC: never idle-sleep. Battery: sleep after a few minutes. A Mac without a
+    # battery has no Battery Power section and only gets the AC value.
+    local custom ac battery
+    custom=$(pmset -g custom 2>/dev/null)
+    ac=$(awk '/^AC Power:/{s=1;next} /Power:$/{s=0} s && $1=="sleep"{print $2; exit}' <<< "$custom")
+    battery=$(awk '/^Battery Power:/{s=1;next} /Power:$/{s=0} s && $1=="sleep"{print $2; exit}' <<< "$custom")
+
+    local -a todo=()
+    [[ "$ac" == "$MACOS_PMSET_AC_SLEEP" ]] || todo+=("-c sleep $MACOS_PMSET_AC_SLEEP")
+    if grep -q '^Battery Power:' <<< "$custom" && [[ "$battery" != "$MACOS_PMSET_BATTERY_SLEEP" ]]; then
+        todo+=("-b sleep $MACOS_PMSET_BATTERY_SLEEP")
+    fi
+
+    if [[ ${#todo[@]} -eq 0 ]]; then
+        log_info "Sleep already set (AC $ac, battery ${battery:-n/a})"
+        track_skipped "pmset sleep"
         return 0
     fi
 
+    local t
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would run: sudo pmset -c sleep 0 (currently ${current:-unknown})"
+        for t in "${todo[@]}"; do log_info "[DRY-RUN] Would run: sudo pmset $t"; done
         return 0
     fi
 
-    if [[ "$NO_SUDO" == "true" ]] || ! sudo -n true 2>/dev/null; then
-        log_warn "pmset needs sudo — run manually: sudo pmset -c sleep 0"
-        track_skipped "pmset -c sleep 0 (needs sudo)"
+    if [[ "$NO_SUDO" == "true" ]] || { ! sudo -n true 2>/dev/null && { [[ ! -t 0 ]] || ! validate_sudo; }; }; then
+        for t in "${todo[@]}"; do log_warn "pmset needs sudo — run manually: sudo pmset $t"; done
+        track_skipped "pmset sleep (needs sudo)"
         return 0
     fi
 
-    sudo pmset -c sleep 0
-    track_installed "pmset -c sleep 0"
-    log_success "System sleep disabled on AC power"
+    for t in "${todo[@]}"; do
+        # shellcheck disable=SC2086
+        sudo pmset $t
+    done
+    track_installed "pmset sleep"
+    log_success "Sleep set: AC never, battery ${MACOS_PMSET_BATTERY_SLEEP} min"
 }
 
 _macos_refresh() {
@@ -338,8 +439,14 @@ _macos_refresh() {
         killall Finder SystemUIServer ControlCenter 2>/dev/null || true
         log_info "Menu bar spacing applies to apps as they relaunch (or after logout)"
     fi
+    if [[ "$_MACOS_DOCK_CHANGED" == "true" ]]; then
+        killall Dock 2>/dev/null || true
+    fi
     if [[ "$_MACOS_KEYS_CHANGED" == "true" ]]; then
         log_info "Key repeat changes apply to apps as they relaunch (or after logout)"
+    fi
+    if [[ "$_MACOS_LOGOUT_NEEDED" == "true" ]]; then
+        log_info "Trackpad and appearance changes take full effect after logging out and back in"
     fi
 }
 
@@ -361,6 +468,8 @@ install_macos() {
     install_macos_keybindings
     install_macos_capslock
     install_macos_ui
+    install_macos_dock
+    install_macos_trackpad
     install_macos_menubar
     install_macos_power
     _macos_refresh

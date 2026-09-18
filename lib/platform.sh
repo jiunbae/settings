@@ -207,7 +207,12 @@ pkg_installed() {
 
 # Get the default shell path
 get_zsh_path() {
-    if command_exists zsh; then
+    # macOS ships zsh as the system shell. Taking the first zsh on PATH picked
+    # up a Homebrew zsh where one was installed and made it the login shell,
+    # which then breaks whenever Homebrew is missing, upgrading or relocated.
+    if [[ "$PLATFORM" == "macos" && -x /bin/zsh ]]; then
+        echo "/bin/zsh"
+    elif command_exists zsh; then
         command -v zsh
     else
         case "$PLATFORM" in
