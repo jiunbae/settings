@@ -236,8 +236,16 @@ _fetch() {
                 '(.fields // []) | map(select(.name == $n)) | .[0].value // empty' <<< "$json" > "$out"
             ;;
         attachment:*)
-            bw get attachment "${src#attachment:}" --itemid "$(jq -r '.id' <<< "$json")" \
-                --output "$out" >/dev/null
+            # By attachment id, not name: `bw get attachment <name>` fails with
+            # "More than one result" whenever an earlier push left a same-named
+            # attachment behind. The last one listed is the newest upload.
+            local fname="${src#attachment:}" aid err
+            aid="$(jq -r --arg f "$fname" '[(.attachments // [])[] | select(.fileName == $f)] | last | .id // empty' <<< "$json")"
+            [[ -n "$aid" ]] || { log_error "No attachment '$fname' on $item"; return 1; }
+            err="$(bw get attachment "$aid" --itemid "$(jq -r '.id' <<< "$json")" --output "$out" 2>&1 >/dev/null)" || {
+                log_error "bw get attachment failed for $item/$fname: ${err%%$'\n'*}"
+                return 1
+            }
             ;;
         *)
             log_error "Unknown source spec: $src"

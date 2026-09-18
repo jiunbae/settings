@@ -217,12 +217,20 @@ upsert_attachment() {
         id="$(_item_id "$name")"
     fi
 
-    for old in $(bw get item "$id" | jq -r --arg f "$fname" \
-                     '(.attachments // [])[] | select(.fileName == $f) | .id'); do
-        bw delete attachment "$old" --itemid "$id" >/dev/null
-    done
+    local before after
+    before="$(bw get item "$id" | jq -r --arg f "$fname" '[(.attachments // [])[] | select(.fileName == $f) | .id] | join(" ")')"
     bw create attachment --file "$file" --itemid "$id" >/dev/null
-    log_success "attached $name/$fname"
+    # Upload first, then remove every older copy, so a failed upload never
+    # leaves the item without one - and a failed delete is reported, not ignored.
+    for old in $before; do
+        bw delete attachment "$old" --itemid "$id" >/dev/null || log_warn "could not delete old attachment $old on $name"
+    done
+    after="$(bw get item "$id" | jq -r --arg f "$fname" '[(.attachments // [])[] | select(.fileName == $f)] | length')"
+    if [[ "$after" == "1" ]]; then
+        log_success "attached $name/$fname"
+    else
+        log_warn "attached $name/$fname, but the item now has $after attachments with that name"
+    fi
 }
 
 # ==============================================================================
