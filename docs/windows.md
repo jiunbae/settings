@@ -316,6 +316,14 @@ pwsh -ExecutionPolicy Bypass -File $s
 locked and stops. The vault stays unlocked in the calling shell afterwards — run
 `bw lock` when finished.
 
+It syncs first, which the bash engine's dry run does not. `bw` answers from a local
+cache and `bw unlock` only decrypts that cache, so a dry run right after pushing from
+another machine would otherwise describe a plan built from whatever this machine last
+downloaded — the one moment you are most likely to run it, and the worst thing a
+"here is what would happen" command can get wrong. When the manifest item is missing
+the error reports how many items this machine holds and when it last synced, because
+that one line is usually the whole answer.
+
 `jq` is not required, unlike the bash engine: `ConvertFrom-Json` does that work.
 
 ### Restoring is all it does

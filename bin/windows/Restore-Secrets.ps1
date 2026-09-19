@@ -210,6 +210,24 @@ function Get-VaultItem([string]$Name) {
   return $hit[0]
 }
 
+# bw 가 마지막으로 받아온 항목 수. "없다" 는 말에 근거를 달기 위한 것입니다.
+function Get-VaultItemCount {
+  if ($null -eq $script:ItemsCache) { return -1 }
+  return @($script:ItemsCache).Count
+}
+
+# 마지막 동기화 시각. 캐시가 낡았는지를 가르는 단 하나의 사실이고, vault 가
+# 잠긴 상태에서도 읽힙니다. "10일 전" 한 줄이면 원인을 찾을 필요가 없습니다.
+function Get-LastSyncText {
+  $json = Invoke-Bw status
+  if (-not $json) { return $null }
+  try { $last = ($json | ConvertFrom-Json).lastSync } catch { return $null }
+  if (-not $last) { return "한 번도 없음" }
+  $dt = [datetime]$last
+  $days = [int]([datetime]::UtcNow - $dt.ToUniversalTime()).TotalDays
+  return "{0:yyyy-MM-dd HH:mm} ({1}일 전)" -f $dt.ToLocalTime(), $days
+}
+
 function Get-Prop($Object, [string]$Name) {
   if ($null -eq $Object) { return $null }
   if (-not $Object.PSObject.Properties[$Name]) { return $null }
@@ -451,7 +469,17 @@ function Invoke-Manifest([string]$TmpDir) {
   Section "Restoring Secrets"
 
   $manifestItem = Get-VaultItem $Manifest
-  if (-not $manifestItem) { Die "manifest 항목 '$Manifest' 을 찾을 수 없습니다" }
+  if (-not $manifestItem) {
+    # 이 자리에서 제일 흔한 원인은 "vault 에 없다" 가 아니라 "이 기기가 아직
+    # 못 받았다" 입니다. bw 는 로컬 캐시를 읽고 unlock 은 그걸 복호화만 하므로,
+    # 다른 기기에서 push 한 직후의 manifest 는 sync 전까지 보이지 않습니다.
+    Warn "manifest 항목 '$Manifest' 을 찾을 수 없습니다 (이 기기가 받아온 항목 $(Get-VaultItemCount)개 중에는 없습니다)"
+    $sync = Get-LastSyncText
+    if ($sync) { Info "마지막 동기화: $sync" }
+    Info "그 뒤에 다른 기기에서 push 했다면 캐시가 낡은 것입니다: bw sync"
+    Info "이름이 다르다면: -Manifest <항목명> 또는 SETTINGS_VAULT_MANIFEST"
+    Die "manifest 를 읽지 못했습니다"
+  }
   $notes = Get-Prop $manifestItem "notes"
   if ([string]::IsNullOrWhiteSpace($notes)) { Die "manifest '$Manifest' 의 notes 가 비어 있습니다" }
 
@@ -549,6 +577,12 @@ if ($DryRun) {
   }
   Info "[DRY-RUN] $VaultServer 를 열고 manifest '$Manifest' 을 적용합니다"
   if ($env:BW_SESSION) {
+    # 여기서만 bash 판과 다르게 굽니다. bw 는 로컬 캐시를 읽고 unlock 은 그걸
+    # 복호화만 하므로, 동기화 없이 열거하면 다른 기기에서 방금 push 한 내용을
+    # 못 본 채로 "이게 복원될 것" 이라고 말하게 됩니다. 그건 계획을 보여주는
+    # 명령이 할 수 있는 최악의 거짓말입니다. sync 는 읽기 전용이라 비용도 없습니다.
+    Info "Vault 동기화 중..."
+    if ($null -eq (Invoke-Bw sync)) { Warn "bw sync 실패 - 캐시된 내용으로 열거합니다" }
     $tmp = New-ScratchDir
     try { Invoke-Manifest $tmp } finally { Remove-Item -Recurse -Force -LiteralPath $tmp -ErrorAction SilentlyContinue }
   } else {
