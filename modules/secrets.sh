@@ -280,6 +280,20 @@ _place() {
     track_installed "$(basename "$dest")"
 }
 
+# _platform_matches <space-separated names> — true when this machine is one of
+# them. Manifest names are macos, windows and linux; WSL answers to linux too,
+# since everything a Linux entry restores works there unchanged.
+_platform_matches() {
+    local want=$1 self="$PLATFORM" w s
+    [[ "$self" == "wsl" ]] && self="linux wsl"
+    for w in $want; do
+        for s in $self; do
+            [[ "$w" == "$s" ]] && return 0
+        done
+    done
+    return 1
+}
+
 apply_manifest() {
     print_section "Restoring Secrets"
 
@@ -298,16 +312,46 @@ apply_manifest() {
     count="$(printf '%s' "$manifest" | jq '.entries | length')"
     log_info "Manifest '$VAULT_MANIFEST': $count entries"
 
-    local entry item src dest mode exec_cmd tmp
+    local entry item src dest mode exec_cmd platforms ptype tmp
     while IFS= read -r entry; do
         item="$(printf '%s' "$entry" | jq -r '.item')"
         src="$(printf '%s' "$entry" | jq -r '.source // "notes"')"
         dest="$(printf '%s' "$entry" | jq -r '.dest // empty')"
         mode="$(printf '%s' "$entry" | jq -r '.mode // "600"')"
         exec_cmd="$(printf '%s' "$entry" | jq -r '.exec // empty')"
+        # A bare string is accepted as well as an array; absent means everywhere.
+        # The type is read first, on its own: `.platform | type` answers "null"
+        # for an absent field, where iterating a number would make jq exit 5 and
+        # take the whole install.sh run down with it under `set -e`.
+        ptype="$(printf '%s' "$entry" | jq -r '.platform | type')"
+        case "$ptype" in
+            null)   platforms="" ;;
+            string) platforms="$(printf '%s' "$entry" | jq -r '.platform')" ;;
+            array)
+                # A name that is not a string is a broken manifest. Do not guess
+                # in either direction: reading it as "everywhere" would let one
+                # typo loose a macOS-only entry on another platform.
+                if ! platforms="$(printf '%s' "$entry" | jq -er \
+                    '.platform | if all(type == "string") then join(" ") else error end')"; then
+                    log_error "Entry '$item' has a non-string platform name; skipping"
+                    continue
+                fi
+                ;;
+            *)
+                log_error "Entry '$item' has a $ptype platform, expected a string or an array; skipping"
+                continue
+                ;;
+        esac
 
         if [[ -n "$dest" && -n "$exec_cmd" ]] || [[ -z "$dest" && -z "$exec_cmd" ]]; then
             log_error "Entry '$item' needs exactly one of 'dest' or 'exec'"
+            continue
+        fi
+
+        # Checked ahead of the dry run, so a dry run reports the skips too.
+        if [[ -n "$platforms" ]] && ! _platform_matches "$platforms"; then
+            log_info "Skipped $item (platform: $platforms)"
+            track_skipped "$item"
             continue
         fi
 

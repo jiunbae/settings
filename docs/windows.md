@@ -12,6 +12,7 @@ is installed automatically.
 | [PowerShell](#powershell) | `configs/powershell/` — `.zshrc` ported, starship prompt |
 | [NeoVim](#neovim) | `configs/nvim/` — same config as everywhere else |
 | [Nextcloud upload](#nextcloud-upload) | `bin/windows/cloud-upload.ps1` |
+| [Secrets](#secrets) | `bin/windows/Restore-Secrets.ps1` — SSH keys and private configs, from the vault |
 
 ## Windows Terminal
 
@@ -287,3 +288,61 @@ that item's remote path, including when its files are already uploaded. Multiple
 inputs are rejected before uploading; run each separately to create separate links.
 A folder link includes its existing remote contents. `-DryRun` also works with
 `-Sync` and never creates a public link.
+
+
+## Secrets
+
+SSH keys, GPG keys, `.env` files and the host configs too sensitive for a public
+repo are restored from a Bitwarden-compatible vault. On every other platform that is
+`./install.sh secrets`; here it is `bin/windows/Restore-Secrets.ps1`, for the same
+reason as everything else on this page.
+
+What gets restored is a JSON manifest stored **inside** the vault, not in this repo —
+[secrets.md](secrets.md) covers the format, the vault layout and how to populate it.
+This section is only the Windows half.
+
+### How to apply
+
+```powershell
+winget install Bitwarden.CLI          # or: npm install -g @bitwarden/cli@2026.8.0
+
+$s = "$env:USERPROFILE\workspace\settings\bin\windows\Restore-Secrets.ps1"
+pwsh -ExecutionPolicy Bypass -File $s -DryRun
+pwsh -ExecutionPolicy Bypass -File $s
+```
+
+`-DryRun` writes nothing and never prompts for a password. With an existing
+`$env:BW_SESSION` it enumerates the real manifest; without one it says the vault is
+locked and stops. The vault stays unlocked in the calling shell afterwards — run
+`bw lock` when finished.
+
+`jq` is not required, unlike the bash engine: `ConvertFrom-Json` does that work.
+
+### Restoring is all it does
+
+There is no Windows push. `scripts/secrets-push.sh` remains the only thing that
+writes the manifest. Two writers would drift from each other, and no secret's
+original copy lives on Windows to begin with.
+
+### Why it is not just the shell script under Git Bash
+
+`modules/secrets.sh` would run there, but three of the things it does are wrong on
+Windows:
+
+- **`chmod 600` does nothing.** Windows OpenSSH ignores POSIX modes and reads the
+  ACL. A key restored with its inherited ACEs intact is refused outright with
+  `UNPROTECTED PRIVATE KEY FILE`, and MSYS's `chmod` cannot express the fix. The
+  PowerShell version disables inheritance and leaves a single ACE for the current
+  user on any entry whose `mode` ends in `00`. Public keys (`644`) keep the
+  inherited ACL, and the **directory** is deliberately left alone: the profile's ACL
+  already grants only the user, SYSTEM and Administrators, and OpenSSH checks the
+  key file, not the directory holding it.
+- **The macOS app entries would run.** `app:aas`, `app:barshelf` and `app:otpeek`
+  restore into `~/Library` and call `open -a` and `pkill`. They now carry
+  `"platform": ["macos"]` in the manifest and are skipped everywhere else — by the
+  bash engine too, which gained the same filter.
+- **`exec` assumes a shell.** The bash engine pipes payloads into `bash -c`. The
+  PowerShell one has no `sh`, so it refuses any command containing a pipe, `;`, `&`,
+  redirection or `$(…)` — pointing at the `platform` tag as the fix — and runs plain
+  ones such as `gpg --batch --quiet --import` directly, piping the payload to stdin
+  as bytes.
