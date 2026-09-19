@@ -5,6 +5,9 @@ files, host configs that are too sensitive for a public repo, and app state such
 accounts, BarShelf data and the OTPeek vault — from a
 Bitwarden-compatible vault (Bitwarden or a self-hosted Vaultwarden).
 
+On Windows, where `install.sh` cannot run at all, `bin/windows/Restore-Secrets.ps1`
+is the restoring half — see [Windows](#windows).
+
 It is **opt-in only**. `secrets` is deliberately absent from `COMPONENTS_ORDER`,
 so neither `--all` nor the interactive menu can drop private keys onto a shared
 box, a CI runner, or a machine that only wanted dotfiles.
@@ -56,6 +59,9 @@ comes back by being piped into a command (`exec`) instead of written to a path.
 | `app:barshelf` | `barshelf.tar.gz` of `~/Library/Application Support/BarShelf` without `runtime/` and `cache/` | quits BarShelf, extracts into Application Support, starts it again | BarShelf.app |
 | `app:otpeek` | `otpeek.tar.gz`: the CLI config and the app-group vault `vault.otpvault` (still encrypted with the OTPeek master password) | extracts into `$HOME`, points `active_vault` at this home | `otpeek` CLI in `~/.cargo/bin` |
 
+- All three are tagged `"platform": ["macos"]` by `secrets-push.sh`. They restore into
+  `~/Library` and shell out to `open -a` and `pkill`, so a restore anywhere else skips
+  them instead of writing paths that mean nothing there.
 - Push from a **Terminal on the Mac itself**. `aas export` reads the Claude credential
   from the login keychain, which an SSH session cannot open.
 - `aas import` restores the accounts but not which one is active; pick with
@@ -87,7 +93,9 @@ Stored in the **notes** field of the vault item named by
     {"item": "ssh:company",    "source": "attachment:20-company.conf",
                                "dest": "~/.ssh/config.d/20-company.conf", "mode": "600"},
     {"item": "gpg:primary",    "source": "notes", "exec": "gpg --batch --quiet --import"},
-    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust"}
+    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust"},
+    {"item": "app:barshelf",   "source": "attachment:barshelf.tar.gz",
+                               "exec": "tar -xzf - -C ...", "platform": ["macos"]}
   ]
 }
 ```
@@ -98,7 +106,8 @@ Stored in the **notes** field of the vault item named by
 | `source` | `notes` (default), `sshkey`, `password`, `field:<name>`, `attachment:<filename>` |
 | `dest` | File to write. `~` is expanded. Mutually exclusive with `exec` |
 | `exec` | Command to pipe the payload into. Mutually exclusive with `dest` |
-| `mode` | `chmod` for `dest`, default `600` |
+| `mode` | `chmod` for `dest`, default `600`. On Windows a mode whose group/other digits are `0` means "strip inherited ACEs, leave only this user" |
+| `platform` | Where the entry applies — `macos`, `windows`, `linux`, as a string or an array. Absent means everywhere; WSL matches `linux` too |
 
 Restores are idempotent: an unchanged `dest` is skipped, and a changed one is
 backed up to `<dest>.backup.<timestamp>` before being replaced.
@@ -116,6 +125,34 @@ gpg --export-ownertrust                     # → item "gpg:ownertrust" notes
 
 Prefer notes and fields over attachments where the payload is text; they are
 smaller, diff-able in the web vault, and supported by every client.
+
+## Windows
+
+`install.sh` cannot run on Windows — `lib/platform.sh` `detect_platform` exits on
+anything that is not Linux or Darwin — so the restoring half is its own script,
+placed the way everything else in [windows.md](windows.md) is:
+
+```powershell
+$s = "$env:USERPROFILE\workspace\settings\bin\windows\Restore-Secrets.ps1"
+pwsh -ExecutionPolicy Bypass -File $s -DryRun   # nothing is written, nothing is prompted
+pwsh -ExecutionPolicy Bypass -File $s
+```
+
+Same vault, same manifest item, same entries. `jq` is not needed —
+`ConvertFrom-Json` replaces it — but `bw` is: `winget install Bitwarden.CLI`, or
+`npm install -g @bitwarden/cli@2026.8.0` for the pinned version.
+
+There is no Windows push. `scripts/secrets-push.sh` stays the only writer of the
+manifest; a second one would drift from it, and no secret's original copy lives on
+Windows anyway.
+
+Three things differ from the bash engine, each forced by the platform:
+
+| | |
+| :--- | :--- |
+| **ACLs, not `chmod`** | Windows OpenSSH ignores POSIX modes and reads the ACL, so a restored key that still carries inherited ACEs is refused with `UNPROTECTED PRIVATE KEY FILE`. An entry whose `mode` ends in `00` gets inheritance disabled and one ACE for the current user; a `644` public key keeps the inherited ACL. The destination **directory** is left alone — the profile ACL already grants only the user, SYSTEM and Administrators, and OpenSSH checks the key file, not the directory it sits in. |
+| **`exec` is not a shell** | There is no `sh` to hand the string to. A command containing a pipe, `;`, `&`, redirection or `$(…)` is refused with a note to tag that entry `"platform": ["macos"]` instead; a plain one such as `gpg --batch --quiet --import` runs directly, with the payload piped to its stdin as bytes rather than as text. |
+| **Line endings** | Payloads written to `dest` are normalised to LF, and a final newline is added when one is missing. OpenSSH and GPG both reject a key whose armor carries CRLF, which a note edited in the web vault from a Windows browser can pick up. The trailing newline matters just as much: `secrets-push.sh` stores notes through `$(cat …)`, which strips it, and the bash engine only gets it back because `jq -r` appends one. Without it `ssh-keygen` fails the restored key with `error in libcrypto`. |
 
 ## Environment
 

@@ -23,6 +23,11 @@
 # `aas export` reads the Claude credential from the login keychain, so run this
 # from a Terminal on the Mac itself, not over SSH.
 #
+# All three restore into ~/Library and shell out to macOS-only commands, so each
+# is tagged "platform": ["macos"] in the manifest. A restore on another platform
+# skips them instead of running `open -a` or writing an Application Support path
+# that means nothing there.
+#
 # Everything is stored as a Secure Note. Bitwarden's native SSH Key item type
 # would also work for the key pairs, but the exact shape of its template could
 # not be verified against this vault, and a Secure Note behaves identically for
@@ -87,7 +92,7 @@ collect() {
     done
 }
 
-# App data. Each line: <item> <attachment-file-name> <restore-exec> <kind>
+# App data. Each line: <item> <attachment-file-name> <restore-exec> <kind> <platforms>
 APPS="$(mktemp)"
 trap 'rm -f "$COLLECTED" "$APPS"' EXIT
 
@@ -99,24 +104,24 @@ OTPEEK_VAULT="Library/Group Containers/group.com.otpeek.app/vault.otpvault"
 
 collect_apps() {
     if command_exists aas && aas list 2>/dev/null | grep -q '@'; then
-        printf '%s\t%s\t%s\t%s\n' "app:aas" "aas-bundle.json" \
-            'aas import -' aas >> "$APPS"
+        printf '%s\t%s\t%s\t%s\t%s\n' "app:aas" "aas-bundle.json" \
+            'aas import -' aas macos >> "$APPS"
     fi
 
     if [[ -d "$BARSHELF_DIR" ]]; then
         # Quit the app first so it cannot write its old state back over the restore,
         # then start it again on the restored data.
-        printf '%s\t%s\t%s\t%s\n' "app:barshelf" "barshelf.tar.gz" \
+        printf '%s\t%s\t%s\t%s\t%s\n' "app:barshelf" "barshelf.tar.gz" \
             'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' \
-            barshelf >> "$APPS"
+            barshelf macos >> "$APPS"
     fi
 
     if [[ -f "$HOME/$OTPEEK_CONFIG" && -f "$HOME/$OTPEEK_VAULT" ]]; then
         # The vault is encrypted with the OTPeek master password; it stays that way
         # in the attachment. active_vault is rewritten for the restoring user's home.
-        printf '%s\t%s\t%s\t%s\n' "app:otpeek" "otpeek.tar.gz" \
+        printf '%s\t%s\t%s\t%s\t%s\n' "app:otpeek" "otpeek.tar.gz" \
             'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' \
-            otpeek >> "$APPS"
+            otpeek macos >> "$APPS"
     fi
 }
 
@@ -251,8 +256,9 @@ while IFS=$'\t' read -r src item dest mode pub; do
     printf '  %-26s %-8s %s%s\n' "$item" "$mode" "$dest" \
         "$([[ -n "$pub" ]] && echo "  (+public)")"
 done < "$COLLECTED"
-while IFS=$'\t' read -r item fname exec_cmd kind; do
-    printf '  %-26s %-8s %s\n' "$item" "attach" "$fname -> exec"
+while IFS=$'\t' read -r item fname exec_cmd kind platforms; do
+    printf '  %-26s %-8s %s%s\n' "$item" "attach" "$fname -> exec" \
+        "$([[ -n "$platforms" ]] && echo "  [$platforms]")"
 done < "$APPS"
 echo
 log_info "$(cat "$COLLECTED" "$APPS" | wc -l | tr -d ' ') items, folder '$VAULT_FOLDER', manifest '$VAULT_MANIFEST'"
@@ -296,7 +302,7 @@ while IFS=$'\t' read -r src item dest mode pub; do
     fi
 done < "$COLLECTED"
 
-while IFS=$'\t' read -r item fname exec_cmd kind; do
+while IFS=$'\t' read -r item fname exec_cmd kind platforms; do
     payload="$PAYLOADS/$fname"
     if ! (umask 077; make_app_payload "$kind" "$payload"); then
         log_warn "skipped  $item (could not produce $fname)"
@@ -305,8 +311,18 @@ while IFS=$'\t' read -r item fname exec_cmd kind; do
     upsert_attachment "$item" "$payload" "$FOLDER_ID"
     rm -f "$payload"
 
+    # jq -R on empty input prints nothing, and --argjson refuses an empty string -
+    # which under `set -e` would abort the push here, after the attachments are
+    # already uploaded and the old ones pruned, but before the manifest is written.
+    if [[ -n "$platforms" ]]; then
+        plat_json="$(printf '%s' "$platforms" | jq -R 'split(" ") | map(select(length > 0))')"
+    else
+        plat_json='[]'
+    fi
     jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" \
-        '{item: $item, source: $src, exec: $exec}' >> "$ENTRIES"
+        --argjson plat "$plat_json" \
+        '{item: $item, source: $src, exec: $exec}
+         | if ($plat | length) > 0 then .platform = $plat else . end' >> "$ENTRIES"
 done < "$APPS"
 
 # GPG is not collected from disk - exporting a secret key needs the passphrase,

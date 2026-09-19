@@ -143,6 +143,8 @@ Opt-in components:
 `secrets` restores private material from a Bitwarden-compatible vault. The list of
 what to restore is a manifest kept *inside* the vault, so this public repository
 carries the restore engine and none of the inventory — see [docs/secrets.md](docs/secrets.md).
+On Windows, where `install.sh` does not run, `bin/windows/Restore-Secrets.ps1` restores
+from the same vault — see [windows.md](docs/windows.md#secrets).
 
 ```bash
 ./install.sh secrets                                  # this vault
@@ -199,7 +201,7 @@ settings/
 | :--- | :--- |
 | [macos.md](docs/macos.md) | Keyboard, shortcuts, Finder, fonts, cmux and git on macOS |
 | [components.md](docs/components.md) | hishtory sync, Hammerspoon permissions, the managed Codex config |
-| [windows.md](docs/windows.md) | rmux, PowerShell, NeoVim, Windows Terminal, Nextcloud upload |
+| [windows.md](docs/windows.md) | rmux, PowerShell, NeoVim, Windows Terminal, Nextcloud upload, secrets restore |
 | [powershell.md](docs/powershell.md) | How the PowerShell profile went from 1354ms to 394ms |
 | [agent-state.md](docs/agent-state.md) | Restoring Claude Code / Codex state on a new machine |
 | [tmux-to-zellij.md](docs/tmux-to-zellij.md) | Migration notes |
