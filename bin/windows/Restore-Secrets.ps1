@@ -324,7 +324,16 @@ function Copy-Into {
   param([string]$Tmp, [string]$Dest, [string]$Mode)
 
   if (Test-Path -LiteralPath $Dest -PathType Leaf) {
-    if (Test-SameContent $Tmp $Dest) { Ok "$Dest (변경 없음)"; return }
+    if (Test-SameContent $Tmp $Dest) {
+      # 내용이 같아도 ACL 은 다시 맞춥니다. 이 포팅이 존재하는 이유가 퍼미션이라,
+      # 손으로 복사해 왔거나 Move-Item 직후에 죽은 실행이 남긴 "내용은 맞는데
+      # ACL 이 틀린" 키를 그냥 두면 재실행으로도 영영 고쳐지지 않고 ssh 는 계속
+      # UNPROTECTED PRIVATE KEY FILE 로 거부합니다. 멱등이라 비용도 없습니다.
+      if (Test-PrivateMode $Mode) { Protect-Path $Dest } else { Reset-InheritedAcl $Dest }
+      Remove-Item -LiteralPath $Tmp -Force -ErrorAction SilentlyContinue
+      Ok "$Dest (변경 없음)"
+      return
+    }
     $backup = "$Dest.backup." + (Get-Date -Format "yyyyMMddHHmmss")
     Move-Item -LiteralPath $Dest -Destination $backup
     Info "백업: $Dest -> $backup"
@@ -394,10 +403,21 @@ function Invoke-ExecEntry {
   $psi.UseShellExecute = $false
 
   $proc = [System.Diagnostics.Process]::Start($psi)
-  # 바이트 그대로 흘려보냅니다. 텍스트로 파이프하면 인코딩이 섞입니다.
-  $fs = [System.IO.File]::OpenRead($PayloadFile)
-  try { $fs.CopyTo($proc.StandardInput.BaseStream) } finally { $fs.Dispose() }
-  $proc.StandardInput.Close()
+  try {
+    # 바이트 그대로 흘려보냅니다. 텍스트로 파이프하면 인코딩이 섞입니다.
+    $fs = [System.IO.File]::OpenRead($PayloadFile)
+    try { $fs.CopyTo($proc.StandardInput.BaseStream) } finally { $fs.Dispose() }
+    $proc.StandardInput.Close()
+  } catch {
+    # 자식이 stdin 을 다 읽기 전에 끝나면(망가진 armor 를 gpg 가 즉시 거절하는
+    # 경우) 파이프가 끊기면서 CopyTo 가 IOException 을 던집니다. 바로 아래의 두
+    # 실패 경로와 마찬가지로, 그 항목만 경고로 끝나야 합니다.
+    Warn "$ItemName 실패 - stdin 으로 넘기는 중 끊겼습니다: $($_.Exception.Message)"
+    try { $proc.StandardInput.Close() } catch { }
+    try { if (-not $proc.HasExited) { $proc.Kill() } } catch { }
+    $proc.WaitForExit()
+    return
+  }
   $proc.WaitForExit()
 
   if ($proc.ExitCode -eq 0) { Ok "$ItemName -> $Cmd" }
@@ -438,54 +458,69 @@ function Invoke-Manifest([string]$TmpDir) {
   try { $parsed = $notes | ConvertFrom-Json }
   catch { Die "manifest '$Manifest' 이 올바른 JSON 이 아닙니다: $_" }
 
-  # @($null) 은 원소가 하나인 배열이라 Count 로는 "entries 없음" 을 잡지 못합니다.
-  # 타입을 직접 봐야 합니다 - 잘못된 vault 항목을 -Manifest 로 가리켰을 때
-  # 조용히 "1 entries" 를 세고 성공했다고 끝내는 것이 여기서 나오는 실패입니다.
-  $entriesRaw = Get-Prop $parsed "entries"
+  # entries 만은 Get-Prop 을 거치면 안 됩니다. 함수의 반환값은 파이프라인을
+  # 지나며 언롤링돼서, 원소가 하나인 배열은 PSCustomObject 로, 빈 배열은 $null 로
+  # 바뀝니다 - 키 하나짜리 manifest 로 시작한 부트스트랩이 "배열이 아니다" 로
+  # 거절당하는 게 그 결과입니다. 직접 대입은 세 경우 모두 Object[] 를 보존합니다.
+  # 존재 여부는 따로 봐야 합니다. @($null) 이 원소 하나짜리 배열이라 Count 로는
+  # "entries 없음" 과 "entries 가 하나" 를 구분할 수 없기 때문입니다.
+  if (-not $parsed.PSObject.Properties['entries']) { Die "manifest '$Manifest' 에 entries 가 없습니다" }
+  $entriesRaw = $parsed.entries
   if ($entriesRaw -isnot [System.Array]) { Die "manifest '$Manifest' 의 entries 가 배열이 아닙니다" }
   $entries = @($entriesRaw)
   Info "manifest '$Manifest': $($entries.Count) entries"
 
   foreach ($e in $entries) {
     $item = Get-Prop $e "item"
-    $src  = Get-Prop $e "source"; if (-not $src) { $src = "notes" }
-    $dest = Get-Prop $e "dest"
-    $mode = Get-Prop $e "mode";   if (-not $mode) { $mode = "600" }
-    $exec = Get-Prop $e "exec"
-    $plat = Get-Prop $e "platform"
 
-    if (($dest -and $exec) -or (-not $dest -and -not $exec)) {
-      Warn "$item 항목에는 dest 와 exec 중 정확히 하나가 필요합니다"
-      continue
-    }
+    # 한 항목의 실패가 나머지를 데려가지 않도록 감쌉니다. $ErrorActionPreference
+    # 가 Stop 이라 잠긴 파일에 대한 Move-Item 하나(편집기나 살아있는 ssh 가
+    # ~/.ssh/config 를 잡고 있으면 실제로 IOException 입니다)가 Invoke-Manifest
+    # 밖으로 튀어나가면, 뒤에 남은 항목은 아무 말 없이 전부 복원되지 않습니다.
+    # bash 판의 apply_manifest 는 항목마다 로그를 남기고 continue 합니다.
+    # try 안의 continue 는 switch 와 달리 바깥 foreach 를 정상적으로 넘깁니다.
+    try {
+      $src  = Get-Prop $e "source"; if (-not $src) { $src = "notes" }
+      $dest = Get-Prop $e "dest"
+      $mode = Get-Prop $e "mode";   if (-not $mode) { $mode = "600" }
+      $exec = Get-Prop $e "exec"
+      $plat = Get-Prop $e "platform"
 
-    # dry run 보다 먼저 봅니다. 그래야 dry run 에도 건너뛴 항목이 보입니다.
-    # switch 안의 continue 는 switch 만 빠져나가므로 여기서는 쓰지 않습니다.
-    $verdict = Get-PlatformVerdict $plat
-    if ($verdict -eq "skip") {
-      Info "건너뜀 $item (platform: $(@($plat) -join ' '))"
-      continue
-    }
-    if ($verdict -eq "invalid") {
-      Warn "$item 건너뜀 - platform 은 문자열이거나 문자열 배열이어야 합니다"
-      continue
-    }
+      if (($dest -and $exec) -or (-not $dest -and -not $exec)) {
+        Warn "$item 항목에는 dest 와 exec 중 정확히 하나가 필요합니다"
+        continue
+      }
 
-    if ($DryRun) {
-      $sink = if ($dest) { $dest } else { $exec }
-      Info "[DRY-RUN] $item ($src) -> $sink"
-      continue
-    }
+      # dry run 보다 먼저 봅니다. 그래야 dry run 에도 건너뛴 항목이 보입니다.
+      # switch 안의 continue 는 switch 만 빠져나가므로 여기서는 쓰지 않습니다.
+      $verdict = Get-PlatformVerdict $plat
+      if ($verdict -eq "skip") {
+        Info "건너뜀 $item (platform: $(@($plat) -join ' '))"
+        continue
+      }
+      if ($verdict -eq "invalid") {
+        Warn "$item 건너뜀 - platform 은 문자열이거나 문자열 배열이어야 합니다"
+        continue
+      }
 
-    $payload = Join-Path $TmpDir "payload"
-    if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload -Force }
-    if (-not (Get-Payload -ItemName $item -Source $src -OutFile $payload)) { continue }
+      if ($DryRun) {
+        $sink = if ($dest) { $dest } else { $exec }
+        Info "[DRY-RUN] $item ($src) -> $sink"
+        continue
+      }
 
-    if ($dest) {
-      Copy-Into -Tmp $payload -Dest (Expand-DestPath $dest) -Mode $mode
-    } else {
-      Invoke-ExecEntry -ItemName $item -Cmd $exec -PayloadFile $payload
-      Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
+      $payload = Join-Path $TmpDir "payload"
+      if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload -Force }
+      if (-not (Get-Payload -ItemName $item -Source $src -OutFile $payload)) { continue }
+
+      if ($dest) {
+        Copy-Into -Tmp $payload -Dest (Expand-DestPath $dest) -Mode $mode
+      } else {
+        Invoke-ExecEntry -ItemName $item -Cmd $exec -PayloadFile $payload
+        Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
+      }
+    } catch {
+      Warn "$item 실패: $($_.Exception.Message)"
     }
   }
 }
@@ -501,9 +536,17 @@ function New-ScratchDir {
 # ==============================================================================
 
 Section "Secrets ($VaultServer)"
-Assert-VaultCli
 
 if ($DryRun) {
+  # dry run 은 bw 가 없어도 계획을 말할 수 있어야 합니다. docs/windows.md 의
+  # 설치 순서를 그대로 따라오는 새 PC 는 아직 bw 가 없는 상태로 여기에 닿는데,
+  # 계획을 보여주라는 실행이 그걸 이유로 아무 말도 못 하면 곤란합니다.
+  # bash 판의 ensure_vault_cli 도 DRY_RUN 이면 "설치할 것" 만 알리고 통과합니다.
+  if (Get-Command bw -ErrorAction SilentlyContinue) {
+    Assert-VaultCli
+  } else {
+    Info "[DRY-RUN] 설치 필요: @bitwarden/cli@$BwVersion"
+  }
   Info "[DRY-RUN] $VaultServer 를 열고 manifest '$Manifest' 을 적용합니다"
   if ($env:BW_SESSION) {
     $tmp = New-ScratchDir
@@ -514,6 +557,7 @@ if ($DryRun) {
   exit 0
 }
 
+Assert-VaultCli
 Unlock-Vault
 
 # 비밀 자료가 잠깐이라도 다른 사용자에게 읽히지 않도록, 작업 디렉터리부터 잠급니다.
