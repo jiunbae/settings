@@ -532,14 +532,34 @@ _load_items() {
     ITEMS_CACHE="$(bw list items)"
 }
 
+# Items this engine owns. kitbag writes the same names into the same vault, in
+# its own folder and marked with a `kitbag` field, and matching on the name
+# alone picked whichever copy the listing happened to return first. Two engines
+# then took turns editing each other's items, and every run reported a
+# different handful as changed because the one it compared against was not the
+# one it had written.
+_mine() {
+    printf '%s' "$ITEMS_CACHE" | jq -c --arg n "$1" \
+        '[.[] | select(.name == $n)
+              | select([(.fields // [])[] | select(.name == "kitbag")] | length == 0)]'
+}
+
 _item_id() {
-    printf '%s' "$ITEMS_CACHE" | jq -r --arg n "$1" '.[] | select(.name == $n) | .id' | head -1
+    local mine count
+    mine="$(_mine "$1")"
+    count="$(printf '%s' "$mine" | jq 'length')"
+    # More than one left is a duplicate this engine made, which is worth saying:
+    # picking one silently means the other drifts and nothing ever converges.
+    if [[ "$count" -gt 1 ]]; then
+        log_warn "$1: $count items with this name in the vault — editing the first, the rest will drift" >&2
+    fi
+    printf '%s' "$mine" | jq -r '.[0].id // empty'
 }
 
 # The listing already carries every item in full - notes, fields, folder - so
 # the item can be compared without asking the server for it again.
 _cached_item() {
-    printf '%s' "$ITEMS_CACHE" | jq -c --arg n "$1" 'map(select(.name == $n)) | .[0] // empty'
+    _mine "$1" | jq -c '.[0] // empty'
 }
 
 # _cached_field <item-name> <field-name>
