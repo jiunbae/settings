@@ -176,6 +176,8 @@ usually live. Everything else is listed, one per line, in
 
 - A `# scope:` header **inside** the file still wins over the column, so a file
   that can carry its own marker keeps carrying it.
+- The columns are positional, so `-` is how one is left empty when a later one
+  is wanted: `~/.config/gh/hosts.yml  personal  -  -  linux,macos`.
 - The fifth column is comma-separated and says **where the path exists at all**;
   it becomes the entry's [`platform`](#manifest-format). A keychain restored onto
   a Linux server or a Windows profile looks like a restore that worked, right up
