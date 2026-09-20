@@ -117,8 +117,11 @@ SCOPES_VALID="personal work shared mixed local"
 # _scope_of <file> [default] — the scope a file declares, or the default.
 _scope_of() {
     local f=$1 def=${2:-} s=""
+    # LC_ALL=C: a marker is ASCII, and the files searched for one include a
+    # keychain. Without it sed reads those bytes as text in the current locale
+    # and stops with "RE error: illegal byte sequence" before it finds nothing.
     s="$(head -5 "$f" 2>/dev/null \
-         | sed -nE 's/^[[:space:]]*#[[:space:]]*scope:[[:space:]]*([a-zA-Z-]+).*/\1/p' \
+         | LC_ALL=C sed -nE 's/^[[:space:]]*#[[:space:]]*scope:[[:space:]]*([a-zA-Z-]+).*/\1/p' \
          | head -1 | tr '[:upper:]' '[:lower:]')"
     if [[ -z "$s" && -f "$f.scope" ]]; then
         s="$(tr -d '[:space:]' < "$f.scope" | tr '[:upper:]' '[:lower:]')"
@@ -129,7 +132,7 @@ _scope_of() {
 # _owner_of <file> — the optional owner note, free text.
 _owner_of() {
     head -5 "$1" 2>/dev/null \
-        | sed -nE 's/^[[:space:]]*#[[:space:]]*owner:[[:space:]]*(.+)$/\1/p' | head -1
+        | LC_ALL=C sed -nE 's/^[[:space:]]*#[[:space:]]*owner:[[:space:]]*(.+)$/\1/p' | head -1
 }
 
 # Where an entry can be restored at all. A name that is not one of these is a
@@ -658,7 +661,14 @@ upsert_attachment() {
 
     # Now, and only now, record what the vault holds. A failure here costs one
     # needless upload next time and nothing else.
+    #
+    # Attaching moves the item on the server and leaves the local copy behind,
+    # and bw refuses to edit from a stale copy: "The client copy of this cipher
+    # is out of date." The edit that writes the payload-hash was hitting that
+    # every time, so the hash was never written, so every push re-uploaded
+    # every attachment — 150KB of them here, on a run that had nothing to do.
     if [[ -n "$phash" ]]; then
+        bw sync >/dev/null 2>&1 || log_warn "$name: could not resync before recording the hash"
         local notes_now
         notes_now="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes_now=""
         if ! upsert_note "$name" "$notes_now" "$fid" "" "$scope" "" "$phash" >/dev/null; then
@@ -711,7 +721,7 @@ _conf_keys() {
 # _spans_of <file> — what a "mixed" file is mixed from, as it says itself:
 #   # spans: personal, work
 _spans_of() {
-    sed -nE 's/^[[:space:]]*#[[:space:]]*spans:[[:space:]]*(.+)$/\1/p' "$1" 2>/dev/null | head -1
+    LC_ALL=C sed -nE 's/^[[:space:]]*#[[:space:]]*spans:[[:space:]]*(.+)$/\1/p' "$1" 2>/dev/null | head -1
 }
 
 # An app blob holds whatever its app holds, and the app is not going to say.
