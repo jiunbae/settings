@@ -15,6 +15,7 @@
 # ~/.config/settings/secrets-paths is read for the extra paths, one per line:
 #
 #   <path>  <scope>  [owner]  [item-name]  [platforms]
+#   ~/.config/gh/hosts.yml               personal  -     -   macos,linux
 #   ~/.aws/config                        work  rtzr
 #   ~/Library/Keychains/x.keychain-db    work  rtzr  file:x-keychain  macos
 #
@@ -152,6 +153,12 @@ EOF
         local path scope owner name platform
         while read -r path scope owner name platform; do
             case "${path:-}" in ''|\#*) continue ;; esac
+            # `-` is a column that does not apply. The columns are positional,
+            # so without it a platform written after a bare scope becomes the
+            # owner, and nothing would say so.
+            [[ "${owner:-}" == "-" ]] && owner=""
+            [[ "${name:-}" == "-" ]] && name=""
+            [[ "${platform:-}" == "-" ]] && platform=""
             printf '\n[[track]]\npath = "%s"\n' "$path"
             [[ -n "${scope:-}" ]] && printf 'scope = "%s"\n' "$scope"
             [[ -n "${owner:-}" ]] && printf 'owner = "%s"\n' "$owner"
