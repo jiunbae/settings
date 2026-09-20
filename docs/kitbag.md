@@ -115,16 +115,17 @@ private key, and it matches.
 
 Still true, and worth keeping in view:
 
-- **No machine has been restored from the vault with kitbag.** The round trip
-  above used a local store. Reading these items back out of Bitwarden is
-  covered by tests against a stub, not by having done it.
-- `kitbag restore --backend bw --dry-run` has been run, and it proves less than
-  it looks like it does. It is fast *because* it reads nothing: the store
-  reports each item's hash, the file on disk is hashed here, and matching items
-  are never fetched. So the path that pulls a payload back out of Bitwarden —
-  the attachment path in particular, which four items use — has still not run
-  against the real vault. Restoring into a throwaway `$HOME` is what would
-  settle it.
+Reading back has since been checked against the real vault too, by restoring
+into a throwaway `$HOME`: all 36 files came back byte for byte at `0600`,
+including the one stored as an attachment. Worth knowing that
+`kitbag restore --backend bw --dry-run` does **not** check this — it is fast
+precisely because it reads nothing, comparing the store's hashes against the
+files here and fetching only what differs.
+
+Still true:
+
+- **No machine has been set up from the vault with kitbag.** Restoring into a
+  throwaway home is not the same as a machine coming up on it.
 - The other machines still restore with `SETTINGS_SECRETS_ENGINE=bash`, and
   their manifest is untouched. They move across one at a time.
 - The `op` and `pass` stores are tested against stub clients, not real accounts.
@@ -156,6 +157,39 @@ comma-separated column.
 
 The words are `macos`, `linux` and `windows` — the same ones the manifest uses,
 so one vault answers both engines the same way.
+
+## How application state gets back
+
+Three items here are not files: the aas bundle, the OTPeek vault and
+BarShelf's data. They come out of an application and go back into one, so
+each track names both ends:
+
+```toml
+command = { export = "aas export --all", restore = "aas import -" }
+```
+
+The restore half travels **with the item**, because the machine that has to
+run it is the one being restored — and a machine being restored does not have
+the application installed, so its own config cannot know. A machine that does
+already track the item uses its own command; local knowledge is newer.
+
+This means kitbag runs a command it read out of the vault. The vault already
+holds every secret on this machine, so it is not a new thing to trust, but it
+is a new thing it can do — so the command is named before it runs:
+
+```
++ app:otpeek   into `tar -xzf - -C "$HOME" && sed -i "" ...`  (from the store)
+```
+
+Two of those commands do more than untar, and both reasons are easy to lose
+in a rewrite:
+
+- **OTPeek** finds its vault through `active_vault`, an absolute path. The
+  restore rewrites it for the restoring user, or the CLI goes on looking in
+  this machine's home.
+- **BarShelf** writes its own state on the way out, so it is quit before its
+  data is written over and started again afterwards. Extracting over a running
+  app leaves the app to undo the restore.
 
 ## One item reads `?`, and that is the answer
 
