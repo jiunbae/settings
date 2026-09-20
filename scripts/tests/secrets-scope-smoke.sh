@@ -126,6 +126,10 @@ case "${1:-}" in
         jq --arg id "$id" '.id = $id' <<< "$payload" ;;
       attachment)
         # bw create attachment --file <f> --itemid <id>
+        if [[ -n "${BW_STUB_FAIL_ATTACH:-}" ]]; then
+          echo "FetchError: upload failed" >&2
+          exit 1
+        fi
         shift 2; file=""; itemid=""
         while [[ $# -gt 0 ]]; do
           case "$1" in --file) file=$2; shift 2 ;; --itemid) itemid=$2; shift 2 ;; *) shift ;; esac
@@ -171,6 +175,7 @@ run_push() { # <home> [args...]
   SETTINGS_VAULT_SERVER="https://vault.test" \
   BW_STUB_FAIL_NAME="${FAIL_NAME:-}" \
   BW_STUB_FAIL_TIMES="${FAIL_TIMES:-99}" \
+  BW_STUB_FAIL_ATTACH="${FAIL_ATTACH:-}" \
   PATH="$home/bin:$PATH" \
     bash "$REPO_ROOT/scripts/secrets-push.sh" "$@" 2>&1
 }
@@ -313,6 +318,9 @@ make_home "$HOME_C"
 make_bw_stub "$HOME_C"
 run_push "$HOME_C" --push >/dev/null
 printf '%s\n' '# scope: work' '# owner: acme' 'export WORK_TOKEN=rotated' > "$HOME_C/.envs/work.env"
+# One item that really is stale, beside the one that merely failed, so the stale
+# report has to tell them apart rather than simply having nothing to say.
+printf '%s\n' '# scope: local' 'export SHARED_TOKEN=s' > "$HOME_C/.envs/shared.env"
 RC=0
 OUT_C="$(FAIL_NAME="env:work" run_push "$HOME_C" --push)" || RC=$?
 check "a write that keeps failing exits non-zero" "1" "$RC"
@@ -325,6 +333,57 @@ check "manifest excludes the failed item" "" \
 check "manifest keeps the others" "env:personal" \
   "$(jq -r '[.entries[] | select(.item == "env:personal")] | .[0].item // empty' <<< "$MANIFEST_C")"
 
+# An item that failed to write is still this machine's, and its vault copy is
+# still the only one. Offering to delete it is the worst thing the stale report
+# can do.
+STALE_C="$(sed -n '/In the vault but not sent/,/could not be written/p' <<< "$OUT_C")"
+contains "a genuinely stale item is still named" "env:shared" "$STALE_C"
+lacks "but a failed one is not offered for deletion" "env:work" "$STALE_C"
+
+# ------------------------------------------------------------------------------
+printf '\nsecrets-push: an attachment that does not land\n'
+
+# payload-hash is what the next run compares against. Written before the upload,
+# a failed upload leaves the item claiming bytes it does not hold - and every
+# later push believes the claim, so the attachment never goes up again.
+HOME_E="$TEST_ROOT/e"
+make_home "$HOME_E"
+make_bw_stub "$HOME_E"
+make_tracked "$HOME_E"
+run_push "$HOME_E" --push >/dev/null
+ITEMS_E="$HOME_E/.bwstate/items.json"
+
+printf '\x00\x01changed payload\x00' > "$HOME_E/Library/Keychains/fixture.keychain-db"
+NEW_HASH="$(shasum -a 256 < "$HOME_E/Library/Keychains/fixture.keychain-db" 2>/dev/null \
+            || sha256sum < "$HOME_E/Library/Keychains/fixture.keychain-db")"
+NEW_HASH="${NEW_HASH%% *}"
+
+RC=0
+OUT_E="$(FAIL_ATTACH=1 run_push "$HOME_E" --push)" || RC=$?
+check "a failed upload fails the run" "1" "$RC"
+STORED="$(jq -r '.[] | select(.name == "file:fixture-keychain")
+                 | (.fields // []) | map(select(.name == "payload-hash")) | .[0].value // ""' "$ITEMS_E")"
+if [[ "$STORED" == "$NEW_HASH" ]]; then
+  fail "the vault does not claim bytes it never received"
+else
+  pass "the vault does not claim bytes it never received"
+fi
+
+# ... so the next push, with the server back, actually re-uploads.
+: > "$HOME_E/.bwstate/calls.log"
+run_push "$HOME_E" --push >/dev/null
+check "the next push re-uploads it" "1" \
+  "$(grep -c '^create attachment' "$HOME_E/.bwstate/calls.log" || true)"
+check "and records the hash once it is there" "$NEW_HASH" \
+  "$(jq -r '.[] | select(.name == "file:fixture-keychain")
+            | (.fields // []) | map(select(.name == "payload-hash")) | .[0].value // ""' "$ITEMS_E")"
+
+: > "$HOME_E/.bwstate/calls.log"
+run_push "$HOME_E" --push >/dev/null
+check "and a third push sends nothing" "0" \
+  "$(grep -c '^create attachment' "$HOME_E/.bwstate/calls.log" || true)"
+
+# ------------------------------------------------------------------------------
 printf '\nsecrets-push: an unchanged push costs nothing\n'
 HOME_D="$TEST_ROOT/d"
 make_home "$HOME_D"

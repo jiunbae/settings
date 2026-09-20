@@ -614,15 +614,22 @@ upsert_attachment() {
     local id fname old
     fname="$(basename "$file")"
     id="$(_item_id "$name")"
+    # The hash is what the next run compares against, so it must not be written
+    # until the bytes it describes are in the vault. Writing it here and then
+    # failing the upload leaves the item claiming content it does not hold, and
+    # every later push reads that claim and reports "unchanged" - the attachment
+    # never goes up again, and the manifest points restores at the old bytes.
+    # Clearing it first means a run that dies here re-uploads next time, which
+    # is the safe direction to be wrong in.
     if [[ -z "$id" ]]; then
-        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope" "" "$phash" || return 1
+        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope" "" "" || return 1
         _load_items
         id="$(_item_id "$name")"
     else
         # Keep folder and scope current even when the attachment is all that changes.
         local notes
         notes="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes=""
-        upsert_note "$name" "$notes" "$fid" "" "$scope" "" "$phash" >/dev/null || return 1
+        upsert_note "$name" "$notes" "$fid" "" "$scope" "" "" >/dev/null || return 1
     fi
 
     local before after
@@ -647,6 +654,16 @@ upsert_attachment() {
         log_success "attached $name/$fname"
     else
         log_warn "attached $name/$fname, but the item now has $after attachments with that name"
+    fi
+
+    # Now, and only now, record what the vault holds. A failure here costs one
+    # needless upload next time and nothing else.
+    if [[ -n "$phash" ]]; then
+        local notes_now
+        notes_now="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes_now=""
+        if ! upsert_note "$name" "$notes_now" "$fid" "" "$scope" "" "$phash" >/dev/null; then
+            log_warn "$name: the attachment is up but its payload-hash was not written; the next push re-uploads it"
+        fi
     fi
 }
 
@@ -987,7 +1004,16 @@ done < "$APPS"
 # but not the exec entries this run just rewrote, or every push would add a copy.
 print_section "Manifest"
 PUSHED_ITEMS="$(jq -s '[.[].item]' < "$ENTRIES")"
+# An item this run failed to write is not "not sent by this machine" - it is
+# "sent, and did not land". Leaving it out of KEEP puts it in the stale report
+# with a ready-made `bw delete item`, which is an offer to destroy the vault's
+# only copy of a secret that is still on this disk and still being pushed.
 KEEP="$PUSHED_ITEMS"
+if [[ -s "$FAILED" ]]; then
+    KEEP="$(jq -n --argjson pushed "$PUSHED_ITEMS" \
+        --argjson failed "$(sed 's/^[[:space:]]*//' "$FAILED" | jq -Rs 'split("\n") | map(select(length > 0))')" \
+        '$pushed + $failed')"
+fi
 MANIFEST_ID="$(_item_id "$VAULT_MANIFEST")"
 EXISTING_EXTRA="$([[ -n "$MANIFEST_ID" ]] && bw get item "$MANIFEST_ID" 2>/dev/null \
     | jq -r '.notes // empty' 2>/dev/null \
