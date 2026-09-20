@@ -18,6 +18,30 @@ It is **opt-in only**. `secrets` is deliberately absent from `COMPONENTS_ORDER`,
 so neither `--all` nor the interactive menu can drop private keys onto a shared
 box, a CI runner, or a machine that only wanted dotfiles.
 
+## What a machine keeps for itself
+
+Scope says whose an item is. `platform` says where it can live. Neither
+answers this one: the vault holds one `ssh:id_ed25519`, it is `personal`, and
+it belongs on every platform — and a machine that already has its own key must
+not take it, because two machines on one key means revoking it locks out both.
+
+That is not a fact about the item, so it is not in the item. The machine holds
+it, in `~/.config/settings/secrets.skip`, one name per line:
+
+```
+# this machine has its own
+ssh:id_ed25519
+```
+
+or `SETTINGS_SECRETS_SKIP=ssh:id_ed25519` for the run where it is learnt, which
+is usually the moment it matters. All three engines read it — this one, kitbag
+(which also takes `skip = [...]` in its own config), and the Windows restore as
+`-Skip`.
+
+kitbag goes one step further and refuses to **push** it too. A machine keeping
+its own key must not send that key over the one in the store either; it is the
+same mistake from the other end, and it is the end that loses something.
+
 ## Why the list lives in the vault
 
 This repository is public. `modules/secrets.sh` therefore contains no item

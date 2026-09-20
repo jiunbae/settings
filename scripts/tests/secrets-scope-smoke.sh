@@ -495,6 +495,42 @@ check "linux entry under wsl"       "yes" "$(plat_match linux wsl)"
 check "a list matches on any name"  "yes" "$(plat_match "macos linux" linux)"
 check "windows entry nowhere here"  "no"  "$(plat_match windows macos)"
 
+# ==============================================================================
+# What a machine keeps for itself
+# ==============================================================================
+# Scope and platform are about the item. This is about the machine: a box with
+# its own SSH key must not take the one in the store, whatever its scope says.
+SKIP_FILE="$(mktemp)"
+printf '# this machine has its own\nssh:id_ed25519\n\nenv:hf\n' > "$SKIP_FILE"
+
+skip_list() { # [override]
+  bash -c '
+    source "'"$REPO_ROOT"'/lib/core.sh"
+    SETTINGS_SECRETS_SKIP_FILE="'"$SKIP_FILE"'"
+    SETTINGS_SECRETS_SKIP="'"${1:-}"'"
+    source "'"$REPO_ROOT"'/modules/secrets.sh"
+    secrets_skip_list'
+}
+
+kept() { # <item> [override]
+  bash -c '
+    source "'"$REPO_ROOT"'/lib/core.sh"
+    SETTINGS_SECRETS_SKIP_FILE="'"$SKIP_FILE"'"
+    SETTINGS_SECRETS_SKIP="'"${2:-}"'"
+    source "'"$REPO_ROOT"'/modules/secrets.sh"
+    _skipped_here "'"$1"'" "$(secrets_skip_list)" && echo yes || echo no'
+}
+
+check "the key is kept back"              "yes" "$(kept ssh:id_ed25519)"
+check "and the second name"               "yes" "$(kept env:hf)"
+check "a longer name is not a match"      "no"  "$(kept env:hfx)"
+check "a prefix is not a match"           "no"  "$(kept env:h)"
+check "a comment is not a name"           "no"  "$(kept 'this machine has its own')"
+check "the variable wins over the file"   "no"  "$(kept ssh:id_ed25519 'env:one,env:two')"
+check "and its spaces do not count"       "yes" "$(kept env:two 'env:one, env:two')"
+check "nothing declared keeps nothing"    ""    "$(SKIP_FILE=/nonexistent skip_list)"
+rm -f "$SKIP_FILE"
+
 printf '\n'
 if [[ "$FAILURES" -gt 0 ]]; then
   printf '%s test(s) failed\n' "$FAILURES"
