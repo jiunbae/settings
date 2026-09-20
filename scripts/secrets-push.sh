@@ -67,10 +67,11 @@ COLLECTED="$(mktemp)"   # what to push, one line per item
 APPS="$(mktemp)"        # app payload descriptors
 UNSCOPED="$(mktemp)"    # files skipped for want of a usable scope
 FOLDERS_CACHE="$(mktemp)"
+TMPDIR_ROWS="$(mktemp)"  # one display row per collected item
 ENTRIES=""              # manifest entries, created by the push
 PAYLOADS=""             # staged app payloads, created by the push
 FAILED=""                # items this run could not write; set once bw is in play
-cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$FOLDERS_CACHE" ${FAILED:+"$FAILED"} ${ENTRIES:+"$ENTRIES"} ${PAYLOADS:+"$PAYLOADS"}; }
+cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$FOLDERS_CACHE" "$TMPDIR_ROWS" ${FAILED:+"$FAILED"} ${ENTRIES:+"$ENTRIES"} ${PAYLOADS:+"$PAYLOADS"}; }
 trap cleanup EXIT
 
 # ==============================================================================
@@ -469,6 +470,143 @@ upsert_attachment() {
     fi
 }
 
+
+# ==============================================================================
+# What was collected
+# ==============================================================================
+# Grouped by whose secrets these are, because that is the question this script
+# exists to answer. What each item holds - variable names, host counts, key
+# comments - matters more than its mode, which is 600 for everything but a
+# public key.
+
+# _env_keys <file> — the variable names it sets, in file order, no duplicates.
+# A file with forty of them is telling you it is a config file with a couple of
+# secrets in it, and the first dozen names say that just as well.
+ENV_KEYS_SHOWN="${SETTINGS_ENV_KEYS_SHOWN:-12}"
+_env_keys() {
+    local all n
+    all="$(grep -ohE '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=' "$1" 2>/dev/null \
+        | sed -E 's/^[[:space:]]*(export[[:space:]]+)?//; s/=$//' | awk '!seen[$0]++')"
+    n="$(printf '%s\n' "$all" | grep -c . || true)"
+    if (( n > ENV_KEYS_SHOWN )); then
+        printf '%s +%s more' "$(printf '%s\n' "$all" | head -"$ENV_KEYS_SHOWN" | paste -sd' ' -)" "$(( n - ENV_KEYS_SHOWN ))"
+    else
+        printf '%s' "$(printf '%s\n' "$all" | paste -sd' ' -)"
+    fi
+}
+
+# _spans_of <file> — what a "mixed" file is mixed from, as it says itself:
+#   # spans: personal, work
+_spans_of() {
+    sed -nE 's/^[[:space:]]*#[[:space:]]*spans:[[:space:]]*(.+)$/\1/p' "$1" 2>/dev/null | head -1
+}
+
+# An app blob holds whatever its app holds, and the app is not going to say.
+SPANS_AAS="${SETTINGS_SPANS_AAS:-personal, work}"
+SPANS_OTPEEK="${SETTINGS_SPANS_OTPEEK:-personal, work}"
+SPANS_BARSHELF="${SETTINGS_SPANS_BARSHELF:-}"
+
+_app_spans() {
+    case "$1" in
+        aas) printf '%s' "$SPANS_AAS" ;;
+        otpeek) printf '%s' "$SPANS_OTPEEK" ;;
+        barshelf) printf '%s' "$SPANS_BARSHELF" ;;
+    esac
+}
+
+# _detail <item> <src> <mode> <pubpath> — the one line that says what is inside
+_detail() {
+    local item=$1 src=$2 mode=$3 pub=$4 d=""
+    case "$item" in
+        env:*)
+            d="$(_env_keys "$src")"
+            ;;
+        ssh:authorized_keys)
+            local n names
+            n="$(grep -cE '^[a-z]' "$src" 2>/dev/null || echo 0)"
+            names="$(awk '/^[a-z]/ {c=""; for (i=3; i<=NF; i++) c = c (i>3 ? " " : "") $i; print (c == "" ? "(unnamed)" : c)}' "$src" 2>/dev/null | paste -sd' ' -)"
+            d="${n} keys: ${names}"
+            ;;
+        ssh:config-*)
+            d="$(grep -ciE '^[[:space:]]*Host[[:space:]]' "$src" 2>/dev/null || echo 0) hosts"
+            ;;
+        ssh:*)
+            [[ -n "$pub" ]] && d="$(ssh-keygen -lf "$pub" 2>/dev/null | awk '{print $2, $4}')"
+            [[ -n "$d" ]] || d="private key"
+            ;;
+    esac
+    [[ -n "$pub" && "$item" != ssh:* ]] && d="$d  +public"
+    [[ "$mode" != "600" ]] && d="$d  (mode $mode)"
+    printf '%s' "$d"
+}
+
+print_collected() {
+    print_section "Collected"
+    local rows="$TMPDIR_ROWS"
+    : > "$rows"
+
+    local src item dest mode pub scope owner detail spans group
+    while IFS="$SEP" read -r src item dest mode pub scope owner; do
+        detail="$(_detail "$item" "$src" "$mode" "$pub")"
+        if [[ "$scope" == "mixed" ]]; then
+            spans="$(_spans_of "$src")"
+            [[ -n "$spans" ]] && detail="${detail:+$detail  }— $spans"
+        fi
+        group="$scope"
+        [[ -n "$owner" ]] && group="$scope · $owner"
+        printf '%s\t%s\t%s\n' "$group" "$item" "$detail" >> "$rows"
+    done < "$COLLECTED"
+
+    local fname exec_cmd kind
+    while IFS="$SEP" read -r item fname exec_cmd kind scope; do
+        detail="$fname"
+        if [[ "$scope" == "mixed" ]]; then
+            spans="$(_app_spans "$kind")"
+            [[ -n "$spans" ]] && detail="$detail  — $spans"
+        fi
+        printf '%s\t%s\t%s\n' "$scope" "$item" "$detail" >> "$rows"
+    done < "$APPS"
+
+    # personal first, mixed last: the clear cases before the ones that need a
+    # second thought.
+    local order="personal shared work mixed" prefix g n last
+    local groups
+    groups="$(cut -f1 "$rows" | sort -u)"
+    for prefix in $order; do
+        local matching
+        matching="$(printf '%s\n' "$groups" | awk -v p="$prefix" 'index($0, p) == 1' || true)"
+        [[ -n "$matching" ]] || continue
+        while IFS= read -r g; do
+            [[ -n "$g" ]] || continue
+            n="$(awk -F'\t' -v g="$g" '$1 == g' "$rows" | wc -l | tr -d ' ')"
+            printf '\n  %b%s%b  (%s)\n' "$BOLD" "$g" "$NC" "$n"
+            last="$(awk -F'\t' -v g="$g" '$1 == g {print $2}' "$rows" | tail -1)"
+            awk -F'\t' -v g="$g" '$1 == g {print $2 "\t" $3}' "$rows" | while IFS=$'\t' read -r item detail; do
+                local branch cont
+                if [[ "$item" == "$last" ]]; then branch='  └── '; cont='      '; else branch='  ├── '; cont='  │   '; fi
+                # Wrap the detail under itself rather than past the edge of the
+                # terminal, where nobody reads it.
+                local avail first=true wrapped
+                avail=$(( ${COLUMNS:-$(tput cols 2>/dev/null || echo 100)} - 6 - 27 ))
+                (( avail < 30 )) && avail=30
+                wrapped="$(printf '%s' "$detail" | fold -s -w "$avail")"
+                while IFS= read -r line; do
+                    if [[ "$first" == "true" ]]; then
+                        printf '%s%-26s %s\n' "$branch" "$item" "$line"
+                        first=false
+                    else
+                        printf '%s%-26s %s\n' "$cont" "" "$line"
+                    fi
+                done <<< "$wrapped"
+            done
+        done <<< "$matching"
+        groups="$(printf '%s\n' "$groups" | awk -v p="$prefix" 'index($0, p) != 1' || true)"
+    done
+
+    echo
+    log_info "$(cat "$COLLECTED" "$APPS" | wc -l | tr -d ' ') items, folder '$VAULT_FOLDER', manifest '$VAULT_MANIFEST'"
+}
+
 # ==============================================================================
 # Main
 # ==============================================================================
@@ -481,21 +619,7 @@ if [[ ! -s "$COLLECTED" && ! -s "$APPS" ]]; then
     exit 1
 fi
 
-print_section "Collected"
-printf '  %-26s %-9s %-8s %s\n' "ITEM" "SCOPE" "MODE" "DEST"
-while IFS="$SEP" read -r src item dest mode pub scope owner; do
-    printf '  %-26s %-9s %-8s %s%s\n' "$item" "$scope" "$mode" "$dest" \
-        "$([[ -n "$pub" ]] && echo "  (+public)")"
-done < "$COLLECTED"
-while IFS="$SEP" read -r item fname exec_cmd kind scope; do
-    printf '  %-26s %-9s %-8s %s\n' "$item" "$scope" "attach" "$fname -> exec"
-done < "$APPS"
-echo
-cut -d"$SEP" -f6 "$COLLECTED" 2>/dev/null | cat - <(cut -d"$SEP" -f5 "$APPS" 2>/dev/null) \
-    | sort | uniq -c | while read -r n s; do printf '  %-9s %s\n' "$s" "$n"; done
-echo
-log_info "$(cat "$COLLECTED" "$APPS" | wc -l | tr -d ' ') items, folder '$VAULT_FOLDER', manifest '$VAULT_MANIFEST'"
-
+print_collected
 if [[ -s "$UNSCOPED" ]]; then
     echo
     log_warn "Not pushed — no usable scope (add '# scope: personal|work|shared' to the file):"
