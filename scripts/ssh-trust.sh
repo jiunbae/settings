@@ -35,6 +35,18 @@ HOSTS_FILE="${SETTINGS_TRUSTED_HOSTS:-$HOME/.ssh/trusted-hosts}"
 KEY="$HOME/.ssh/id_ed25519"
 SSH_OPTS=(-o ConnectTimeout=10 -o BatchMode=yes)
 
+# A machine that has just rotated its key cannot log in with the new one yet -
+# no host has seen it. The very command that fixes that is `sync`, so offer the
+# retired key alongside the current one and the rotation can finish itself.
+_offer_retired_keys() {
+    local old
+    for old in "$HOME"/.ssh/retired-*/id_ed25519 "$HOME"/.ssh/retired-*/*/id_ed25519; do
+        [[ -f "$old" ]] && SSH_OPTS+=(-i "$old")
+    done
+    [[ -f "$KEY" ]] && SSH_OPTS+=(-i "$KEY")
+    return 0
+}
+
 # ==============================================================================
 # Helpers
 # ==============================================================================
@@ -152,12 +164,17 @@ cmd_register() {
         log_success "Added to the local list: $(comment "$(cat "$KEY.pub")")"
     fi
 
+    if [[ "$new_key" == "true" ]]; then
+        log_warn "No host trusts this new key yet. Run sync now, from this machine,"
+        log_warn "while the retired key is still around to get you in."
+    fi
     log_info "Next: scripts/ssh-trust.sh sync   (give every host the union)"
     log_info "Then: scripts/secrets-push.sh --push   (put the list in the vault)"
 }
 
 cmd_sync() {
     local hs host added total=0
+    _offer_retired_keys
     hs="$(hosts "$@")" || return 1
     ensure_auth
 
