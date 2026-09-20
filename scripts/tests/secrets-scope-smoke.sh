@@ -43,10 +43,11 @@ make_home() {
   printf '%s\n' 'export UNMARKED=1' > "$home/.envs/unmarked.env"
   printf '%s\n' '# scope: nonsense' 'export BOGUS=1' > "$home/.envs/bogus.env"
   printf '%s\n' '# scope: work' 'export DRAFT=1' > "$home/.envs/_draft.env"
+  printf '%s\n' '# scope: mixed' '# spans: personal, work' 'export BOTH_TOKEN=m' > "$home/.envs/both.env"
 
-  printf '%s\n' 'KEY' > "$home/.ssh/id_ed25519"      # no marker -> personal
-  printf '%s\n' 'PUB' > "$home/.ssh/id_ed25519.pub"
-  printf '%s\n' 'KEY' > "$home/.ssh/id_work"
+  # Real keys: the display fingerprints them, and a fake string is not a key.
+  ssh-keygen -q -t ed25519 -N '' -C 'device@fixture' -f "$home/.ssh/id_ed25519"  # no marker -> personal
+  ssh-keygen -q -t ed25519 -N '' -C 'work@fixture' -f "$home/.ssh/id_work"
   printf '%s\n' 'work' > "$home/.ssh/id_work.scope"  # sidecar marker
   printf '%s\n' '# scope: work' 'Host office' > "$home/.ssh/config.d/20-company.conf"
   printf '%s\n' '# scope: personal' \
@@ -160,7 +161,7 @@ make_bw_stub "$HOME_A"
 DRY="$(run_push "$HOME_A")"
 # Only the table of what would be pushed; the skip report below it names the
 # same files for the opposite reason.
-TABLE="$(sed -n '/ITEM  */,/items, folder/p' <<< "$DRY")"
+TABLE="$(sed -n '/Collected/,/items, folder/p' <<< "$DRY")"
 contains "personal env collected"        "env:personal" "$TABLE"
 contains "work env collected"            "env:work" "$TABLE"
 contains "shared env collected"          "env:shared" "$TABLE"
@@ -172,8 +173,14 @@ contains "unmarked env reported"         "env:unmarked — no '# scope:' marker"
 contains "unknown scope reported"        "unknown scope 'nonsense'" "$DRY"
 contains "key without marker is personal" "ssh:id_ed25519" "$TABLE"
 contains "key sidecar marker read"       "ssh:id_work" "$TABLE"
-contains "scope column shows work"       "env:work                   work" "$TABLE"
 contains "authorized_keys collected"     "ssh:authorized_keys" "$TABLE"
+contains "grouped under its scope"       "work · acme" "$TABLE"
+contains "tree branches are drawn"       "└──" "$TABLE"
+contains "env keys are named"            "WORK_TOKEN" "$TABLE"
+contains "key shows its fingerprint"     "SHA256:" "$TABLE"
+contains "authorized_keys counts its keys" "2 keys:" "$TABLE"
+contains "a mixed item says what it mixes" "— personal, work" "$TABLE"
+lacks    "the mode column is gone"       "MODE" "$TABLE"
 lacks    "no phantom public field"       "~/.envs/personal.env  (+public)" "$TABLE"
 
 OUT="$(run_push "$HOME_A" --push)"
@@ -190,8 +197,8 @@ check "scope stored as a field" "work" \
   "$(jq -r '.[] | select(.name == "env:work") | .fields[] | select(.name == "scope") | .value' "$ITEMS")"
 check "owner stored as a field" "acme" \
   "$(jq -r '.[] | select(.name == "env:work") | .fields[] | select(.name == "owner") | .value' "$ITEMS")"
-check "ssh key keeps its public field" "PUB" \
-  "$(jq -r '.[] | select(.name == "ssh:id_ed25519") | .fields[] | select(.name == "public") | .value' "$ITEMS" | tr -d '\n')"
+contains "ssh key keeps its public field" "ssh-ed25519" \
+  "$(jq -r '.[] | select(.name == "ssh:id_ed25519") | .fields[] | select(.name == "public") | .value' "$ITEMS")"
 MANIFEST_A="$(jq -r '.[] | select(.name == "bootstrap") | .notes' "$ITEMS")"
 check "authorized_keys restores by merging, not overwriting" "" \
   "$(jq -r '.entries[] | select(.item == "ssh:authorized_keys") | .dest // empty' <<< "$MANIFEST_A")"
