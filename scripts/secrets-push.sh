@@ -1018,10 +1018,18 @@ done < "$APPS"
 # uploads all of them again — which is what it did, every time, for as long as
 # this edit was attempted from a copy that attaching had just made stale.
 if [[ -s "$PENDING" ]]; then
+    # Two caches, and both are behind. `bw sync` refreshes the client's own
+    # store, which is what stops the server rejecting the edit — but the edit
+    # is built from ITEMS_CACHE, read once at the start of the run, and that
+    # copy still carries the revision these items had before they were attached
+    # to. Syncing without reloading was the whole of the last attempt at this,
+    # and it changed nothing.
     bw sync >/dev/null 2>&1 || log_warn "could not resync before recording what was attached"
+    _load_items
     while IFS="$SEP" read -r pname pid pfid pscope pphash; do
         [[ -n "$pname" ]] || continue
-        pnotes="$(_bw_read bw get item "$pid" | jq -r '.notes // ""')" || pnotes=""
+        pnotes="$(_cached_item "$pname" | jq -r '.notes // ""')"
+        [[ -n "$pnotes" ]] || pnotes="$(_bw_read bw get item "$pid" | jq -r '.notes // ""')" || pnotes=""
         if ! upsert_note "$pname" "$pnotes" "$pfid" "" "$pscope" "" "$pphash" >/dev/null; then
             log_warn "$pname: the attachment is up but its payload-hash was not written; the next push re-uploads it"
         fi
