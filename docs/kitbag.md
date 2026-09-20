@@ -1,19 +1,20 @@
 # kitbag
 
-The secrets engine in this repository is being replaced by
+The secrets engine in this repository has been replaced by
 [kitbag](https://github.com/Open330/kitbag), a tool that does the same job with
 values, errors and types instead of shell.
 
-**Nothing in this change alters what `./install.sh secrets` does.** kitbag is
-installed alongside it. Until a vault has been pushed with kitbag, the bash
-engine is still the one that restores a machine.
+`./install.sh secrets` restores with kitbag now. `modules/secrets.sh` still
+supplies what it always did — the vault server, the login, the 2FA, and this
+machine's scope — and hands the restore over.
 
 ```bash
-./install.sh kitbag            # install the binary (pinned, checksummed)
+./install.sh kitbag            # the binary on its own (pinned, checksummed)
 scripts/kitbag-config.sh       # show the config it would build for this machine
 scripts/kitbag-config.sh --write
 kitbag status                  # what it makes of this machine — reads only
 kitbag doctor                  # and whether anything is unmarked or loose
+kitbag push --backend bw       # the inverse; replaces scripts/secrets-push.sh
 ```
 
 ## Why
@@ -53,7 +54,7 @@ deletes, and nothing prints a secret's value.
 
 ## What is different
 
-| | bash engine | kitbag |
+| | the older engine | kitbag |
 | --- | --- | --- |
 | Inventory | a JSON manifest in the vault | each item carries its own scope, owner and path |
 | Stores | Bitwarden / Vaultwarden | that, plus 1Password, `pass`, and an `age`-encrypted file with no server at all |
@@ -61,29 +62,54 @@ deletes, and nothing prints a secret's value.
 | App state | three hardcoded cases in the push script | any `command = { export, restore }` pair |
 | Reports | text | text, and `--json` on every command |
 
-The two write different items, so a vault can hold both while a machine moves
-across. Nothing is deleted from a vault by either of them.
+The two write different items, so one vault holds both while machines move
+across. Neither deletes what the other wrote.
 
-## The cutover, when you want it
+## The machine that has not moved across
 
-1. `./install.sh kitbag` and `scripts/kitbag-config.sh --write` on one machine.
-2. `kitbag status --backend bw` and `kitbag doctor` — both read only. Compare
-   with `./scripts/secrets-push.sh` (its dry run) and see that the same items
-   are found.
-3. `kitbag push --backend bw --dry-run`, then without it when the list looks
-   right. The vault now holds kitbag items *as well as* the bash manifest.
-4. On another machine, `kitbag restore --backend bw --dry-run`.
-5. When every machine is across, the bash engine and its manifest can go.
+Every machine that already has this repository restores from the manifest, and
+that path is still here, reached by name:
 
-Step 5 is not part of this change, and there is no hurry: a machine that never
-moves across keeps working exactly as it does now.
+```bash
+SETTINGS_SECRETS_ENGINE=bash ./install.sh secrets
+```
+
+It stays until every machine is across. Then it, `scripts/secrets-push.sh`, and
+the manifest go together.
+
+## Declaring a machine's scope
+
+This decides what `push` sends and what `restore` takes, so it is worth being
+explicit:
+
+```bash
+echo personal > ~/.config/settings/secrets.scope    # or: work / shared / all
+```
+
+A machine that declares nothing used to fall back to `personal`. That is right
+for an empty machine and wrong for a full one — this machine held work and
+shared files and would have pushed **16 of its 39 items**, reporting only that
+it sent what it sent. So `scripts/kitbag-config.sh` now reads the scopes off
+the markers already on disk when nothing is declared, and says that it did.
 
 ## What has not been tried yet
 
-- **Nothing has been pushed to the real vault with kitbag.** Everything above
-  has been exercised against an `age` store and a stubbed client.
+- **Nothing has been pushed to the real vault with kitbag** — see below.
 - The `op` and `pass` stores are tested against stub clients, not against real
   accounts — neither client is installed here.
 - `kitbag apply` covers packages, links, macOS defaults, downloads, clones,
   merges and commands. The modules in this repository are not ported to it, and
   `./install.sh` remains what installs a machine.
+
+The restore path is switched, but a restore reads what a push wrote, and that
+push needs the master password:
+
+```bash
+export BW_SESSION=$(bw unlock --raw)
+kitbag push --backend bw --dry-run     # 39 items expected
+kitbag push --backend bw
+kitbag status --backend bw             # every item '=' against the store
+```
+
+Until that runs, `./install.sh secrets` finds nothing of kitbag's in the vault,
+and the machine to restore is the one to run it from.

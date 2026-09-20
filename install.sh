@@ -79,8 +79,8 @@ get_component_name() {
         claude)      echo "Claude Code configuration" ;;
         cship)       echo "cship (Claude Code statusline)" ;;
         scripts)     echo "Personal CLI scripts" ;;
-        secrets)     echo "Secrets from vault" ;;
-        kitbag)      echo "kitbag (the secrets engine's successor)" ;;
+        secrets)     echo "Secrets from vault (via kitbag)" ;;
+        kitbag)      echo "kitbag on its own, without restoring anything" ;;
         *)           echo "$1" ;;
     esac
 }

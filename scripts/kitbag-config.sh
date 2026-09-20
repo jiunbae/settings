@@ -30,13 +30,47 @@ WRITE=false
 # ==============================================================================
 # What this machine takes
 # ==============================================================================
-# The bash engine keeps this in one word in a file, defaulting to personal.
+# The scopes this machine can be seen to hold, read off the markers already on
+# disk. `mixed` is left out because anyone may take it, and `local` because it
+# never travels - neither says anything about what this machine is entitled to.
+scopes_on_disk() {
+    {
+        grep -h -m1 '^# scope:' "$HOME"/.envs/*.env "$HOME"/.ssh/config.d/*.conf 2>/dev/null
+        # The extra-paths file names a scope in its second column.
+        [[ -f "$TRACKED_PATHS" ]] && awk '!/^#/ && NF > 1 { print "# scope: " $2 }' "$TRACKED_PATHS"
+    } | sed 's/^# scope:[[:space:]]*//' | tr ',' '\n' \
+      | sed 's/[[:space:]]//g' \
+      | grep -vxE 'local|mixed' | grep -v '^$' | sort -u
+}
+
+# Resolving sets globals, so it is called once at the top level and never from
+# inside `$( )`: a variable assigned in a command substitution dies with the
+# subshell, which is the bug that printed an empty skip list for a week.
+SCOPE_WORD=""
+SCOPE_INFERRED=false
+
+resolve_scope() {
+    SCOPE_WORD="${SETTINGS_SECRETS_SCOPE:-}"
+    [[ -z "$SCOPE_WORD" && -f "$SCOPE_FILE" ]] &&
+        SCOPE_WORD="$(tr -d '[:space:]' < "$SCOPE_FILE")"
+    [[ -n "$SCOPE_WORD" ]] && return 0
+
+    # No answer anywhere. The bash engine's default is `personal`, which is
+    # right for a machine holding nothing yet and wrong for one already full:
+    # this list decides what `push` sends, so a machine holding work files and
+    # told `personal` leaves every one of them out of the store, and reports
+    # only that it sent what it sent. So ask the disk before falling back.
+    SCOPE_WORD="$(scopes_on_disk | paste -sd, -)"
+    if [[ -n "$SCOPE_WORD" ]]; then
+        SCOPE_INFERRED=true
+    else
+        SCOPE_WORD="personal"
+    fi
+}
+
+# Formatting is pure, so it is safe to call from inside the heredoc.
 scopes() {
-    local scope="${SETTINGS_SECRETS_SCOPE:-}"
-    [[ -z "$scope" && -f "$SCOPE_FILE" ]] && scope="$(tr -d '[:space:]' < "$SCOPE_FILE")"
-    # The same default the bash engine has: a machine told nothing takes only
-    # what is its owner's.
-    scope="${scope:-personal}"
+    local scope="$SCOPE_WORD"
     case "$scope" in
         all) printf '"personal", "work", "shared"' ;;
         # printf with a newline: `read` drops a final line that has none, so
@@ -125,7 +159,7 @@ EOF
 name = "app:aas"
 scope = "mixed"
 spans = ["personal", "work"]
-command = { export = "aas export --all -o -", restore = "aas import -" }
+command = { export = "aas export --all", restore = "aas import -" }
 EOF
     fi
 
@@ -157,8 +191,17 @@ EOF
 # ==============================================================================
 print_section "kitbag config"
 
+resolve_scope
 OUT="$(generate)"
 COUNT="$(printf '%s\n' "$OUT" | grep -c '^\[\[track\]\]' || true)"
+
+# Say when the answer was read off the disk rather than declared. This list is
+# what `push` sends and what `restore` takes, so a machine that disagrees with
+# it should disagree now, not after a restore comes back short.
+if [[ "$SCOPE_INFERRED" == "true" ]]; then
+    log_warn "No scope declared for this machine, so it was read off the files here: $SCOPE_WORD"
+    log_info "  Declare it instead: echo <scope> > $SCOPE_FILE"
+fi
 
 if [[ "$WRITE" != "true" ]]; then
     printf '%s\n' "$OUT"

@@ -8,6 +8,11 @@
 #
 #   ./install.sh secrets
 #
+# The restore itself is kitbag's now; this file supplies the vault login, the
+# 2FA and the per-machine scope, and hands over. Everything from
+# `install_secrets_manifest` down is the engine that did the job before, kept
+# for a machine that has not moved across: SETTINGS_SECRETS_ENGINE=bash.
+#
 # Nothing personal lives in this file. WHAT to restore is a JSON manifest stored
 # inside the vault itself, so this script stays publishable while the inventory
 # of secrets (item names, destination paths, which keys even exist) stays behind
@@ -393,10 +398,84 @@ apply_manifest() {
 # Main Installation
 # ==============================================================================
 
-install_secrets() {
-    log_info "Restoring secrets from $VAULT_SERVER ..."
+# kitbag restores this machine now. Everything below this function is the
+# engine that did it before, and it stays reachable by name for a machine that
+# has not moved across yet:
+#
+#   SETTINGS_SECRETS_ENGINE=bash ./install.sh secrets
+#
+# The two read different things out of the same vault - kitbag its own items,
+# the older path the `bootstrap` manifest - so a vault mid-migration holds both
+# and neither deletes what the other wrote.
+SECRETS_ENGINE="${SETTINGS_SECRETS_ENGINE:-kitbag}"
 
+# The scope this machine was *told*, as opposed to the one it falls back to.
+# Empty means nobody said, and then kitbag's own config decides rather than
+# this script overriding it with a default.
+secrets_scope_declared() {
+    local scope="${SETTINGS_SECRETS_SCOPE:-}"
+    if [[ -z "$scope" && -f "$SECRETS_SCOPE_FILE" ]]; then
+        scope="$(tr -d '[:space:]' < "$SECRETS_SCOPE_FILE")"
+    fi
+    printf '%s' "$scope"
+}
+
+restore_with_kitbag() {
+    # Running this module on its own does not source the other one.
+    if ! declare -F install_kitbag_binary >/dev/null 2>&1; then
+        source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kitbag.sh"
+    fi
+    install_kitbag_binary || return 1
+
+    local config="$HOME/.config/kitbag/machine.toml"
+    if [[ ! -f "$config" && "$DRY_RUN" != "true" ]]; then
+        # A machine being restored holds nothing yet, so there is nothing for
+        # the generator to read: what it produces here is the scope line, which
+        # is the part restore actually needs.
+        "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/kitbag-config.sh" --write || return 1
+    fi
+
+    local args=(restore --backend bw)
+    local scope
+    scope="$(secrets_scope_declared)"
+    [[ -n "$scope" ]] && args+=(--scope "$scope")
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would restore from $VAULT_SERVER with kitbag"
+        if [[ -n "${BW_SESSION:-}" ]]; then
+            kitbag "${args[@]}" --dry-run || return 1
+        else
+            log_info "[DRY-RUN] Vault locked - run 'bw unlock' first to enumerate items"
+        fi
+        return 0
+    fi
+
+    # The unlock below is the one this repository already had: it knows this
+    # server's login, its 2FA method, and how to keep the session key out of
+    # the process table. kitbag reads BW_SESSION from the environment, so the
+    # two need nothing else from each other.
+    vault_unlock || return 1
+    export BW_SESSION
+
+    kitbag "${args[@]}" || return 1
+    log_info "Vault stays unlocked for this shell. Run 'bw lock' when done."
+    log_success "Secrets restore complete!"
+}
+
+install_secrets() {
     ensure_vault_cli || return 1
+
+    if [[ "$SECRETS_ENGINE" == "kitbag" ]]; then
+        restore_with_kitbag
+        return $?
+    fi
+
+    log_warn "Using the pre-kitbag engine (SETTINGS_SECRETS_ENGINE=$SECRETS_ENGINE)"
+    install_secrets_manifest
+}
+
+install_secrets_manifest() {
+    log_info "Restoring secrets from $VAULT_SERVER ..."
 
     # A dry run must not prompt for a master password. With an existing session
     # the manifest can still be enumerated for real; without one, say so and stop
