@@ -56,6 +56,22 @@ make_home() {
     > "$home/.ssh/authorized_keys"
 }
 
+# Paths outside the known directories, listed for tracking.
+make_tracked() {
+  local home=$1
+  mkdir -p "$home/.config/settings" "$home/Library/Keychains"
+  printf '%s\n' 'registry=https://example.test' '//example.test/:_authToken=abc' > "$home/.npmrc"
+  printf '\x00\x01binary payload\x00' > "$home/Library/Keychains/fixture.keychain-db"
+  printf '%s\n' '# scope: work' 'k = v' > "$home/self-marked.conf"
+  printf '%s\n' \
+    '# path                              scope     owner  name' \
+    '~/.npmrc                            personal' \
+    '~/Library/Keychains/fixture.keychain-db  work  acme  file:fixture-keychain' \
+    '~/self-marked.conf                  personal' \
+    '~/not-here.conf                     personal' \
+    > "$home/.config/settings/secrets-paths"
+}
+
 # A `bw` that keeps folders and items in files, so ids stay stable across calls.
 make_bw_stub() {
   local home=$1
@@ -158,6 +174,7 @@ HOME_A="$TEST_ROOT/a"
 make_home "$HOME_A"
 make_bw_stub "$HOME_A"
 
+make_tracked "$HOME_A"
 DRY="$(run_push "$HOME_A")"
 # Only the table of what would be pushed; the skip report below it names the
 # same files for the opposite reason.
@@ -181,6 +198,14 @@ contains "key shows its fingerprint"     "SHA256:" "$TABLE"
 contains "authorized_keys counts its keys" "2 keys:" "$TABLE"
 contains "a mixed item says what it mixes" "— personal, work" "$TABLE"
 lacks    "the mode column is gone"       "MODE" "$TABLE"
+
+# Paths the script never guessed at, tracked by listing them.
+contains "a tracked text file is collected"  "file:npmrc" "$TABLE"
+contains "its keys are read too"             "_authToken" "$TABLE"
+contains "a tracked binary is collected"     "file:fixture-keychain" "$TABLE"
+contains "binaries say so"                   "binary," "$TABLE"
+contains "the file's own marker wins"        "file:self-marked.conf" "$TABLE"
+contains "a missing path is reported"        "not-here.conf — listed in" "$DRY"
 lacks    "no phantom public field"       "~/.envs/personal.env  (+public)" "$TABLE"
 
 OUT="$(run_push "$HOME_A" --push)"
@@ -204,6 +229,12 @@ check "authorized_keys restores by merging, not overwriting" "" \
   "$(jq -r '.entries[] | select(.item == "ssh:authorized_keys") | .dest // empty' <<< "$MANIFEST_A")"
 contains "the merge keeps what it does not know" "grep -qF" \
   "$(jq -r '.entries[] | select(.item == "ssh:authorized_keys") | .exec' <<< "$MANIFEST_A")"
+check "a tracked binary restores from its attachment" "attachment:fixture.keychain-db" \
+  "$(jq -r '.entries[] | select(.item == "file:fixture-keychain") | .source' <<< "$MANIFEST_A")"
+check "and lands back at its path" "~/Library/Keychains/fixture.keychain-db" \
+  "$(jq -r '.entries[] | select(.item == "file:fixture-keychain") | .dest' <<< "$MANIFEST_A")"
+check "the marked file follows its own header, not the column" "work" \
+  "$(jq -r '.entries[] | select(.item == "file:self-marked.conf") | .scope' <<< "$MANIFEST_A")"
 check "manifest is version 2" "2" \
   "$(jq -r '.[] | select(.name == "bootstrap") | .notes' "$ITEMS" | jq -r '.version')"
 check "manifest entries carry scopes" "" \
@@ -223,7 +254,7 @@ check "changed scope does not duplicate" "1" \
 printf '%s\n' '# scope: local' 'export SHARED_TOKEN=s' > "$HOME_A/.envs/shared.env"
 STALE_OUT="$(run_push "$HOME_A" --push)"
 contains "stale vault item reported" "env:shared" \
-  "$(printf '%s' "$STALE_OUT" | sed -n '/In the vault but not pushed/,$p')"
+  "$(printf '%s' "$STALE_OUT" | sed -n '/In the vault but not sent/,$p')"
 
 printf '\nauthorized_keys merge (run exactly as a restore runs it)\n'
 MERGE_HOME="$TEST_ROOT/merge"

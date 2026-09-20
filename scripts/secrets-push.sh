@@ -16,6 +16,18 @@
 #   ~/.ssh/config.d/*.conf   -> ssh:config-<name>   (skips files the repo tracks)
 #   ~/.ssh/authorized_keys   -> ssh:authorized_keys  (restores by merging, below)
 #
+# Anything else is tracked by listing it in ~/.config/settings/secrets-paths,
+# one per line - because the next secret will not live where this script guessed:
+#
+#   <path>  <scope>  [owner]  [item-name]
+#   ~/.npmrc                                    personal
+#   ~/.aws/config                               work      acme
+#   ~/Library/Keychains/x.keychain-db           work      acme   file:x-keychain
+#
+# A path's own `# scope:` header still wins over the column, so a file that can
+# carry the marker keeps carrying it. Text goes up as notes; anything binary
+# goes up as an attachment and is written back byte for byte.
+#
 # Scopes. Every file declares who owns its credentials, so one vault can hold
 # several lives without mixing them. The marker lives in the file, not in this
 # repository - a public repo must not carry the list of which employer or which
@@ -59,19 +71,28 @@ source "$ROOT/modules/secrets.sh"
 VAULT_FOLDER="${SETTINGS_VAULT_FOLDER:-bootstrap}"
 
 PUSH=false
-[[ "${1:-}" == "--push" ]] && PUSH=true
+STATUS=false
+case "${1:-}" in
+    --push)            PUSH=true ;;
+    --status|status)   STATUS=true ;;
+    ''|--dry-run)      ;;
+    *) printf 'usage: %s [--status | --push]\n' "$(basename "$0")" >&2; exit 2 ;;
+esac
 
 # Scratch files. Several of these are written from inside command substitutions,
 # where a shell variable would die with the subshell.
 COLLECTED="$(mktemp)"   # what to push, one line per item
 APPS="$(mktemp)"        # app payload descriptors
 UNSCOPED="$(mktemp)"    # files skipped for want of a usable scope
+BINARIES="$(mktemp)"    # tracked paths that must travel as attachments
 FOLDERS_CACHE="$(mktemp)"
 TMPDIR_ROWS="$(mktemp)"  # one display row per collected item
+STATES=""                # item<TAB>state, filled by --status
+GRAY=$'\033[0;90m'      # core.sh has no dim; unchanged rows should recede
 ENTRIES=""              # manifest entries, created by the push
 PAYLOADS=""             # staged app payloads, created by the push
 FAILED=""                # items this run could not write; set once bw is in play
-cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$FOLDERS_CACHE" "$TMPDIR_ROWS" ${FAILED:+"$FAILED"} ${ENTRIES:+"$ENTRIES"} ${PAYLOADS:+"$PAYLOADS"}; }
+cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$BINARIES" "$FOLDERS_CACHE" "$TMPDIR_ROWS" ${STATES:+"$STATES"} ${FAILED:+"$FAILED"} ${ENTRIES:+"$ENTRIES"} ${PAYLOADS:+"$PAYLOADS"}; }
 trap cleanup EXIT
 
 # ==============================================================================
@@ -174,6 +195,8 @@ collect() {
             "$f" "ssh:config-${base%.conf}" "~/.ssh/config.d/$base" 600 "" "$scope" "$owner" >> "$COLLECTED"
     done
 
+    collect_tracked_paths
+
     # ~/.ssh/authorized_keys, so a new machine starts out reachable from the
     # ones that already exist. It carries its own '# scope:' header.
     local ak="$HOME/.ssh/authorized_keys"
@@ -192,6 +215,66 @@ collect() {
 # restores through a merge that adds what is missing and removes nothing.
 # scripts/ssh-trust.sh is what maintains the list itself.
 AUTHORIZED_KEYS_MERGE='umask 077; mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; while IFS= read -r l; do case "$l" in ""|\#*) continue;; esac; m=$(printf "%s\n" "$l" | awk "{print \$1, \$2}"); grep -qF "$m" "$HOME/.ssh/authorized_keys" || printf "%s\n" "$l" >> "$HOME/.ssh/authorized_keys"; done; chmod 600 "$HOME/.ssh/authorized_keys"'
+
+# ------------------------------------------------------------------------------
+# Paths this machine was told to track
+# ------------------------------------------------------------------------------
+TRACKED_PATHS="${SETTINGS_TRACKED_PATHS:-$HOME/.config/settings/secrets-paths}"
+
+# A name that survives being read back: ~/.aws/config -> file:aws-config
+_path_item_name() {
+    local rel="${1#$HOME/}"
+    rel="${rel#.}"
+    printf 'file:%s' "$(printf '%s' "$rel" | sed -E 's#^\.##; s#/#-#g; s#^\.##')"
+}
+
+# Binary payloads cannot ride in a note. `grep -Iq` is the cheap "is this text"
+# test that every platform here agrees on.
+_is_text() { grep -Iq . "$1" 2>/dev/null; }
+
+collect_tracked_paths() {
+    [[ -f "$TRACKED_PATHS" ]] || return 0
+    local line path scope owner name expanded
+    while IFS= read -r line; do
+        case "$line" in ''|\#*) continue ;; esac
+        # shellcheck disable=SC2086
+        set -- $line
+        path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}
+        [[ -n "$path" ]] || continue
+        expanded="${path/#\~/$HOME}"
+        if [[ ! -e "$expanded" ]]; then
+            printf '  %s — listed in %s but not on this machine\n' "$path" "$TRACKED_PATHS" >> "$UNSCOPED"
+            continue
+        fi
+        if [[ -d "$expanded" ]]; then
+            printf '  %s — is a directory; track the files inside it\n' "$path" >> "$UNSCOPED"
+            continue
+        fi
+        # The file's own marker wins: it travels with the file, the list does not.
+        local declared
+        declared="$(_scope_of "$expanded" "$scope")"
+        if [[ -z "$declared" ]]; then
+            printf '  %s — no scope in the file and none in %s\n' "$path" "$TRACKED_PATHS" >> "$UNSCOPED"
+            continue
+        fi
+        if ! _scope_valid "$declared"; then
+            printf '  %s — unknown scope '"'"'%s'"'"'\n' "$path" "$declared" >> "$UNSCOPED"
+            continue
+        fi
+        [[ "$declared" == "local" ]] && continue
+        [[ -n "$name" ]] || name="$(_path_item_name "$expanded")"
+        [[ -n "$owner" ]] || owner="$(_owner_of "$expanded")"
+
+        if _is_text "$expanded"; then
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" >> "$COLLECTED"
+        else
+            # Binary: goes up as an attachment and is placed back as a file.
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" >> "$BINARIES"
+        fi
+    done < "$TRACKED_PATHS"
+}
 
 # App data. Each line: <item> <attachment-file-name> <restore-exec> <kind> <scope>
 BARSHELF_DIR="$HOME/Library/Application Support/BarShelf"
@@ -345,6 +428,32 @@ _folder_id() {
     printf '%s' "$id"
 }
 
+# Like _folder_id, but never creates: `--status` must not write to the vault.
+_folder_id_lookup() {
+    _folder_list | jq -r --arg n "$1" '.[] | select(.name == $n) | .id' | head -1
+}
+
+# Items sitting in the bootstrap folders that this machine no longer sends: a
+# file that turned machine-local, was deleted, or lost its marker. They are
+# still readable secrets, so say so rather than leave them to rot.
+# Reads $ITEMS_CACHE, so load it first. $KEEP is what this run accounts for.
+print_stale() {
+    local keep="${KEEP:-[]}" stale
+    stale="$(_folder_list | jq -r --arg f "$VAULT_FOLDER" \
+                '[.[] | select(.name == $f or (.name | startswith($f + "/"))) | .id]' \
+            | jq --argjson items "$(printf '%s' "$ITEMS_CACHE" | jq '[.[] | {id, name, folderId}]')" \
+                 --argjson keep "$keep" --arg m "$VAULT_MANIFEST" -r \
+                 '. as $folders | $items[]
+                  | select(.folderId as $fid | $folders | index($fid))
+                  | select(.name != $m)
+                  | select(.name as $n | $keep | index($n) | not)
+                  | "  \(.name)  (bw delete item \(.id))"')"
+    [[ -n "$stale" ]] || return 0
+    echo
+    log_warn "In the vault but not sent by this machine — delete if obsolete:"
+    printf '%s\n' "$stale"
+}
+
 # _scope_folder <scope> — where items of that scope live.
 _scope_folder() {
     case "$1" in
@@ -380,6 +489,35 @@ _cached_field() {
 # upsert_note <name> <notes> <folder-id> [pub-field-value] [scope] [owner]
 # The folder is reassigned on every update: an item whose file changed scope has
 # to leave the old folder, or the separation is only true for new items.
+# The fields an item carries besides its notes. Shared by the writer and by
+# `--status`, so what the status reports is exactly what the push would do.
+_FIELDS_FILTER='
+    def put($n; $v):
+        if $v == "" then map(select(.name != $n))
+        else map(select(.name != $n)) + [{"name":$n,"value":$v,"type":0}] end;
+    .fields = ((.fields // []) | put("public"; $pub) | put("scope"; $scope) | put("owner"; $owner) | put("payload-hash"; $phash))'
+
+# _comparable <item-json> — the part of an item a push would actually change
+_comparable() { jq -S -c '{notes, folderId, fields: ((.fields // []) | sort_by(.name))}'; }
+
+# _item_state <name> <notes> <fid> <pub> <scope> <owner> <phash>
+# prints: new | changed | unchanged
+_item_state() {
+    local name=$1 notes=$2 fid=$3 pub=${4:-} scope=${5:-} owner=${6:-} phash=${7:-}
+    local current desired
+    current="$(_cached_item "$name")"
+    if [[ -z "$current" ]]; then printf 'new'; return 0; fi
+    desired="$(printf '%s' "$current" | jq \
+        --arg notes "$notes" --arg pub "$pub" --arg fid "$fid" \
+        --arg scope "$scope" --arg owner "$owner" --arg phash "$phash" \
+        ".notes = \$notes | .folderId = \$fid | $_FIELDS_FILTER")"
+    if [[ "$(printf '%s' "$current" | _comparable)" == "$(printf '%s' "$desired" | _comparable)" ]]; then
+        printf 'unchanged'
+    else
+        printf 'changed'
+    fi
+}
+
 upsert_note() {
     local name=$1 notes=$2 fid=$3 pub=${4:-} scope=${5:-} owner=${6:-} phash=${7:-}
     local id payload
@@ -387,11 +525,7 @@ upsert_note() {
 
     # scope/owner are custom fields as well as folders, so they survive an export
     # and can be searched in the clients.
-    local fields_filter='
-        def put($n; $v):
-            if $v == "" then map(select(.name != $n))
-            else map(select(.name != $n)) + [{"name":$n,"value":$v,"type":0}] end;
-        .fields = ((.fields // []) | put("public"; $pub) | put("scope"; $scope) | put("owner"; $owner) | put("payload-hash"; $phash))'
+    local fields_filter="$_FIELDS_FILTER"
 
     if [[ -n "$id" ]]; then
         local current
@@ -403,8 +537,7 @@ upsert_note() {
             ".notes = \$notes | .folderId = \$fid | $fields_filter")"
         # Nothing to send when the vault already holds exactly this. Every write
         # is a round trip, so on an unchanged machine a push should cost nothing.
-        if [[ "$(printf '%s' "$current" | jq -S -c '{notes, folderId, fields: ((.fields // []) | sort_by(.name))}')" \
-           == "$(printf '%s' "$payload"  | jq -S -c '{notes, folderId, fields: ((.fields // []) | sort_by(.name))}')" ]]; then
+        if [[ "$(printf '%s' "$current" | _comparable)" == "$(printf '%s' "$payload" | _comparable)" ]]; then
             printf "  ${GREEN}=${NC} unchanged %s%s\n" "$name" "${scope:+  [$scope]}"
             return 0
         fi
@@ -495,6 +628,22 @@ _env_keys() {
     fi
 }
 
+# _conf_keys <file> — the left-hand sides of key=value lines, whatever the
+# syntax around them. npmrc, ini, toml and plain env files all answer to this.
+_conf_keys() {
+    local all n
+    all="$(grep -E '^[^#[:space:]][^=]*=' "$1" 2>/dev/null \
+        | sed -E 's/[[:space:]]*=.*//; s/^[[:space:]]*(export[[:space:]]+)?//' \
+        | awk 'length($0) > 0 && length($0) < 60 && !seen[$0]++')"
+    n="$(printf '%s\n' "$all" | grep -c . || true)"
+    (( n == 0 )) && return 0
+    if (( n > ENV_KEYS_SHOWN )); then
+        printf '%s +%s more' "$(printf '%s\n' "$all" | head -"$ENV_KEYS_SHOWN" | paste -sd' ' -)" "$(( n - ENV_KEYS_SHOWN ))"
+    else
+        printf '%s' "$(printf '%s\n' "$all" | paste -sd' ' -)"
+    fi
+}
+
 # _spans_of <file> — what a "mixed" file is mixed from, as it says itself:
 #   # spans: personal, work
 _spans_of() {
@@ -521,6 +670,12 @@ _detail() {
         env:*)
             d="$(_env_keys "$src")"
             ;;
+        file:*)
+            # A tracked file is whatever the user tracked: an rc file, a token
+            # store, an ini. If it looks like key = value, name the keys.
+            d="$(_conf_keys "$src")"
+            [[ -n "$d" ]] || d="$(grep -c . "$src" 2>/dev/null || echo 0) lines"
+            ;;
         ssh:authorized_keys)
             local n names
             n="$(grep -cE '^[a-z]' "$src" 2>/dev/null || echo 0)"
@@ -540,8 +695,22 @@ _detail() {
     printf '%s' "$d"
 }
 
-print_collected() {
-    print_section "Collected"
+# When $STATES holds "item<TAB>state" lines, each row is marked with what a
+# push would do to it.
+_state_of() { awk -F'\t' -v i="$1" '$1 == i {print $2; exit}' "$STATES" 2>/dev/null; }
+
+_marker() {
+    case "$1" in
+        new)       printf '%b+%b ' "$GREEN" "$NC" ;;
+        changed)   printf '%b~%b ' "$YELLOW" "$NC" ;;
+        unchanged) printf '%b=%b ' "$GRAY" "$NC" ;;
+        unknown)   printf '%b?%b ' "$YELLOW" "$NC" ;;
+        *)         printf '' ;;
+    esac
+}
+
+print_collected() {   # <section title>
+    print_section "${1:-Collected}"
     local rows="$TMPDIR_ROWS"
     : > "$rows"
 
@@ -556,6 +725,13 @@ print_collected() {
         [[ -n "$owner" ]] && group="$scope · $owner"
         printf '%s\t%s\t%s\n' "$group" "$item" "$detail" >> "$rows"
     done < "$COLLECTED"
+
+    while IFS="$SEP" read -r src item dest mode pub scope owner; do
+        detail="binary, $(wc -c < "$src" | tr -d ' ') bytes → $dest"
+        group="$scope"
+        [[ -n "$owner" ]] && group="$scope · $owner"
+        printf '%s\t%s\t%s\n' "$group" "$item" "$detail" >> "$rows"
+    done < "$BINARIES"
 
     local fname exec_cmd kind
     while IFS="$SEP" read -r item fname exec_cmd kind scope; do
@@ -592,10 +768,10 @@ print_collected() {
                 wrapped="$(printf '%s' "$detail" | fold -s -w "$avail")"
                 while IFS= read -r line; do
                     if [[ "$first" == "true" ]]; then
-                        printf '%s%-26s %s\n' "$branch" "$item" "$line"
+                        printf '%s%s%-26s %s\n' "$branch" "$(_marker "$(_state_of "$item")")" "$item" "$line"
                         first=false
                     else
-                        printf '%s%-26s %s\n' "$cont" "" "$line"
+                        printf '%s%s%-26s %s\n' "$cont" "$([[ -s "${STATES:-}" ]] && printf '  ')" "" "$line"
                     fi
                 done <<< "$wrapped"
             done
@@ -604,7 +780,19 @@ print_collected() {
     done
 
     echo
-    log_info "$(cat "$COLLECTED" "$APPS" | wc -l | tr -d ' ') items, folder '$VAULT_FOLDER', manifest '$VAULT_MANIFEST'"
+    if [[ -s "${STATES:-}" ]]; then
+        local n_new n_changed n_unchanged n_unknown
+        n_new="$(awk -F'\t' '$2 == "new"' "$STATES" | wc -l | tr -d ' ')"
+        n_changed="$(awk -F'\t' '$2 == "changed"' "$STATES" | wc -l | tr -d ' ')"
+        n_unchanged="$(awk -F'\t' '$2 == "unchanged"' "$STATES" | wc -l | tr -d ' ')"
+        n_unknown="$(awk -F'\t' '$2 == "unknown"' "$STATES" | wc -l | tr -d ' ')"
+        printf '  %b+%b %s new   %b~%b %s changed   %b=%b %s unchanged' \
+            "$GREEN" "$NC" "$n_new" "$YELLOW" "$NC" "$n_changed" "$GRAY" "$NC" "$n_unchanged"
+        [[ "$n_unknown" != "0" ]] && printf '   %b?%b %s built on push' "$YELLOW" "$NC" "$n_unknown"
+        printf '\n'
+        echo
+    fi
+    log_info "$(cat "$COLLECTED" "$BINARIES" "$APPS" | wc -l | tr -d ' ') items, folder '$VAULT_FOLDER', manifest '$VAULT_MANIFEST'"
 }
 
 # ==============================================================================
@@ -614,7 +802,7 @@ print_collected() {
 collect
 collect_apps
 
-if [[ ! -s "$COLLECTED" && ! -s "$APPS" ]]; then
+if [[ ! -s "$COLLECTED" && ! -s "$BINARIES" && ! -s "$APPS" ]]; then
     log_error "Nothing collected. Are ~/.envs and ~/.ssh populated?"
     exit 1
 fi
@@ -674,6 +862,25 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
     fi
 done < "$COLLECTED"
 
+# Tracked paths that are not text: the file itself is the attachment, and the
+# restore writes it back byte for byte.
+while IFS="$SEP" read -r src item dest mode pub scope owner; do
+    fid="$(_folder_id "$(_scope_folder "$scope")")"
+    fp="$(_sha256 < "$src")"
+    fname="$(basename "$src")"
+    if [[ "$fp" != "$(_cached_field "$item" "payload-hash")" ]]; then
+        if ! upsert_attachment "$item" "$src" "$fid" "$scope" "$fp"; then
+            printf '%s\n' "  $item" >> "$FAILED"
+            continue
+        fi
+    else
+        printf "  ${GREEN}=${NC} unchanged %s/%s\n" "$item" "$fname"
+    fi
+    jq -n --arg item "$item" --arg src "attachment:$fname" --arg dest "$dest" \
+          --arg mode "$mode" --arg scope "$scope" \
+        '{item: $item, source: $src, dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
+done < "$BINARIES"
+
 while IFS="$SEP" read -r item fname exec_cmd kind scope; do
     manifest_entry() {
         jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" --arg scope "$scope" \
@@ -720,6 +927,7 @@ done < "$APPS"
 # but not the exec entries this run just rewrote, or every push would add a copy.
 print_section "Manifest"
 PUSHED_ITEMS="$(jq -s '[.[].item]' < "$ENTRIES")"
+KEEP="$PUSHED_ITEMS"
 MANIFEST_ID="$(_item_id "$VAULT_MANIFEST")"
 EXISTING_EXTRA="$([[ -n "$MANIFEST_ID" ]] && bw get item "$MANIFEST_ID" 2>/dev/null \
     | jq -r '.notes // empty' 2>/dev/null \
@@ -746,24 +954,8 @@ log_success "Pushed $(jq '.entries | length' <<< "$MANIFEST") manifest entries t
 jq -r '.entries | group_by(.scope // "none")[] | "\(.[0].scope // "none") \(length)"' <<< "$MANIFEST" \
     | while read -r s n; do printf '  %-9s %s entries\n' "$s" "$n"; done
 
-# Items left in the bootstrap folders that this push did not write: a file that
-# turned machine-local (# scope: local), was deleted, or lost its marker. They
-# are still readable secrets, so say so rather than leave them to rot.
 _load_items
-STALE="$(_folder_list | jq -r --arg f "$VAULT_FOLDER" \
-            '[.[] | select(.name == $f or (.name | startswith($f + "/"))) | .id]' \
-        | jq --argjson items "$(printf '%s' "$ITEMS_CACHE" | jq '[.[] | {id, name, folderId}]')" \
-             --argjson pushed "$PUSHED_ITEMS" --arg m "$VAULT_MANIFEST" -r \
-             '. as $folders | $items[]
-              | select(.folderId as $fid | $folders | index($fid))
-              | select(.name != $m)
-              | select(.name as $n | $pushed | index($n) | not)
-              | "  \(.name)  (bw delete item \(.id))"')"
-if [[ -n "$STALE" ]]; then
-    echo
-    log_warn "In the vault but not pushed by this machine — delete if obsolete:"
-    printf '%s\n' "$STALE"
-fi
+print_stale
 
 if [[ -s "$FAILED" ]]; then
     echo
