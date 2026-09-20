@@ -28,6 +28,10 @@
 #   ~/.npmrc                                    personal
 #   ~/.aws/config                               work      acme
 #   ~/Library/Keychains/x.keychain-db           work      acme   file:x-keychain  macos
+#   ~/.config/gh/hosts.yml                      personal  -      -                linux,macos
+#
+# The columns are positional, so "-" is how one is left empty when a later one
+# is wanted.
 #
 # The fifth column is comma-separated and says where the path exists at all, so
 # a restore elsewhere skips it instead of writing a macOS keychain into a Linux
@@ -269,6 +273,12 @@ collect_tracked_paths() {
         set -- $line
         path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}; platform=${5:-}
         [[ -n "$path" ]] || continue
+        # The columns are positional, so a path that wants only the last one has
+        # to say something in the ones before it. "-" is that something, and
+        # means exactly what leaving the column off the end means.
+        [[ "$scope" == "-" ]] && scope=""
+        [[ "$owner" == "-" ]] && owner=""
+        [[ "$name"  == "-" ]] && name=""
         expanded="${path/#\~/$HOME}"
         if [[ ! -e "$expanded" ]]; then
             printf '  %s — listed in %s but not on this machine\n' "$path" "$TRACKED_PATHS" >> "$UNSCOPED"

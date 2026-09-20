@@ -29,6 +29,16 @@
   $env:SETTINGS_SECRETS_SCOPE, 그다음 ~/.config/settings/secrets.scope,
   그래도 없으면 personal.
 
+.PARAMETER Skip
+  이 기기에서만 건너뛸 항목 이름. 쉼표로 여러 개. 지정하지 않으면
+  $env:SETTINGS_SECRETS_SKIP, 그다음 ~/.config/settings/secrets.skip.
+
+  scope 도 platform 도 이 질문에 답하지 못하는 경우가 있습니다. vault 의
+  ssh:id_ed25519 는 어느 기기의 키이고 scope 는 personal 인데, 이미 자기 키를
+  가진 기기는 그것을 받으면 안 됩니다 - 두 기기가 같은 키를 쓰면 한쪽만
+  폐기할 수도, 로그에서 구분할 수도 없습니다. manifest 가 아니라 기기 쪽에
+  두는 이유도 그것입니다: vault 의 사실이 아니라 이 기기의 사정입니다.
+
 .PARAMETER DryRun
   아무것도 쓰지 않고 무엇이 복원될지만 출력합니다. 비밀번호를 묻지 않습니다.
   이미 세션이 있으면($env:BW_SESSION) 실제 manifest 를 열거합니다.
@@ -37,6 +47,7 @@
   .\Restore-Secrets.ps1 -DryRun
   .\Restore-Secrets.ps1
   .\Restore-Secrets.ps1 -Scope all
+  .\Restore-Secrets.ps1 -Skip ssh:id_ed25519
   .\Restore-Secrets.ps1 -VaultServer https://vault.example.com -Manifest my-bootstrap
 
 .NOTES
@@ -78,6 +89,12 @@ param(
 
   # scope 를 이 기기의 기본값으로 적어두는 파일. bash 판과 같은 경로입니다.
   [string]$ScopeFile = $(if ($env:SETTINGS_SECRETS_SCOPE_FILE) { $env:SETTINGS_SECRETS_SCOPE_FILE } else { Join-Path $HOME ".config\settings\secrets.scope" }),
+
+  # 이 기기에서만 건너뛸 항목 이름. 쉼표로 여러 개.
+  [string]$Skip = $(if ($env:SETTINGS_SECRETS_SKIP) { $env:SETTINGS_SECRETS_SKIP } else { "" }),
+
+  # -Skip 을 이 기기의 기본값으로 적어두는 파일.
+  [string]$SkipFile = $(if ($env:SETTINGS_SECRETS_SKIP_FILE) { $env:SETTINGS_SECRETS_SKIP_FILE } else { Join-Path $HOME ".config\settings\secrets.skip" }),
 
   # 쓰지 않고 계획만 출력
   [switch]$DryRun
@@ -560,6 +577,23 @@ function Resolve-Scope {
   return "personal"
 }
 
+# 이 기기가 이름으로 거절하는 항목들. scope 도 platform 도 "이 기기가 아니다"
+# 라고 말하지 못하는 경우가 있습니다 - vault 의 ssh:id_ed25519 는 누군가의
+# 기기 키이고, 이미 자기 키를 가진 기기는 그것을 받아선 안 됩니다. 덮어쓰면 두
+# 기기가 같은 키를 쓰게 되어 한쪽만 폐기할 수도, 로그에서 구분할 수도 없습니다.
+#
+# manifest 가 아니라 기기 쪽에 두는 이유: 이것은 vault 의 사실이 아니라 이
+# 기기의 사정입니다. 같은 항목을 다른 기기는 받아야 합니다.
+function Resolve-SkipList {
+  $raw = $Skip
+  if ([string]::IsNullOrWhiteSpace($raw) -and (Test-Path -LiteralPath $SkipFile)) {
+    $raw = ((Get-Content -LiteralPath $SkipFile -ErrorAction SilentlyContinue) |
+      Where-Object { $_ -and -not $_.TrimStart().StartsWith("#") }) -join ","
+  }
+  if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
+  return @($raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
 # 항목의 scope 가 요청한 scope 에 드는가.
 # 여러 삶이 한 덩어리에 섞인 항목(mixed)은 밖에서 쪼갤 수 없으므로 어느 scope 로도
 # 복원합니다. scope 가 아예 없는 항목은 scope 가 생기기 전에 쓰인 manifest 이고,
@@ -626,7 +660,9 @@ function Invoke-Manifest([string]$TmpDir) {
   $entries = @($entriesRaw)
 
   $want = Resolve-Scope
+  $skipList = Resolve-SkipList
   Info "manifest '$Manifest': $($entries.Count) entries, scope '$want'"
+  if ($skipList.Count -gt 0) { Info "이 기기가 건너뛰도록 지정된 항목: $($skipList -join ', ')" }
 
   $legacy = @($entries | Where-Object { -not $_.PSObject.Properties['scope'] }).Count
   if ($legacy -gt 0) {
@@ -650,6 +686,13 @@ function Invoke-Manifest([string]$TmpDir) {
       $exec = Get-Prop $e "exec"
       $plat = Get-Prop $e "platform"
       $escope = Get-Prop $e "scope"
+
+      # 이름으로 거절한 것이 제일 먼저입니다. 사용자가 직접 지목한 것이라,
+      # 다른 어떤 판정보다 먼저 그리고 눈에 띄게 말해야 합니다.
+      if ($skipList -contains $item) {
+        Info "건너뜀 $item (이 기기에서 제외)"
+        continue
+      }
 
       # scope 가 먼저입니다. 이 기기가 아예 원하지 않는 삶의 비밀은 dest 가
       # 멀쩡한지조차 따질 필요가 없습니다.

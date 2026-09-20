@@ -17,6 +17,10 @@
 #   <path>  <scope>  [owner]  [item-name]  [platforms]
 #   ~/.aws/config                        work  rtzr
 #   ~/Library/Keychains/x.keychain-db    work  rtzr  file:x-keychain  macos
+#   ~/.config/gh/hosts.yml               personal  -  -  linux,macos
+#
+# The columns are positional, so "-" is how one is left empty when a later one
+# is wanted.
 #
 # The fifth column is comma-separated and says where the path exists at all.
 # Without it every machine takes the item, and a keychain written onto a Linux
@@ -152,6 +156,12 @@ EOF
         local path scope owner name platform
         while read -r path scope owner name platform; do
             case "${path:-}" in ''|\#*) continue ;; esac
+            # "-" is how a column is left empty when a later one is wanted; the
+            # columns are positional, and scripts/secrets-push.sh reads the same
+            # file the same way.
+            [[ "${scope:-}" == "-" ]] && scope=""
+            [[ "${owner:-}" == "-" ]] && owner=""
+            [[ "${name:-}"  == "-" ]] && name=""
             printf '\n[[track]]\npath = "%s"\n' "$path"
             [[ -n "${scope:-}" ]] && printf 'scope = "%s"\n' "$scope"
             [[ -n "${owner:-}" ]] && printf 'owner = "%s"\n' "$owner"
