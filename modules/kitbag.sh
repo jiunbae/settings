@@ -29,7 +29,7 @@ fi
 # ==============================================================================
 # Pinned, like every other download this repository makes: an installer that
 # fetches "latest" installs whatever that URL serves on the day it runs.
-KITBAG_VERSION="${SETTINGS_KITBAG_VERSION:-v0.2.3}"
+KITBAG_VERSION="${SETTINGS_KITBAG_VERSION:-v0.2.4}"
 KITBAG_INSTALLER="https://raw.githubusercontent.com/Open330/kitbag/main/install.sh"
 KITBAG_BIN_DIR="${SETTINGS_KITBAG_BIN_DIR:-$HOME/.local/bin}"
 
