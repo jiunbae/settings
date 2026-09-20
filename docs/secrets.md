@@ -22,15 +22,68 @@ itself, behind the master password and verification code.
 Anyone can reuse this: point `SETTINGS_VAULT_SERVER` at your own vault, write
 your own manifest, done. Nothing in this repo needs forking or editing.
 
+## Scopes
+
+One vault, several lives. Every secret declares whose it is, and a machine
+restores only the scopes it asks for — so a personal laptop never has to hold an
+employer's credentials, and the machine that does can still get everything from
+the same place.
+
+| Scope | What it means |
+| --- | --- |
+| `personal` | Your own accounts and infrastructure |
+| `work` | An employer's or client's credentials |
+| `shared` | An account someone else owns that you were given access to |
+| `mixed` | One blob holding several of the above (aas accounts, an OTP vault, a GPG key with more than one identity) |
+| `local` | Machine-only — collected by nothing, pushed by nothing (a cached vault session, for instance) |
+
+The marker lives in the file, never in this repository: a public repo must not
+carry the list of which employer or which service each secret belongs to.
+
+```sh
+# ~/.envs/<service>.env, ~/.ssh/config.d/*.conf — a comment in the first 5 lines
+# scope: work
+# owner: acme        # optional, free text, kept as a vault field
+```
+
+A private key holds no comments, so it takes a sidecar instead —
+`~/.ssh/id_work.scope` containing the word `work`. A key with neither is the
+machine owner's own key (`personal`); **every other file without a marker is
+skipped and listed**, so a new secret is never filed into the wrong life by
+default.
+
+In the vault, scopes become folders under the bootstrap folder and a `scope`
+custom field on each item:
+
+    bootstrap/                 manifest
+    bootstrap/personal/        env:…, ssh:…
+    bootstrap/work/            env:…, ssh:config-…
+    bootstrap/shared/          env:…
+
+Changing a file's marker moves the item on the next push; items left in those
+folders that no machine pushes any more are reported with the command to delete
+them.
+
 ## New machine
 
 ```bash
 # 1. Public settings — unchanged
 curl -LsSf https://settings.jiun.dev | bash -s -- --all
 
-# 2. Secrets — separate, explicit command
+# 2. Secrets — separate, explicit command. Personal only, by default.
 cd ~/.settings && ./install.sh secrets
+
+# Everything, or a specific set:
+SETTINGS_SECRETS_SCOPE=all ./install.sh secrets
+SETTINGS_SECRETS_SCOPE=personal,work ./install.sh secrets
+
+# Or decide once per machine, and plain `./install.sh secrets` follows it:
+mkdir -p ~/.config/settings && echo all > ~/.config/settings/secrets.scope
 ```
+
+`./install.sh -n secrets` lists what each entry would do, with its scope, and
+writes nothing. `mixed` entries restore under every scope — they cannot be split
+from out here.
 
 Step 2 installs the Bitwarden CLI pinned to a version verified against the vault
 (`npm install -g @bitwarden/cli@2026.8.0`; override with `SETTINGS_BW_CLI_VERSION`),
@@ -80,14 +133,14 @@ Stored in the **notes** field of the vault item named by
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "entries": [
-    {"item": "ssh:id_ed25519", "source": "sshkey",       "dest": "~/.ssh/id_ed25519",     "mode": "600"},
-    {"item": "ssh:id_ed25519", "source": "field:public", "dest": "~/.ssh/id_ed25519.pub", "mode": "644"},
+    {"item": "ssh:id_ed25519", "source": "sshkey",       "dest": "~/.ssh/id_ed25519",     "mode": "600", "scope": "personal"},
+    {"item": "ssh:id_ed25519", "source": "field:public", "dest": "~/.ssh/id_ed25519.pub", "mode": "644", "scope": "personal"},
     {"item": "ssh:company",    "source": "attachment:20-company.conf",
-                               "dest": "~/.ssh/config.d/20-company.conf", "mode": "600"},
-    {"item": "gpg:primary",    "source": "notes", "exec": "gpg --batch --quiet --import"},
-    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust"}
+                               "dest": "~/.ssh/config.d/20-company.conf", "mode": "600", "scope": "work"},
+    {"item": "gpg:primary",    "source": "notes", "exec": "gpg --batch --quiet --import",    "scope": "mixed"},
+    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust", "scope": "mixed"}
   ]
 }
 ```
@@ -99,6 +152,7 @@ Stored in the **notes** field of the vault item named by
 | `dest` | File to write. `~` is expanded. Mutually exclusive with `exec` |
 | `exec` | Command to pipe the payload into. Mutually exclusive with `dest` |
 | `mode` | `chmod` for `dest`, default `600` |
+| `scope` | `personal`, `work`, `shared` or `mixed`. Missing (version 1 manifests) is treated as `mixed`, with a warning |
 
 Restores are idempotent: an unchanged `dest` is skipped, and a changed one is
 backed up to `<dest>.backup.<timestamp>` before being replaced.
@@ -124,6 +178,9 @@ smaller, diff-able in the web vault, and supported by every client.
 | `SETTINGS_VAULT_SERVER` | `https://vault.jiun.dev` | Vault base URL |
 | `SETTINGS_VAULT_MANIFEST` | `bootstrap` | Item holding the manifest |
 | `SETTINGS_VAULT_2FA_METHOD` | `0` | `0` authenticator, `1` email, `3` YubiKey |
+| `SETTINGS_SECRETS_SCOPE` | `personal` | Scopes to restore: a comma-separated list, or `all` |
+| `SETTINGS_SECRETS_SCOPE_FILE` | `~/.config/settings/secrets.scope` | Per-machine default for the above |
+| `SETTINGS_SCOPE_AAS` / `_BARSHELF` / `_OTPEEK` | `mixed` / `personal` / `mixed` | Scope pushed for each app blob |
 
 ```bash
 SETTINGS_VAULT_SERVER=https://vault.example.com \
@@ -137,6 +194,8 @@ SETTINGS_VAULT_MANIFEST=my-bootstrap \
   enumerates the manifest for real; otherwise it reports that the vault is locked.
 - Secret payloads are staged in a `umask 077` temp directory that is removed on
   exit, including on failure.
+- `scripts/tests/secrets-scope-smoke.sh` covers collection, scope routing and the
+  restore filter against a stubbed `bw`; it touches no vault and no real secret.
 - The vault stays unlocked in the calling shell afterwards. Run `bw lock` when
   finished.
 - The vault is a single point of failure for bootstrapping. Keep an offline
