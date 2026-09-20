@@ -168,14 +168,22 @@ usually live. Everything else is listed, one per line, in
 `~/.config/settings/secrets-paths` (override with `SETTINGS_TRACKED_PATHS`):
 
 ```
-# <path>  <scope>  [owner]  [item-name]
+# <path>  <scope>  [owner]  [item-name]  [platforms]
 ~/.npmrc                                   personal
 ~/.aws/config                              work      acme
-~/Library/Keychains/x.keychain-db          work      acme   file:x-keychain
+~/Library/Keychains/x.keychain-db          work      acme   file:x-keychain  macos
 ```
 
 - A `# scope:` header **inside** the file still wins over the column, so a file
   that can carry its own marker keeps carrying it.
+- The fifth column is comma-separated and says **where the path exists at all**;
+  it becomes the entry's [`platform`](#manifest-format). A keychain restored onto
+  a Linux server or a Windows profile looks like a restore that worked, right up
+  until something tries to read it. `scripts/kitbag-config.sh` reads the same
+  column out of the same file, so both engines agree about a given path. A name
+  that is not `macos`, `windows`, `linux` or `wsl` is a typo — and a typo here is
+  an entry that restores nowhere ever again, so it is reported and not pushed,
+  exactly like an unknown scope.
 - Text goes up as notes; **anything binary goes up as an attachment** and is
   written back byte for byte, which is how a keychain or a `.db` travels.
 - A listed path that is missing on this machine is reported, not silently

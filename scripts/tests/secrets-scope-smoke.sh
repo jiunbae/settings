@@ -63,11 +63,15 @@ make_tracked() {
   printf '%s\n' 'registry=https://example.test' '//example.test/:_authToken=abc' > "$home/.npmrc"
   printf '\x00\x01binary payload\x00' > "$home/Library/Keychains/fixture.keychain-db"
   printf '%s\n' '# scope: work' 'k = v' > "$home/self-marked.conf"
+  printf '%s\n' '# scope: personal' 'k = v' > "$home/tracked-bad.conf"
+  # The fifth column says where a path exists at all. scripts/kitbag-config.sh
+  # reads the same one, so the two engines must agree about this file.
   printf '%s\n' \
-    '# path                              scope     owner  name' \
-    '~/.npmrc                            personal' \
-    '~/Library/Keychains/fixture.keychain-db  work  acme  file:fixture-keychain' \
+    '# path                              scope     owner  name                   platforms' \
+    '~/.npmrc                            personal  me     file:npmrc             linux,macos' \
+    '~/Library/Keychains/fixture.keychain-db  work  acme  file:fixture-keychain  macos' \
     '~/self-marked.conf                  personal' \
+    '~/tracked-bad.conf                  personal  me     file:tracked-bad       nonsense' \
     '~/not-here.conf                     personal' \
     > "$home/.config/settings/secrets-paths"
 }
@@ -158,6 +162,9 @@ STUB
 
 run_push() { # <home> [args...]
   local home=$1; shift
+  # Fixed width: the tree view wraps its detail column against the terminal, so
+  # without this what the test sees depends on the window it happens to run in.
+  COLUMNS=200 \
   HOME="$home" \
   BW_STUB_STATE="$home/.bwstate" \
   BW_SESSION="stub" \
@@ -206,6 +213,10 @@ contains "a tracked binary is collected"     "file:fixture-keychain" "$TABLE"
 contains "binaries say so"                   "binary," "$TABLE"
 contains "the file's own marker wins"        "file:self-marked.conf" "$TABLE"
 contains "a missing path is reported"        "not-here.conf — listed in" "$DRY"
+contains "a path's platforms are shown before the push" "[macos]" "$TABLE"
+contains "a comma list becomes a list"       "[linux macos]" "$TABLE"
+lacks    "a bad platform name is not collected" "file:tracked-bad" "$TABLE"
+contains "and is reported with the valid names" "unknown platform 'nonsense'" "$DRY"
 lacks    "no phantom public field"       "~/.envs/personal.env  (+public)" "$TABLE"
 
 OUT="$(run_push "$HOME_A" --push)"
@@ -235,6 +246,14 @@ check "and lands back at its path" "~/Library/Keychains/fixture.keychain-db" \
   "$(jq -r '.entries[] | select(.item == "file:fixture-keychain") | .dest' <<< "$MANIFEST_A")"
 check "the marked file follows its own header, not the column" "work" \
   "$(jq -r '.entries[] | select(.item == "file:self-marked.conf") | .scope' <<< "$MANIFEST_A")"
+check "a tracked path's platform reaches the manifest" "macos" \
+  "$(jq -r '.entries[] | select(.item == "file:fixture-keychain") | .platform | join(" ")' <<< "$MANIFEST_A")"
+check "a text path carries one too" "linux macos" \
+  "$(jq -r '.entries[] | select(.item == "file:npmrc") | .platform | join(" ")' <<< "$MANIFEST_A")"
+check "a path without the column carries none" "" \
+  "$(jq -r '.entries[] | select(.item == "file:self-marked.conf") | .platform // empty | join(" ")' <<< "$MANIFEST_A")"
+check "and neither do the files collected by glob" "" \
+  "$(jq -r '.entries[] | select(.item == "env:personal") | .platform // empty | join(" ")' <<< "$MANIFEST_A")"
 check "manifest is version 2" "2" \
   "$(jq -r '.[] | select(.name == "bootstrap") | .notes' "$ITEMS" | jq -r '.version')"
 check "manifest entries carry scopes" "" \

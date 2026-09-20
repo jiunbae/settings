@@ -475,6 +475,13 @@ function Merge-AuthorizedKeys {
   }
 
   if ($added -eq 0) {
+    # 파일이 없는데 더할 줄도 없는 경우(payload 가 주석과 빈 줄뿐)가 있습니다.
+    # 그때는 만들 것도, 퍼미션을 맞출 것도 없습니다. 아래 Protect-Path 가
+    # 없는 경로에 Get-Acl 을 걸어 이 항목만 실패로 보고되던 자리입니다.
+    if (-not (Test-Path -LiteralPath $dest -PathType Leaf)) {
+      Ok "$ItemName (목록에 키가 없어 $dest 를 만들지 않았습니다)"
+      return
+    }
     Ok "$ItemName (이미 다 있음, $dest 그대로)"
   } else {
     [System.IO.File]::WriteAllText($dest, (($lines -join "`n") + "`n"),

@@ -24,10 +24,14 @@
 # Anything else is tracked by listing it in ~/.config/settings/secrets-paths,
 # one per line - because the next secret will not live where this script guessed:
 #
-#   <path>  <scope>  [owner]  [item-name]
+#   <path>  <scope>  [owner]  [item-name]  [platforms]
 #   ~/.npmrc                                    personal
 #   ~/.aws/config                               work      acme
-#   ~/Library/Keychains/x.keychain-db           work      acme   file:x-keychain
+#   ~/Library/Keychains/x.keychain-db           work      acme   file:x-keychain  macos
+#
+# The fifth column is comma-separated and says where the path exists at all, so
+# a restore elsewhere skips it instead of writing a macOS keychain into a Linux
+# home. scripts/kitbag-config.sh reads the same column out of the same file.
 #
 # A path's own `# scope:` header still wins over the column, so a file that can
 # carry the marker keeps carrying it. Text goes up as notes; anything binary
@@ -128,6 +132,19 @@ _owner_of() {
         | sed -nE 's/^[[:space:]]*#[[:space:]]*owner:[[:space:]]*(.+)$/\1/p' | head -1
 }
 
+# Where an entry can be restored at all. A name that is not one of these is a
+# typo, and a typo here is an entry that restores on no machine ever again -
+# which is worth the same treatment as an unknown scope: reported, not pushed.
+PLATFORMS_VALID="macos windows linux wsl"
+
+_platform_valid() {
+    local p
+    for p in ${1//,/ }; do
+        case " $PLATFORMS_VALID " in *" $p "*) ;; *) return 1 ;; esac
+    done
+    return 0
+}
+
 _scope_valid() {
     case " $SCOPES_VALID " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
@@ -153,7 +170,8 @@ _scope_gate() {
 # ==============================================================================
 # Collection
 # ==============================================================================
-# One line per entry: <srcpath> <item> <dest> <mode> <pubpath> <scope> <owner>.
+# One line per entry:
+#   <srcpath> <item> <dest> <mode> <pubpath> <scope> <owner> <platforms>.
 # Fields are separated by US (0x1f), not by a tab: bash counts a tab as IFS
 # whitespace, so a run of them collapses and an empty field - a key with no
 # .pub, a file with no owner - would shift every column after it.
@@ -170,8 +188,8 @@ collect() {
         case "$base" in _*) continue ;; esac
         scope="$(_scope_gate "$f" "env:$base")" || continue
         owner="$(_owner_of "$f")"
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-            "$f" "env:$base" "~/.envs/$base.env" 600 "" "$scope" "$owner" >> "$COLLECTED"
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+            "$f" "env:$base" "~/.envs/$base.env" 600 "" "$scope" "$owner" "" >> "$COLLECTED"
     done
 
     # ~/.ssh/id_* private keys, with the matching .pub carried as a field. A key
@@ -184,8 +202,8 @@ collect() {
         scope="$(_scope_gate "$f" "ssh:$base" personal)" || continue
         local pub=""
         [[ -f "$f.pub" ]] && pub="$f.pub"
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-            "$f" "ssh:$base" "~/.ssh/$base" 600 "$pub" "$scope" "" >> "$COLLECTED"
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+            "$f" "ssh:$base" "~/.ssh/$base" 600 "$pub" "$scope" "" "" >> "$COLLECTED"
     done
 
     # ~/.ssh/config.d/*.conf, minus whatever the repo already manages. Anything
@@ -201,8 +219,8 @@ collect() {
         fi
         scope="$(_scope_gate "$f" "ssh:config-${base%.conf}")" || continue
         owner="$(_owner_of "$f")"
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-            "$f" "ssh:config-${base%.conf}" "~/.ssh/config.d/$base" 600 "" "$scope" "$owner" >> "$COLLECTED"
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+            "$f" "ssh:config-${base%.conf}" "~/.ssh/config.d/$base" 600 "" "$scope" "$owner" "" >> "$COLLECTED"
     done
 
     collect_tracked_paths
@@ -213,8 +231,8 @@ collect() {
     if [[ -f "$ak" ]]; then
         if scope="$(_scope_gate "$ak" "ssh:authorized_keys")"; then
             owner="$(_owner_of "$ak")"
-            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-                "$ak" "ssh:authorized_keys" "~/.ssh/authorized_keys" 600 "" "$scope" "$owner" >> "$COLLECTED"
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$ak" "ssh:authorized_keys" "~/.ssh/authorized_keys" 600 "" "$scope" "$owner" "" >> "$COLLECTED"
         fi
     fi
 }
@@ -244,12 +262,12 @@ _is_text() { grep -Iq . "$1" 2>/dev/null; }
 
 collect_tracked_paths() {
     [[ -f "$TRACKED_PATHS" ]] || return 0
-    local line path scope owner name expanded
+    local line path scope owner name platform expanded
     while IFS= read -r line; do
         case "$line" in ''|\#*) continue ;; esac
         # shellcheck disable=SC2086
         set -- $line
-        path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}
+        path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}; platform=${5:-}
         [[ -n "$path" ]] || continue
         expanded="${path/#\~/$HOME}"
         if [[ ! -e "$expanded" ]]; then
@@ -272,16 +290,22 @@ collect_tracked_paths() {
             continue
         fi
         [[ "$declared" == "local" ]] && continue
+        if [[ -n "$platform" ]] && ! _platform_valid "$platform"; then
+            printf '  %s — unknown platform '"'"'%s'"'"' (want: %s)\n' \
+                "$path" "$platform" "${PLATFORMS_VALID// /, }" >> "$UNSCOPED"
+            continue
+        fi
+        platform="${platform//,/ }"
         [[ -n "$name" ]] || name="$(_path_item_name "$expanded")"
         [[ -n "$owner" ]] || owner="$(_owner_of "$expanded")"
 
         if _is_text "$expanded"; then
-            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" >> "$COLLECTED"
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" "$platform" >> "$COLLECTED"
         else
             # Binary: goes up as an attachment and is placed back as a file.
-            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" >> "$BINARIES"
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" "$platform" >> "$BINARIES"
         fi
     done < "$TRACKED_PATHS"
 }
@@ -323,6 +347,18 @@ collect_apps() {
             'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' \
             otpeek "$SCOPE_OTPEEK" macos >> "$APPS"
     fi
+}
+
+# _platform_json <space-separated names> - the manifest's platform array, or [].
+# jq -R on empty input prints nothing and --argjson refuses an empty string,
+# which under `set -e` would abort a push after the attachments are uploaded
+# and the old ones pruned, but before the manifest is written.
+_platform_json() {
+    if [[ -z "${1:-}" ]]; then
+        printf '[]'
+        return 0
+    fi
+    printf '%s' "$1" | jq -R 'split(" ") | map(select(length > 0))'
 }
 
 _sha256() {   # hashes stdin
@@ -725,20 +761,22 @@ print_collected() {   # <section title>
     local rows="$TMPDIR_ROWS"
     : > "$rows"
 
-    local src item dest mode pub scope owner detail spans group
-    while IFS="$SEP" read -r src item dest mode pub scope owner; do
+    local src item dest mode pub scope owner platforms detail spans group
+    while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
         detail="$(_detail "$item" "$src" "$mode" "$pub")"
         if [[ "$scope" == "mixed" ]]; then
             spans="$(_spans_of "$src")"
             [[ -n "$spans" ]] && detail="${detail:+$detail  }— $spans"
         fi
+        [[ -n "$platforms" ]] && detail="$detail  [$platforms]"
         group="$scope"
         [[ -n "$owner" ]] && group="$scope · $owner"
         printf '%s\t%s\t%s\n' "$group" "$item" "$detail" >> "$rows"
     done < "$COLLECTED"
 
-    while IFS="$SEP" read -r src item dest mode pub scope owner; do
+    while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
         detail="binary, $(wc -c < "$src" | tr -d ' ') bytes → $dest"
+        [[ -n "$platforms" ]] && detail="$detail  [$platforms]"
         group="$scope"
         [[ -n "$owner" ]] && group="$scope · $owner"
         printf '%s\t%s\t%s\n' "$group" "$item" "$detail" >> "$rows"
@@ -847,7 +885,7 @@ ENTRIES="$(mktemp)"
 PAYLOADS="$(umask 077; mktemp -d "${TMPDIR:-/tmp}/settings-push.XXXXXX")"
 
 print_section "Pushing"
-while IFS="$SEP" read -r src item dest mode pub scope owner; do
+while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
     content="$(cat "$src")"
     if [[ -z "$content" ]]; then
         log_warn "skipped  $item (empty file: $src)"
@@ -868,7 +906,9 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
             '{item: $item, source: "notes", exec: $exec, scope: $scope}' >> "$ENTRIES"
     else
         jq -n --arg item "$item" --arg dest "$dest" --arg mode "$mode" --arg scope "$scope" \
-            '{item: $item, source: "notes", dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
+            --argjson plat "$(_platform_json "$platforms")" \
+            '{item: $item, source: "notes", dest: $dest, mode: $mode, scope: $scope}
+             | if ($plat | length) > 0 then .platform = $plat else . end' >> "$ENTRIES"
     fi
 
     if [[ -n "$pubval" ]]; then
@@ -879,7 +919,7 @@ done < "$COLLECTED"
 
 # Tracked paths that are not text: the file itself is the attachment, and the
 # restore writes it back byte for byte.
-while IFS="$SEP" read -r src item dest mode pub scope owner; do
+while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
     fid="$(_folder_id "$(_scope_folder "$scope")")"
     fp="$(_sha256 < "$src")"
     fname="$(basename "$src")"
@@ -893,18 +933,13 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
     fi
     jq -n --arg item "$item" --arg src "attachment:$fname" --arg dest "$dest" \
           --arg mode "$mode" --arg scope "$scope" \
-        '{item: $item, source: $src, dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
+          --argjson plat "$(_platform_json "$platforms")" \
+        '{item: $item, source: $src, dest: $dest, mode: $mode, scope: $scope}
+         | if ($plat | length) > 0 then .platform = $plat else . end' >> "$ENTRIES"
 done < "$BINARIES"
 
 while IFS="$SEP" read -r item fname exec_cmd kind scope platforms; do
-    # jq -R on empty input prints nothing, and --argjson refuses an empty string -
-    # which under `set -e` would abort the push here, after the attachments are
-    # already uploaded and the old ones pruned, but before the manifest is written.
-    if [[ -n "$platforms" ]]; then
-        plat_json="$(printf '%s' "$platforms" | jq -R 'split(" ") | map(select(length > 0))')"
-    else
-        plat_json='[]'
-    fi
+    plat_json="$(_platform_json "$platforms")"
     manifest_entry() {
         jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" --arg scope "$scope" \
             --argjson plat "$plat_json" \

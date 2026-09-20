@@ -354,6 +354,23 @@ Contains "and says how to mark it macOS-only"    'platform": ["macos"]' $refused
 Contains "the rest of the manifest still runs"   "복원:" $refused
 Check    "including the key after it" $true (Test-Path -LiteralPath (Join-Path $fx.HomeDir ".ssh\id_ed25519"))
 
+# 목록에 키가 하나도 없고(주석뿐) 이 기기에 authorized_keys 도 아직 없는 경우.
+# 만들 것도 퍼미션을 맞출 것도 없는데, 없는 경로에 ACL 을 걸어 이 항목만
+# 실패로 보고되던 자리입니다.
+$fx = New-Fixture (Join-Path $TestRoot "emptykeys")
+$itemsPath = Join-Path $fx.State "items.json"
+$items = Get-Content -LiteralPath $itemsPath -Raw | ConvertFrom-Json
+($items | Where-Object { $_.name -eq "ssh:authorized_keys" }).notes = "# scope: personal`n# (no keys)"
+[System.IO.File]::WriteAllText($itemsPath, ($items | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+
+$empty = Invoke-Restore $fx
+Contains "a list of nothing creates no file" "만들지 않았습니다" $empty
+Lacks    "and is not reported as a failure"  "ssh:authorized_keys 실패" $empty
+Check    "the file really is absent" $false `
+  (Test-Path -LiteralPath (Join-Path $fx.HomeDir ".ssh\authorized_keys"))
+Check    "while the rest of the manifest landed" $true `
+  (Test-Path -LiteralPath (Join-Path $fx.HomeDir ".ssh\id_ed25519"))
+
 # manifest 항목이 없는 경우: 이 자리에서 제일 흔한 원인은 낡은 캐시입니다.
 $fx = New-Fixture (Join-Path $TestRoot "nomanifest")
 $itemsPath = Join-Path $fx.State "items.json"
