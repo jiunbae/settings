@@ -2,6 +2,11 @@
 # secrets-push.sh - publish local private material into the vault that
 # `install.sh secrets` restores from. The inverse of modules/secrets.sh.
 #
+# SUPERSEDED. `kitbag push` does this job now, and `install.sh secrets` restores
+# with kitbag. This script still works and still writes the manifest the older
+# engine reads, which is what a machine that has not moved across needs; when
+# every machine is across, it and the manifest can go. See docs/kitbag.md.
+#
 #   scripts/secrets-push.sh              # show what would be pushed, touch nothing
 #   scripts/secrets-push.sh --push       # create/update vault items and the manifest
 #

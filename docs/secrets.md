@@ -1,5 +1,9 @@
 # Secrets
 
+> **Replaced.** `./install.sh secrets` restores with [kitbag](kitbag.md) now.
+> This page describes the engine underneath it, which still runs for a machine
+> that has not moved across: `SETTINGS_SECRETS_ENGINE=bash ./install.sh secrets`.
+
 `./install.sh secrets` restores private material — SSH keys, GPG keys, `.env`
 files, host configs that are too sensitive for a public repo, and app state such as aas
 accounts, BarShelf data and the OTPeek vault — from a
