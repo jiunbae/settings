@@ -68,7 +68,8 @@ UNSCOPED="$(mktemp)"    # files skipped for want of a usable scope
 FOLDERS_CACHE="$(mktemp)"
 ENTRIES=""              # manifest entries, created by the push
 PAYLOADS=""             # staged app payloads, created by the push
-cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$FOLDERS_CACHE" ${ENTRIES:+"$ENTRIES"} ${PAYLOADS:+"$PAYLOADS"}; }
+FAILED=""                # items this run could not write; set once bw is in play
+cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$FOLDERS_CACHE" ${FAILED:+"$FAILED"} ${ENTRIES:+"$ENTRIES"} ${PAYLOADS:+"$PAYLOADS"}; }
 trap cleanup EXIT
 
 # ==============================================================================
@@ -237,6 +238,42 @@ make_app_payload() {
 # Vault upsert
 # ==============================================================================
 
+# A vault write that survives a blip. The server is on the other side of a
+# network: one FetchError used to abort the whole run with `set -e`, leaving
+# half the items pushed and no manifest at all.
+_bw_write() {   # <payload> <bw-command...>
+    local payload=$1; shift
+    local attempt=1 err
+    while :; do
+        if err="$(printf '%s' "$payload" | bw encode | "$@" 2>&1 >/dev/null)"; then
+            return 0
+        fi
+        if (( attempt >= 3 )); then
+            log_error "${*}: ${err%%$'\n'*}"
+            return 1
+        fi
+        log_warn "vault write failed (attempt $attempt/3), retrying: ${err%%$'\n'*}"
+        sleep $(( attempt * 3 ))
+        attempt=$(( attempt + 1 ))
+    done
+}
+
+# Same for a read, which can fail the same way.
+_bw_read() {    # <bw-command...>
+    local attempt=1 out
+    while :; do
+        if out="$("$@" 2>/dev/null)"; then
+            printf '%s' "$out"
+            return 0
+        fi
+        if (( attempt >= 3 )); then
+            return 1
+        fi
+        sleep $(( attempt * 3 ))
+        attempt=$(( attempt + 1 ))
+    done
+}
+
 # _folder_id <name> — the id of that vault folder, created on first use.
 # Bitwarden folders are flat but a "/" in the name nests them in the clients, so
 # scopes appear as bootstrap/personal, bootstrap/work, bootstrap/shared.
@@ -299,11 +336,13 @@ upsert_note() {
         .fields = ((.fields // []) | put("public"; $pub) | put("scope"; $scope) | put("owner"; $owner))'
 
     if [[ -n "$id" ]]; then
-        payload="$(bw get item "$id" | jq \
+        local current
+        current="$(_bw_read bw get item "$id")" || { log_error "could not read $name"; return 1; }
+        payload="$(printf '%s' "$current" | jq \
             --arg notes "$notes" --arg pub "$pub" --arg fid "$fid" \
             --arg scope "$scope" --arg owner "$owner" \
             ".notes = \$notes | .folderId = \$fid | $fields_filter")"
-        printf '%s' "$payload" | bw encode | bw edit item "$id" >/dev/null
+        _bw_write "$payload" bw edit item "$id" || return 1
         log_success "updated  $name${scope:+  [$scope]}"
     else
         payload="$(bw get template item | jq \
@@ -317,7 +356,7 @@ upsert_note() {
              | .login = null | .card = null | .identity = null
              | .fields = []
              | $fields_filter")"
-        printf '%s' "$payload" | bw encode | bw create item >/dev/null
+        _bw_write "$payload" bw create item || return 1
         log_success "created  $name${scope:+  [$scope]}"
     fi
 }
@@ -330,23 +369,34 @@ upsert_attachment() {
     fname="$(basename "$file")"
     id="$(_item_id "$name")"
     if [[ -z "$id" ]]; then
-        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope"
+        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope" || return 1
         _load_items
         id="$(_item_id "$name")"
     else
         # Keep folder and scope current even when the attachment is all that changes.
-        upsert_note "$name" "$(bw get item "$id" | jq -r '.notes // ""')" "$fid" "" "$scope" >/dev/null
+        local notes
+        notes="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes=""
+        upsert_note "$name" "$notes" "$fid" "" "$scope" >/dev/null || return 1
     fi
 
     local before after
-    before="$(bw get item "$id" | jq -r --arg f "$fname" '[(.attachments // [])[] | select(.fileName == $f) | .id] | join(" ")')"
-    bw create attachment --file "$file" --itemid "$id" >/dev/null
+    before="$(_bw_read bw get item "$id" | jq -r --arg f "$fname" '[(.attachments // [])[] | select(.fileName == $f) | .id] | join(" ")')" || return 1
+    local attempt=1
+    until bw create attachment --file "$file" --itemid "$id" >/dev/null 2>&1; do
+        if (( attempt >= 3 )); then
+            log_error "could not upload $fname to $name"
+            return 1
+        fi
+        log_warn "attachment upload failed (attempt $attempt/3), retrying"
+        sleep $(( attempt * 3 ))
+        attempt=$(( attempt + 1 ))
+    done
     # Upload first, then remove every older copy, so a failed upload never
     # leaves the item without one - and a failed delete is reported, not ignored.
     for old in $before; do
         bw delete attachment "$old" --itemid "$id" >/dev/null || log_warn "could not delete old attachment $old on $name"
     done
-    after="$(bw get item "$id" | jq -r --arg f "$fname" '[(.attachments // [])[] | select(.fileName == $f)] | length')"
+    after="$(_bw_read bw get item "$id" | jq -r --arg f "$fname" '[(.attachments // [])[] | select(.fileName == $f)] | length')" || after="?"
     if [[ "$after" == "1" ]]; then
         log_success "attached $name/$fname"
     else
@@ -398,6 +448,8 @@ ensure_vault_cli
 vault_unlock
 
 _load_items
+# A push that half-worked must say so at the end rather than in the middle.
+FAILED="$(mktemp)"
 ENTRIES="$(mktemp)"
 # App payloads are credentials too: stage them where only this user can read.
 PAYLOADS="$(umask 077; mktemp -d "${TMPDIR:-/tmp}/settings-push.XXXXXX")"
@@ -414,7 +466,10 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
     [[ -n "$pub" ]] && pubval="$(cat "$pub")"
 
     fid="$(_folder_id "$(_scope_folder "$scope")")"
-    upsert_note "$item" "$content" "$fid" "$pubval" "$scope" "$owner"
+    if ! upsert_note "$item" "$content" "$fid" "$pubval" "$scope" "$owner"; then
+        printf '%s\n' "  $item" >> "$FAILED"
+        continue
+    fi
 
     jq -n --arg item "$item" --arg dest "$dest" --arg mode "$mode" --arg scope "$scope" \
         '{item: $item, source: "notes", dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
@@ -432,7 +487,11 @@ while IFS="$SEP" read -r item fname exec_cmd kind scope; do
         continue
     fi
     fid="$(_folder_id "$(_scope_folder "$scope")")"
-    upsert_attachment "$item" "$payload" "$fid" "$scope"
+    if ! upsert_attachment "$item" "$payload" "$fid" "$scope"; then
+        printf '%s\n' "  $item" >> "$FAILED"
+        rm -f "$payload"
+        continue
+    fi
     rm -f "$payload"
 
     jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" --arg scope "$scope" \
@@ -458,7 +517,12 @@ if [[ -n "$EXISTING_EXTRA" ]]; then
 fi
 
 MANIFEST="$(jq -s '{version: 2, entries: .}' < "$ENTRIES")"
-upsert_note "$VAULT_MANIFEST" "$MANIFEST" "$(_folder_id "$VAULT_FOLDER")"
+# The manifest lists only what actually landed, so a restore never chases an
+# item this run failed to write.
+if ! upsert_note "$VAULT_MANIFEST" "$MANIFEST" "$(_folder_id "$VAULT_FOLDER")"; then
+    log_error "The manifest itself could not be written — run the push again."
+    exit 1
+fi
 
 echo
 log_success "Pushed $(jq '.entries | length' <<< "$MANIFEST") manifest entries to $VAULT_SERVER"
@@ -482,6 +546,14 @@ if [[ -n "$STALE" ]]; then
     echo
     log_warn "In the vault but not pushed by this machine — delete if obsolete:"
     printf '%s\n' "$STALE"
+fi
+
+if [[ -s "$FAILED" ]]; then
+    echo
+    log_error "These items could not be written and are NOT in the manifest:"
+    cat "$FAILED"
+    log_info "Run the push again — it updates in place, so nothing is duplicated."
+    exit 1
 fi
 
 log_info "Verify with: ./install.sh -n secrets"

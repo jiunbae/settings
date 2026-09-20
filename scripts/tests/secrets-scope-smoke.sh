@@ -110,6 +110,13 @@ case "${1:-}" in
     esac ;;
   edit)
     payload=$(cat)
+    if [[ -n "${BW_STUB_FAIL_NAME:-}" ]] && grep -q "\"${BW_STUB_FAIL_NAME}\"" <<< "$payload"; then
+      n=$(cat "$STATE/fail.count" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$STATE/fail.count"
+      if (( n <= ${BW_STUB_FAIL_TIMES:-99} )); then
+        echo "FetchError: request to https://vault.test/api/ciphers/x failed, reason: socket hang up" >&2
+        exit 1
+      fi
+    fi
     jq --arg id "$3" --argjson p "$payload" 'map(if .id == $id then ($p + {id: $id, attachments: (.attachments // [])}) else . end)' \
       "$STATE/items.json" > "$STATE/items.tmp" && mv "$STATE/items.tmp" "$STATE/items.json"
     echo "$payload" ;;
@@ -131,6 +138,8 @@ run_push() { # <home> [args...]
   BW_STUB_STATE="$home/.bwstate" \
   BW_SESSION="stub" \
   SETTINGS_VAULT_SERVER="https://vault.test" \
+  BW_STUB_FAIL_NAME="${FAIL_NAME:-}" \
+  BW_STUB_FAIL_TIMES="${FAIL_TIMES:-99}" \
   PATH="$home/bin:$PATH" \
     bash "$REPO_ROOT/scripts/secrets-push.sh" "$@" 2>&1
 }
@@ -195,6 +204,39 @@ printf '%s\n' '# scope: local' 'export SHARED_TOKEN=s' > "$HOME_A/.envs/shared.e
 STALE_OUT="$(run_push "$HOME_A" --push)"
 contains "stale vault item reported" "env:shared" \
   "$(printf '%s' "$STALE_OUT" | sed -n '/In the vault but not pushed/,$p')"
+
+# ------------------------------------------------------------------------------
+printf '\nsecrets-push: a server that drops the connection\n'
+
+# Transient: the write fails once, the retry gets through.
+HOME_B="$TEST_ROOT/b"
+make_home "$HOME_B"
+make_bw_stub "$HOME_B"
+run_push "$HOME_B" --push >/dev/null            # first push creates everything
+RC=0
+OUT_B="$(FAIL_NAME="env:work" FAIL_TIMES=1 run_push "$HOME_B" --push)" || RC=$?
+check "transient failure is retried, run succeeds" "0" "$RC"
+contains "retry is announced" "retrying" "$OUT_B"
+check "the item is still written" "1" \
+  "$(jq -r '[.[] | select(.name == "env:work")] | length' "$HOME_B/.bwstate/items.json")"
+
+# Permanent: the item is reported, skipped, and left out of the manifest, while
+# everything else still goes up.
+HOME_C="$TEST_ROOT/c"
+make_home "$HOME_C"
+make_bw_stub "$HOME_C"
+run_push "$HOME_C" --push >/dev/null
+RC=0
+OUT_C="$(FAIL_NAME="env:work" run_push "$HOME_C" --push)" || RC=$?
+check "a write that keeps failing exits non-zero" "1" "$RC"
+contains "the failed item is named" "env:work" \
+  "$(sed -n '/could not be written/,$p' <<< "$OUT_C")"
+contains "other items still pushed" "env:personal" "$OUT_C"
+MANIFEST_C="$(jq -r '.[] | select(.name == "bootstrap") | .notes' "$HOME_C/.bwstate/items.json")"
+check "manifest excludes the failed item" "" \
+  "$(jq -r '[.entries[] | select(.item == "env:work")] | .[0].item // empty' <<< "$MANIFEST_C")"
+check "manifest keeps the others" "env:personal" \
+  "$(jq -r '[.entries[] | select(.item == "env:personal")] | .[0].item // empty' <<< "$MANIFEST_C")"
 
 # ------------------------------------------------------------------------------
 printf '\nsecrets restore: scope filter\n'
