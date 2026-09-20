@@ -52,7 +52,14 @@ scopes_on_disk() {
     {
         grep -h -m1 '^# scope:' "$HOME"/.envs/*.env "$HOME"/.ssh/config.d/*.conf 2>/dev/null
         # The extra-paths file names a scope in its second column.
-        [[ -f "$TRACKED_PATHS" ]] && awk '!/^#/ && NF > 1 { print "# scope: " $2 }' "$TRACKED_PATHS"
+        #
+        # An `if` rather than `[[ ... ]] &&`: this is the last command in the
+        # group, so its status is the group's, `pipefail` carries that out of
+        # the pipeline, and `set -e` ends the run. On a machine with no such
+        # file the generator printed its header and stopped, saying nothing.
+        if [[ -f "$TRACKED_PATHS" ]]; then
+            awk '!/^#/ && NF > 1 { print "# scope: " $2 }' "$TRACKED_PATHS"
+        fi
     } | sed 's/^# scope:[[:space:]]*//' | tr ',' '\n' \
       | sed 's/[[:space:]]//g' \
       | grep -vxE 'local|mixed' | grep -v '^$' | sort -u
