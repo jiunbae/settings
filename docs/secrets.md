@@ -126,6 +126,53 @@ brew install open330/tap/aas                              # + install BarShelf.a
 cd ~/.settings && ./install.sh secrets                     # keys, envs, app data
 ```
 
+## Seeing where things stand
+
+```bash
+scripts/secrets-push.sh            # what this machine holds, grouped by scope. Reads nothing remote.
+scripts/secrets-push.sh --status   # the same, marked against the vault. Writes nothing.
+scripts/secrets-push.sh --push     # apply
+./install.sh -n secrets            # what a restore would write here
+```
+
+`--status` unlocks the vault read-only and marks every item with what a push
+would do to it:
+
+    + new         the vault has never seen it
+    ~ changed     the vault holds something else
+    = unchanged   nothing to send
+    ? built on push   only building the payload would tell (the aas bundle,
+                      whose tokens rotate on their own)
+
+It ends with the items sitting in the vault that this machine no longer sends —
+a file that turned `local`, was deleted, or lost its marker — each with the
+command to remove it.
+
+## Tracking a path that is not where this script guessed
+
+`~/.envs/*.env`, `~/.ssh/id_*`, `~/.ssh/config.d/*.conf` and
+`~/.ssh/authorized_keys` are collected because they are where these things
+usually live. Everything else is listed, one per line, in
+`~/.config/settings/secrets-paths` (override with `SETTINGS_TRACKED_PATHS`):
+
+```
+# <path>  <scope>  [owner]  [item-name]
+~/.npmrc                                   personal
+~/.aws/config                              work      acme
+~/Library/Keychains/x.keychain-db          work      acme   file:x-keychain
+```
+
+- A `# scope:` header **inside** the file still wins over the column, so a file
+  that can carry its own marker keeps carrying it.
+- Text goes up as notes; **anything binary goes up as an attachment** and is
+  written back byte for byte, which is how a keychain or a `.db` travels.
+- A listed path that is missing on this machine is reported, not silently
+  skipped — that is usually a machine that has not been set up yet, not a typo.
+- Directories are refused: track the files inside them, so a restore never
+  writes a tree you did not look at.
+
+The item name defaults to a slug of the path (`~/.aws/config` → `file:aws-config`).
+
 ## Machine trust
 
 `scripts/ssh-trust.sh` keeps one list of the keys your own machines log in with,
