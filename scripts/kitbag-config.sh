@@ -12,6 +12,16 @@
 # `# scope:` markers - kitbag reads the same markers, which is why this is a
 # translation rather than a migration.
 #
+# ~/.config/settings/secrets-paths is read for the extra paths, one per line:
+#
+#   <path>  <scope>  [owner]  [item-name]  [platforms]
+#   ~/.aws/config                        work  rtzr
+#   ~/Library/Keychains/x.keychain-db    work  rtzr  file:x-keychain  macos
+#
+# The fifth column is comma-separated and says where the path exists at all.
+# Without it every machine takes the item, and a keychain written onto a Linux
+# server looks like a restore that worked.
+#
 # The file is written for review, never applied: the next step is `kitbag
 # status`, which reads and reports and changes nothing.
 
