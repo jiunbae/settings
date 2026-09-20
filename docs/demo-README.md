@@ -44,10 +44,18 @@ docs/demo-teardown.sh
 > **VHS v0.12.0 cannot produce a GIF.** It runs, prints `Creating
 > docs/demo.gif...`, exits 0, and writes nothing. In that release
 > `evaluator.go` cancels the recording context in `teardown()` and then hands
-> that same cancelled context to `Render()`, which builds the ffmpeg command
-> with `exec.CommandContext` — so Go refuses to start ffmpeg, and the error it
-> returns is printed as an empty line. It looks exactly like a font or a
-> permissions problem, and it is neither.
+> that same cancelled context to `Render()`, which builds the encoder with
+> `exec.CommandContext`. Go returns `context canceled` from that without ever
+> starting ffmpeg, and VHS prints the error as `log.Println(string(out))` — an
+> empty line. It looks exactly like a font or a permissions problem, and it is
+> neither.
+>
+> Checked rather than assumed: building v0.12.0 from the tag reproduces it, so
+> it is not a packaging problem, and the same build with that one line changed
+> to `context.WithoutCancel(ctx)` writes the GIF. Upstream has it as
+> [#787][787], with four open fix PRs ([#788][788], #789, #790, [#791][791]).
+> Un-pin once one of them ships in a release, but do not plan around it: the
+> fix for the `Wait` bug below has been sitting open since August 2025.
 >
 > Pin the previous release:
 >
@@ -103,12 +111,10 @@ Four details in the sandbox are load-bearing, and each one cost a take:
 
 ## Tuning the tape
 
-* **Timing is a fixed `Sleep`, on purpose.** `Wait+Screen /Installation
-  Complete!/` reads better and does not work here: the wait and the frame
-  recorder contend for the same CDP connection, the terminal stops draining
-  partway through the run, and the wait times out on a recording that had
-  already finished. If you change a shim delay in `demo-setup.sh`, re-time the
-  run and move the `Sleep` with it:
+* **Timing is a fixed `Sleep`, and `Wait` is not an option.**
+  `Wait+Screen /Installation Complete!/` is the obvious way to write this, and
+  it cannot work at any timeout — see the note below. If you change a shim
+  delay in `demo-setup.sh`, re-time the run and move the `Sleep` with it:
 
   ```bash
   eval "$(docs/demo-setup.sh)" && time ./install.sh --core && docs/demo-teardown.sh
@@ -141,6 +147,52 @@ Four details in the sandbox are load-bearing, and each one cost a take:
     -lavfi "paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y /tmp/demo.gif
   ```
 
+## Why the tape cannot use `Wait`
+
+VHS reads the terminal for `Wait+Screen` in `testing.go`:
+
+```js
+() => Array(term.rows).fill(0).map((e, i) =>
+        term.buffer.active.getLine(i).translateToString().trimEnd())
+```
+
+`getLine` takes an **absolute** buffer index, so this is lines `0 … rows-1` of
+the buffer — not of the viewport. `CurrentLine()`, the function directly below
+it, gets this right (`getLine(cursorY + viewportY)`). Before the terminal has
+scrolled the two are the same, which is why `Wait` looks like it works.
+
+The installer's summary is longer than a screen. The moment it scrolls, `Wait`
+is comparing against a frozen snapshot of the first screenful — which ends at
+`• NeoVim` — and `Installation Complete!` is never in it. Timeouts of 45s and
+300s fail on the byte-identical 25 lines — ~28s and ~283s after the run had in
+fact finished.
+
+Demonstrated rather than deduced, if you want to check it yourself: a tape that
+waits for a string which has already scrolled off *matches*, while one that
+waits for the string at the bottom of the live screen *times out* and reports
+buffer line 0 as the last value it saw. Rebuild VHS with `getLine(i)` changed
+to `getLine(term.buffer.active.viewportY + i)` and both results invert — and
+this tape then passes with `Wait+Screen`.
+
+Upstream: [charmbracelet/vhs#659][659], open since August 2025, with the same
+diagnosis and the same line. Two fixes for it are already open and unmerged —
+[#658][658], which renames `Buffer` to `VisibleLines`, and [#704][704], the
+one-line `viewportY` offset — so there is nothing left for us to contribute
+there. The unfixed `getLine(i)` is still in v0.11.0, v0.12.0 and `main`, so
+pinning a version does not help either; only the fixed `Sleep` does.
+
+Worth knowing even if one of them lands: the discussion on #658 points out that
+`Wait+Screen` polls every 10ms, so output that scrolls past the viewport
+between two polls can be missed anyway. A summary that prints 38 lines at once
+is exactly that race, and a fixed `Sleep` is not in it.
+
+[659]: https://github.com/charmbracelet/vhs/issues/659
+[658]: https://github.com/charmbracelet/vhs/pull/658
+[704]: https://github.com/charmbracelet/vhs/pull/704
+[787]: https://github.com/charmbracelet/vhs/issues/787
+[788]: https://github.com/charmbracelet/vhs/pull/788
+[791]: https://github.com/charmbracelet/vhs/pull/791
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -150,4 +202,5 @@ Four details in the sandbox are load-bearing, and each one cost a take:
 | Spinner and box-drawing render as dashes | JetBrains Mono Nerd Font is missing and the terminal fell back. | Install the cask; re-render. |
 | Every component says "(already installed)" | The sandbox `PATH` or the `brew` shim was bypassed — usually a tape edited to skip the prelude. | Check that the prelude's `eval` ran before `./install.sh`. |
 | The recording cuts off mid-run | A shim delay grew, or the machine is slower than the one that timed the tape. | Re-time the run and raise the `Sleep` in `demo.tape`. |
+| `Wait+Screen` times out on text that is plainly on screen | VHS matches against buffer lines `0 … rows-1`, which stop being the viewport as soon as the terminal scrolls. | Not fixable from the tape — use `Sleep`. See the section above. |
 | `refusing to remove /tmp/...: no .settings-demo marker` | `SETTINGS_DEMO_ROOT` points at something the setup script did not build. | Correct the variable. The teardown will not delete a directory it does not recognise. |

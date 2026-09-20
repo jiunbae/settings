@@ -230,6 +230,33 @@ collect_apps() {
     fi
 }
 
+_sha256() {   # hashes stdin
+    if command_exists shasum; then shasum -a 256 | awk '{print $1}'
+    else sha256sum | awk '{print $1}'; fi
+}
+
+# app_fingerprint <kind> — what the payload would be built from, hashed without
+# building it. Rebuilding is not free: the aas bundle asks the login keychain
+# for every credential, and the tarballs read the whole directory.
+# Empty output means "cannot tell cheaply" — then the payload itself is hashed.
+app_fingerprint() {
+    case "$1" in
+        barshelf)
+            find "$BARSHELF_DIR" -type f \
+                -not -path '*/runtime/*' -not -path '*/cache/*' -print0 2>/dev/null \
+                | LC_ALL=C sort -z | xargs -0 shasum -a 256 2>/dev/null | _sha256
+            ;;
+        otpeek)
+            shasum -a 256 "$HOME/$OTPEEK_CONFIG" "$HOME/$OTPEEK_VAULT" 2>/dev/null | _sha256
+            ;;
+        *)
+            # aas tokens rotate on their own, so the accounts list says nothing
+            # about whether the bundle changed. Build it and hash that.
+            printf ''
+            ;;
+    esac
+}
+
 # make_app_payload <kind> <out-file>
 make_app_payload() {
     local kind=$1 out=$2
@@ -338,11 +365,22 @@ _item_id() {
     printf '%s' "$ITEMS_CACHE" | jq -r --arg n "$1" '.[] | select(.name == $n) | .id' | head -1
 }
 
+# The listing already carries every item in full - notes, fields, folder - so
+# the item can be compared without asking the server for it again.
+_cached_item() {
+    printf '%s' "$ITEMS_CACHE" | jq -c --arg n "$1" 'map(select(.name == $n)) | .[0] // empty'
+}
+
+# _cached_field <item-name> <field-name>
+_cached_field() {
+    _cached_item "$1" | jq -r --arg f "$2" '(.fields // []) | map(select(.name == $f)) | .[0].value // empty' 2>/dev/null
+}
+
 # upsert_note <name> <notes> <folder-id> [pub-field-value] [scope] [owner]
 # The folder is reassigned on every update: an item whose file changed scope has
 # to leave the old folder, or the separation is only true for new items.
 upsert_note() {
-    local name=$1 notes=$2 fid=$3 pub=${4:-} scope=${5:-} owner=${6:-}
+    local name=$1 notes=$2 fid=$3 pub=${4:-} scope=${5:-} owner=${6:-} phash=${7:-}
     local id payload
     id="$(_item_id "$name")"
 
@@ -352,21 +390,29 @@ upsert_note() {
         def put($n; $v):
             if $v == "" then map(select(.name != $n))
             else map(select(.name != $n)) + [{"name":$n,"value":$v,"type":0}] end;
-        .fields = ((.fields // []) | put("public"; $pub) | put("scope"; $scope) | put("owner"; $owner))'
+        .fields = ((.fields // []) | put("public"; $pub) | put("scope"; $scope) | put("owner"; $owner) | put("payload-hash"; $phash))'
 
     if [[ -n "$id" ]]; then
         local current
-        current="$(_bw_read bw get item "$id")" || { log_error "could not read $name"; return 1; }
+        current="$(_cached_item "$name")"
+        [[ -n "$current" ]] || current="$(_bw_read bw get item "$id")" || { log_error "could not read $name"; return 1; }
         payload="$(printf '%s' "$current" | jq \
             --arg notes "$notes" --arg pub "$pub" --arg fid "$fid" \
-            --arg scope "$scope" --arg owner "$owner" \
+            --arg scope "$scope" --arg owner "$owner" --arg phash "$phash" \
             ".notes = \$notes | .folderId = \$fid | $fields_filter")"
+        # Nothing to send when the vault already holds exactly this. Every write
+        # is a round trip, so on an unchanged machine a push should cost nothing.
+        if [[ "$(printf '%s' "$current" | jq -S -c '{notes, folderId, fields: ((.fields // []) | sort_by(.name))}')" \
+           == "$(printf '%s' "$payload"  | jq -S -c '{notes, folderId, fields: ((.fields // []) | sort_by(.name))}')" ]]; then
+            printf "  ${GREEN}=${NC} unchanged %s%s\n" "$name" "${scope:+  [$scope]}"
+            return 0
+        fi
         _bw_write "$payload" bw edit item "$id" || return 1
         log_success "updated  $name${scope:+  [$scope]}"
     else
         payload="$(bw get template item | jq \
             --arg name "$name" --arg notes "$notes" --arg fid "$fid" --arg pub "$pub" \
-            --arg scope "$scope" --arg owner "$owner" \
+            --arg scope "$scope" --arg owner "$owner" --arg phash "$phash" \
             ".type = 2
              | .name = \$name
              | .notes = \$notes
@@ -383,19 +429,19 @@ upsert_note() {
 # upsert_attachment <name> <file> <folder-id> [scope]
 # Replaces the attachment of the same file name, so re-pushing never stacks copies.
 upsert_attachment() {
-    local name=$1 file=$2 fid=$3 scope=${4:-}
+    local name=$1 file=$2 fid=$3 scope=${4:-} phash=${5:-}
     local id fname old
     fname="$(basename "$file")"
     id="$(_item_id "$name")"
     if [[ -z "$id" ]]; then
-        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope" || return 1
+        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope" "" "$phash" || return 1
         _load_items
         id="$(_item_id "$name")"
     else
         # Keep folder and scope current even when the attachment is all that changes.
         local notes
         notes="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes=""
-        upsert_note "$name" "$notes" "$fid" "" "$scope" >/dev/null || return 1
+        upsert_note "$name" "$notes" "$fid" "" "$scope" "" "$phash" >/dev/null || return 1
     fi
 
     local before after
@@ -505,21 +551,44 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
 done < "$COLLECTED"
 
 while IFS="$SEP" read -r item fname exec_cmd kind scope; do
+    manifest_entry() {
+        jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" --arg scope "$scope" \
+            '{item: $item, source: $src, exec: $exec, scope: $scope}' >> "$ENTRIES"
+    }
+
+    fid="$(_folder_id "$(_scope_folder "$scope")")"
+    known="$(_cached_field "$item" "payload-hash")"
+
+    # Cheap check first: if the files behind the payload are untouched there is
+    # nothing to build, nothing to upload, and no keychain prompt.
+    fp="$(app_fingerprint "$kind")"
+    if [[ -n "$fp" && "$fp" == "$known" ]]; then
+        printf "  ${GREEN}=${NC} unchanged %s/%s\n" "$item" "$fname"
+        manifest_entry
+        continue
+    fi
+
     payload="$PAYLOADS/$fname"
     if ! (umask 077; make_app_payload "$kind" "$payload"); then
         log_warn "skipped  $item (could not produce $fname)"
         continue
     fi
-    fid="$(_folder_id "$(_scope_folder "$scope")")"
-    if ! upsert_attachment "$item" "$payload" "$fid" "$scope"; then
+    [[ -n "$fp" ]] || fp="$(_sha256 < "$payload")"
+
+    if [[ "$fp" == "$known" ]]; then
+        printf "  ${GREEN}=${NC} unchanged %s/%s\n" "$item" "$fname"
+        rm -f "$payload"
+        manifest_entry
+        continue
+    fi
+
+    if ! upsert_attachment "$item" "$payload" "$fid" "$scope" "$fp"; then
         printf '%s\n' "  $item" >> "$FAILED"
         rm -f "$payload"
         continue
     fi
     rm -f "$payload"
-
-    jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" --arg scope "$scope" \
-        '{item: $item, source: $src, exec: $exec, scope: $scope}' >> "$ENTRIES"
+    manifest_entry
 done < "$APPS"
 
 # GPG is not collected from disk - exporting a secret key needs the passphrase,

@@ -63,6 +63,9 @@ make_bw_stub() {
 set -euo pipefail
 STATE="${BW_STUB_STATE:?}"
 mkdir -p "$STATE"
+case "${1:-}" in
+  edit|create|delete) printf '%s %s\n' "$1" "${2:-}" >> "$STATE/calls.log" ;;
+esac
 [[ -f "$STATE/folders.json" ]] || echo '[]' > "$STATE/folders.json"
 [[ -f "$STATE/items.json" ]] || echo '[]' > "$STATE/items.json"
 
@@ -237,6 +240,8 @@ HOME_B="$TEST_ROOT/b"
 make_home "$HOME_B"
 make_bw_stub "$HOME_B"
 run_push "$HOME_B" --push >/dev/null            # first push creates everything
+# An unchanged item is never written, so give it something to write.
+printf '%s\n' '# scope: work' '# owner: acme' 'export WORK_TOKEN=rotated' > "$HOME_B/.envs/work.env"
 RC=0
 OUT_B="$(FAIL_NAME="env:work" FAIL_TIMES=1 run_push "$HOME_B" --push)" || RC=$?
 check "transient failure is retried, run succeeds" "0" "$RC"
@@ -250,6 +255,7 @@ HOME_C="$TEST_ROOT/c"
 make_home "$HOME_C"
 make_bw_stub "$HOME_C"
 run_push "$HOME_C" --push >/dev/null
+printf '%s\n' '# scope: work' '# owner: acme' 'export WORK_TOKEN=rotated' > "$HOME_C/.envs/work.env"
 RC=0
 OUT_C="$(FAIL_NAME="env:work" run_push "$HOME_C" --push)" || RC=$?
 check "a write that keeps failing exits non-zero" "1" "$RC"
@@ -261,6 +267,24 @@ check "manifest excludes the failed item" "" \
   "$(jq -r '[.entries[] | select(.item == "env:work")] | .[0].item // empty' <<< "$MANIFEST_C")"
 check "manifest keeps the others" "env:personal" \
   "$(jq -r '[.entries[] | select(.item == "env:personal")] | .[0].item // empty' <<< "$MANIFEST_C")"
+
+printf '\nsecrets-push: an unchanged push costs nothing\n'
+HOME_D="$TEST_ROOT/d"
+make_home "$HOME_D"
+make_bw_stub "$HOME_D"
+run_push "$HOME_D" --push >/dev/null
+: > "$HOME_D/.bwstate/calls.log"
+OUT_D="$(run_push "$HOME_D" --push)"
+contains "the second push reports unchanged" "unchanged env:work" "$OUT_D"
+check "nothing is edited" "0" "$(grep -c '^edit' "$HOME_D/.bwstate/calls.log" || true)"
+check "nothing is created" "0" "$(grep -c '^create item' "$HOME_D/.bwstate/calls.log" || true)"
+check "no attachment is uploaded" "0" "$(grep -c '^create attachment' "$HOME_D/.bwstate/calls.log" || true)"
+
+printf '%s\n' '# scope: personal' 'export PERSONAL_TOKEN=rotated' > "$HOME_D/.envs/personal.env"
+: > "$HOME_D/.bwstate/calls.log"
+OUT_D2="$(run_push "$HOME_D" --push)"
+contains "a changed file is written" "updated  env:personal" "$OUT_D2"
+check "and only that one" "1" "$(grep -c '^edit' "$HOME_D/.bwstate/calls.log" || true)"
 
 # ------------------------------------------------------------------------------
 printf '\nsecrets restore: scope filter\n'
