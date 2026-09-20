@@ -106,7 +106,8 @@ GRAY=$'\033[0;90m'      # core.sh has no dim; unchanged rows should recede
 ENTRIES=""              # manifest entries, created by the push
 PAYLOADS=""             # staged app payloads, created by the push
 FAILED=""                # items this run could not write; set once bw is in play
-cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$BINARIES" "$FOLDERS_CACHE" "$TMPDIR_ROWS" ${STATES:+"$STATES"} ${FAILED:+"$FAILED"} ${ENTRIES:+"$ENTRIES"} ${PAYLOADS:+"$PAYLOADS"}; }
+PENDING=""               # attachments uploaded, hashes not yet recorded
+cleanup() { rm -rf "$COLLECTED" "$APPS" "$UNSCOPED" "$BINARIES" "$FOLDERS_CACHE" "$TMPDIR_ROWS" ${STATES:+"$STATES"} ${FAILED:+"$FAILED"} ${ENTRIES:+"$ENTRIES"} ${PENDING:+"$PENDING"} ${PAYLOADS:+"$PAYLOADS"}; }
 trap cleanup EXIT
 
 # ==============================================================================
@@ -659,21 +660,13 @@ upsert_attachment() {
         log_warn "attached $name/$fname, but the item now has $after attachments with that name"
     fi
 
-    # Now, and only now, record what the vault holds. A failure here costs one
-    # needless upload next time and nothing else.
-    #
-    # Attaching moves the item on the server and leaves the local copy behind,
-    # and bw refuses to edit from a stale copy: "The client copy of this cipher
-    # is out of date." The edit that writes the payload-hash was hitting that
-    # every time, so the hash was never written, so every push re-uploaded
-    # every attachment — 150KB of them here, on a run that had nothing to do.
+    # What the vault now holds is recorded after every upload in the run, not
+    # after each one. Attaching moves the item on the server and leaves the
+    # local copy behind, and bw refuses to edit from a stale copy — so the
+    # record needs a resync first, and a resync is the most expensive call this
+    # script makes. One of them, not one per attachment.
     if [[ -n "$phash" ]]; then
-        bw sync >/dev/null 2>&1 || log_warn "$name: could not resync before recording the hash"
-        local notes_now
-        notes_now="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes_now=""
-        if ! upsert_note "$name" "$notes_now" "$fid" "" "$scope" "" "$phash" >/dev/null; then
-            log_warn "$name: the attachment is up but its payload-hash was not written; the next push re-uploads it"
-        fi
+        printf '%s%s%s%s%s%s%s\n' "$name" "$SEP" "$id" "$SEP" "$fid" "$SEP" "$scope$SEP$phash" >> "$PENDING"
     fi
 }
 
@@ -908,6 +901,7 @@ _load_items
 # A push that half-worked must say so at the end rather than in the middle.
 FAILED="$(mktemp)"
 ENTRIES="$(mktemp)"
+PENDING="$(mktemp)"
 # App payloads are credentials too: stage them where only this user can read.
 PAYLOADS="$(umask 077; mktemp -d "${TMPDIR:-/tmp}/settings-push.XXXXXX")"
 
@@ -1008,6 +1002,21 @@ while IFS="$SEP" read -r item fname exec_cmd kind scope platforms; do
     rm -f "$payload"
     manifest_entry
 done < "$APPS"
+
+# Record the hashes of everything attached this run. Until this happens the
+# vault holds the payloads but cannot say what is in them, and the next push
+# uploads all of them again — which is what it did, every time, for as long as
+# this edit was attempted from a copy that attaching had just made stale.
+if [[ -s "$PENDING" ]]; then
+    bw sync >/dev/null 2>&1 || log_warn "could not resync before recording what was attached"
+    while IFS="$SEP" read -r pname pid pfid pscope pphash; do
+        [[ -n "$pname" ]] || continue
+        pnotes="$(_bw_read bw get item "$pid" | jq -r '.notes // ""')" || pnotes=""
+        if ! upsert_note "$pname" "$pnotes" "$pfid" "" "$pscope" "" "$pphash" >/dev/null; then
+            log_warn "$pname: the attachment is up but its payload-hash was not written; the next push re-uploads it"
+        fi
+    done < "$PENDING"
+fi
 
 # GPG is not collected from disk - exporting a secret key needs the passphrase,
 # so those two items are maintained by hand. Preserve them if already present,
