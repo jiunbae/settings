@@ -14,6 +14,7 @@
 #   ~/.envs/*.env            -> env:<name>          (skips _-prefixed drafts)
 #   ~/.ssh/id_*              -> ssh:<name>          (+ "public" field from <name>.pub)
 #   ~/.ssh/config.d/*.conf   -> ssh:config-<name>   (skips files the repo tracks)
+#   ~/.ssh/authorized_keys   -> ssh:authorized_keys  (restores by merging, below)
 #
 # Scopes. Every file declares who owns its credentials, so one vault can hold
 # several lives without mixing them. The marker lives in the file, not in this
@@ -171,7 +172,25 @@ collect() {
         printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
             "$f" "ssh:config-${base%.conf}" "~/.ssh/config.d/$base" 600 "" "$scope" "$owner" >> "$COLLECTED"
     done
+
+    # ~/.ssh/authorized_keys, so a new machine starts out reachable from the
+    # ones that already exist. It carries its own '# scope:' header.
+    local ak="$HOME/.ssh/authorized_keys"
+    if [[ -f "$ak" ]]; then
+        if scope="$(_scope_gate "$ak" "ssh:authorized_keys")"; then
+            owner="$(_owner_of "$ak")"
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$ak" "ssh:authorized_keys" "~/.ssh/authorized_keys" 600 "" "$scope" "$owner" >> "$COLLECTED"
+        fi
+    fi
 }
+
+# authorized_keys is the one file that must not be written over on restore: a
+# machine may hold keys this list has never seen - a CI runner, an agent, a
+# phone - and replacing the file would lock them out without a word. So it
+# restores through a merge that adds what is missing and removes nothing.
+# scripts/ssh-trust.sh is what maintains the list itself.
+AUTHORIZED_KEYS_MERGE='umask 077; mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; while IFS= read -r l; do case "$l" in ""|\#*) continue;; esac; m=$(printf "%s\n" "$l" | awk "{print \$1, \$2}"); grep -qF "$m" "$HOME/.ssh/authorized_keys" || printf "%s\n" "$l" >> "$HOME/.ssh/authorized_keys"; done; chmod 600 "$HOME/.ssh/authorized_keys"'
 
 # App data. Each line: <item> <attachment-file-name> <restore-exec> <kind> <scope>
 BARSHELF_DIR="$HOME/Library/Application Support/BarShelf"
@@ -471,8 +490,13 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
         continue
     fi
 
-    jq -n --arg item "$item" --arg dest "$dest" --arg mode "$mode" --arg scope "$scope" \
-        '{item: $item, source: "notes", dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
+    if [[ "$item" == "ssh:authorized_keys" ]]; then
+        jq -n --arg item "$item" --arg exec "$AUTHORIZED_KEYS_MERGE" --arg scope "$scope" \
+            '{item: $item, source: "notes", exec: $exec, scope: $scope}' >> "$ENTRIES"
+    else
+        jq -n --arg item "$item" --arg dest "$dest" --arg mode "$mode" --arg scope "$scope" \
+            '{item: $item, source: "notes", dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
+    fi
 
     if [[ -n "$pubval" ]]; then
         jq -n --arg item "$item" --arg dest "$dest.pub" --arg scope "$scope" \

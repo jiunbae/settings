@@ -49,6 +49,10 @@ make_home() {
   printf '%s\n' 'KEY' > "$home/.ssh/id_work"
   printf '%s\n' 'work' > "$home/.ssh/id_work.scope"  # sidecar marker
   printf '%s\n' '# scope: work' 'Host office' > "$home/.ssh/config.d/20-company.conf"
+  printf '%s\n' '# scope: personal' \
+    'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa one@host-a' \
+    'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb two@host-b' \
+    > "$home/.ssh/authorized_keys"
 }
 
 # A `bw` that keeps folders and items in files, so ids stay stable across calls.
@@ -166,6 +170,7 @@ contains "unknown scope reported"        "unknown scope 'nonsense'" "$DRY"
 contains "key without marker is personal" "ssh:id_ed25519" "$TABLE"
 contains "key sidecar marker read"       "ssh:id_work" "$TABLE"
 contains "scope column shows work"       "env:work                   work" "$TABLE"
+contains "authorized_keys collected"     "ssh:authorized_keys" "$TABLE"
 lacks    "no phantom public field"       "~/.envs/personal.env  (+public)" "$TABLE"
 
 OUT="$(run_push "$HOME_A" --push)"
@@ -184,6 +189,11 @@ check "owner stored as a field" "acme" \
   "$(jq -r '.[] | select(.name == "env:work") | .fields[] | select(.name == "owner") | .value' "$ITEMS")"
 check "ssh key keeps its public field" "PUB" \
   "$(jq -r '.[] | select(.name == "ssh:id_ed25519") | .fields[] | select(.name == "public") | .value' "$ITEMS" | tr -d '\n')"
+MANIFEST_A="$(jq -r '.[] | select(.name == "bootstrap") | .notes' "$ITEMS")"
+check "authorized_keys restores by merging, not overwriting" "" \
+  "$(jq -r '.entries[] | select(.item == "ssh:authorized_keys") | .dest // empty' <<< "$MANIFEST_A")"
+contains "the merge keeps what it does not know" "grep -qF" \
+  "$(jq -r '.entries[] | select(.item == "ssh:authorized_keys") | .exec' <<< "$MANIFEST_A")"
 check "manifest is version 2" "2" \
   "$(jq -r '.[] | select(.name == "bootstrap") | .notes' "$ITEMS" | jq -r '.version')"
 check "manifest entries carry scopes" "" \
@@ -204,6 +214,20 @@ printf '%s\n' '# scope: local' 'export SHARED_TOKEN=s' > "$HOME_A/.envs/shared.e
 STALE_OUT="$(run_push "$HOME_A" --push)"
 contains "stale vault item reported" "env:shared" \
   "$(printf '%s' "$STALE_OUT" | sed -n '/In the vault but not pushed/,$p')"
+
+printf '\nauthorized_keys merge (run exactly as a restore runs it)\n'
+MERGE_HOME="$TEST_ROOT/merge"
+mkdir -p "$MERGE_HOME/.ssh"
+LOCAL_ONLY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIccccccccccccccccccccccccccccccccccccccccccc ci@runner'
+printf '%s\n' "$LOCAL_ONLY" > "$MERGE_HOME/.ssh/authorized_keys"
+MERGE_CMD="$(jq -r '.entries[] | select(.item == "ssh:authorized_keys") | .exec' <<< "$MANIFEST_A")"
+HOME="$MERGE_HOME" bash -c "$MERGE_CMD" < "$HOME_A/.ssh/authorized_keys"
+contains "a key the list never saw survives" "ci@runner" "$(cat "$MERGE_HOME/.ssh/authorized_keys")"
+contains "the list's keys arrive" "one@host-a" "$(cat "$MERGE_HOME/.ssh/authorized_keys")"
+check "merging twice adds nothing" "3" \
+  "$(HOME="$MERGE_HOME" bash -c "$MERGE_CMD" < "$HOME_A/.ssh/authorized_keys"; grep -c . "$MERGE_HOME/.ssh/authorized_keys")"
+check "comments are not copied in" "0" \
+  "$(grep -c '^#' "$MERGE_HOME/.ssh/authorized_keys" || true)"
 
 # ------------------------------------------------------------------------------
 printf '\nsecrets-push: a server that drops the connection\n'
