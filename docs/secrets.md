@@ -1,5 +1,9 @@
 # Secrets
 
+> **Being replaced.** This engine still restores every machine and is unchanged.
+> Its successor is [kitbag](kitbag.md), installed alongside it by
+> `./install.sh kitbag`; nothing moves across until you move it.
+
 `./install.sh secrets` restores private material — SSH keys, GPG keys, `.env`
 files, host configs that are too sensitive for a public repo, and app state such as aas
 accounts, BarShelf data and the OTPeek vault — from a

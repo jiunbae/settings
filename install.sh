@@ -50,6 +50,7 @@ source "$SCRIPT_DIR/modules/claude.sh"
 source "$SCRIPT_DIR/modules/cship.sh"
 source "$SCRIPT_DIR/modules/scripts.sh"
 source "$SCRIPT_DIR/modules/secrets.sh"
+source "$SCRIPT_DIR/modules/kitbag.sh"
 
 # ==============================================================================
 # Component Names (for display) - bash 3.2 compatible
@@ -79,6 +80,7 @@ get_component_name() {
         cship)       echo "cship (Claude Code statusline)" ;;
         scripts)     echo "Personal CLI scripts" ;;
         secrets)     echo "Secrets from vault" ;;
+        kitbag)      echo "kitbag (the secrets engine's successor)" ;;
         *)           echo "$1" ;;
     esac
 }
@@ -192,6 +194,9 @@ main() {
                 ;;
             secrets)
                 install_secrets
+                ;;
+            kitbag)
+                install_kitbag
                 ;;
             *)
                 progress_info "Unknown component: $component"

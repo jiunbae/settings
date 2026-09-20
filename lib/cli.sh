@@ -16,7 +16,7 @@ readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra s
 # Opt-in only components. Kept OUT of COMPONENTS_ORDER on purpose so that --all
 # and the interactive menu can never restore private keys onto a machine that
 # just wanted dotfiles. These are valid only when named explicitly.
-readonly OPTIN_COMPONENTS=(secrets)
+readonly OPTIN_COMPONENTS=(secrets kitbag)
 
 # Basic components for --basic option
 readonly BASIC_COMPONENTS=(base zsh nvim tmux)
