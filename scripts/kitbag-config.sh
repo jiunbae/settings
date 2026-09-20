@@ -175,11 +175,15 @@ EOF
 # `gzip -n` rather than `tar -czf`: gzip stamps the current time into its
 # header, so the same unchanged files produce different bytes every second and
 # the item is reported as changed on every run, forever.
+#
+# `set -o pipefail` because a pipeline reports the last command's status: a tar
+# that failed halfway would be gzipped successfully and stored as a backup of
+# part of the directory, with nothing saying so.
 [[track]]
 name = "app:otpeek"
 scope = "mixed"
 spans = ["personal", "work"]
-command = { export = "tar -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = "tar -xzf - -C \"$HOME\"" }
+command = { export = "set -o pipefail; tar -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = "tar -xzf - -C \"$HOME\"" }
 EOF
     fi
 
@@ -189,7 +193,7 @@ EOF
 [[track]]
 name = "app:barshelf"
 scope = "personal"
-command = { export = "tar -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf | gzip -n", restore = "tar -xzf - -C \"$HOME/Library/Application Support\"" }
+command = { export = "set -o pipefail; tar -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf | gzip -n", restore = "tar -xzf - -C \"$HOME/Library/Application Support\"" }
 EOF
     fi
 }
