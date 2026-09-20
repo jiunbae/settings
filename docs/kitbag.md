@@ -75,7 +75,19 @@ SETTINGS_SECRETS_ENGINE=bash ./install.sh secrets
 ```
 
 It stays until every machine is across. Then it, `scripts/secrets-push.sh`, and
-the manifest go together.
+the manifest go together — except that one machine cannot move across at all.
+
+## The machine that cannot
+
+kitbag publishes `aarch64`/`x86_64` binaries for Darwin and Linux, and nothing for
+Windows. The Windows machine restores from the manifest through
+`bin/windows/Restore-Secrets.ps1` ([windows.md](windows.md#secrets)), which reads
+the same items, the same entries and the same scopes as
+`SETTINGS_SECRETS_ENGINE=bash` does everywhere else.
+
+So the manifest and the push that writes it are not only a migration leftover:
+they are what one supported machine runs on. They can be retired when kitbag
+ships a Windows build, and not before.
 
 ## Declaring a machine's scope
 

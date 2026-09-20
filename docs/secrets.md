@@ -3,11 +3,16 @@
 > **Replaced.** `./install.sh secrets` restores with [kitbag](kitbag.md) now.
 > This page describes the engine underneath it, which still runs for a machine
 > that has not moved across: `SETTINGS_SECRETS_ENGINE=bash ./install.sh secrets`.
+> On [Windows](#windows) it is not a fallback — kitbag has no binary there, so
+> the manifest engine is the whole story.
 
 `./install.sh secrets` restores private material — SSH keys, GPG keys, `.env`
 files, host configs that are too sensitive for a public repo, and app state such as aas
 accounts, BarShelf data and the OTPeek vault — from a
 Bitwarden-compatible vault (Bitwarden or a self-hosted Vaultwarden).
+
+On Windows, where `install.sh` cannot run at all, `bin/windows/Restore-Secrets.ps1`
+is the restoring half — see [Windows](#windows).
 
 It is **opt-in only**. `secrets` is deliberately absent from `COMPONENTS_ORDER`,
 so neither `--all` nor the interactive menu can drop private keys onto a shared
@@ -113,6 +118,9 @@ comes back by being piped into a command (`exec`) instead of written to a path.
 | `app:barshelf` | `barshelf.tar.gz` of `~/Library/Application Support/BarShelf` without `runtime/` and `cache/` | quits BarShelf, extracts into Application Support, starts it again | BarShelf.app |
 | `app:otpeek` | `otpeek.tar.gz`: the CLI config and the app-group vault `vault.otpvault` (still encrypted with the OTPeek master password) | extracts into `$HOME`, points `active_vault` at this home | `otpeek` CLI in `~/.cargo/bin` |
 
+- All three are tagged `"platform": ["macos"]` by `secrets-push.sh`. They restore into
+  `~/Library` and shell out to `open -a` and `pkill`, so a restore anywhere else skips
+  them instead of writing paths that mean nothing there.
 - Push from a **Terminal on the Mac itself**. `aas export` reads the Claude credential
   from the login keychain, which an SSH session cannot open.
 - `aas import` restores the accounts but not which one is active; pick with
@@ -160,14 +168,22 @@ usually live. Everything else is listed, one per line, in
 `~/.config/settings/secrets-paths` (override with `SETTINGS_TRACKED_PATHS`):
 
 ```
-# <path>  <scope>  [owner]  [item-name]
+# <path>  <scope>  [owner]  [item-name]  [platforms]
 ~/.npmrc                                   personal
 ~/.aws/config                              work      acme
-~/Library/Keychains/x.keychain-db          work      acme   file:x-keychain
+~/Library/Keychains/x.keychain-db          work      acme   file:x-keychain  macos
 ```
 
 - A `# scope:` header **inside** the file still wins over the column, so a file
   that can carry its own marker keeps carrying it.
+- The fifth column is comma-separated and says **where the path exists at all**;
+  it becomes the entry's [`platform`](#manifest-format). A keychain restored onto
+  a Linux server or a Windows profile looks like a restore that worked, right up
+  until something tries to read it. `scripts/kitbag-config.sh` reads the same
+  column out of the same file, so both engines agree about a given path. A name
+  that is not `macos`, `windows`, `linux` or `wsl` is a typo — and a typo here is
+  an entry that restores nowhere ever again, so it is reported and not pushed,
+  exactly like an unknown scope.
 - Text goes up as notes; **anything binary goes up as an attachment** and is
   written back byte for byte, which is how a keychain or a `.db` travels.
 - A listed path that is missing on this machine is reported, not silently
@@ -225,7 +241,9 @@ Stored in the **notes** field of the vault item named by
     {"item": "ssh:company",    "source": "attachment:20-company.conf",
                                "dest": "~/.ssh/config.d/20-company.conf", "mode": "600", "scope": "work"},
     {"item": "gpg:primary",    "source": "notes", "exec": "gpg --batch --quiet --import",    "scope": "mixed"},
-    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust", "scope": "mixed"}
+    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust", "scope": "mixed"},
+    {"item": "app:barshelf",   "source": "attachment:barshelf.tar.gz",
+                               "exec": "tar -xzf - -C ...", "scope": "personal", "platform": ["macos"]}
   ]
 }
 ```
@@ -236,8 +254,9 @@ Stored in the **notes** field of the vault item named by
 | `source` | `notes` (default), `sshkey`, `password`, `field:<name>`, `attachment:<filename>` |
 | `dest` | File to write. `~` is expanded. Mutually exclusive with `exec` |
 | `exec` | Command to pipe the payload into. Mutually exclusive with `dest` |
-| `mode` | `chmod` for `dest`, default `600` |
+| `mode` | `chmod` for `dest`, default `600`. On Windows a mode whose group/other digits are `0` means "strip inherited ACEs, leave only this user" |
 | `scope` | `personal`, `work`, `shared` or `mixed`. Missing (version 1 manifests) is treated as `mixed`, with a warning |
+| `platform` | Where the entry applies — `macos`, `windows`, `linux`, as a string or an array. Absent means everywhere; WSL matches `linux` too |
 
 Restores are idempotent: an unchanged `dest` is skipped, and a changed one is
 backed up to `<dest>.backup.<timestamp>` before being replaced.
@@ -255,6 +274,49 @@ gpg --export-ownertrust                     # → item "gpg:ownertrust" notes
 
 Prefer notes and fields over attachments where the payload is text; they are
 smaller, diff-able in the web vault, and supported by every client.
+
+## Windows
+
+`install.sh` cannot run on Windows — `lib/platform.sh` `detect_platform` exits on
+anything that is not Linux or Darwin — so the restoring half is its own script,
+placed the way everything else in [windows.md](windows.md) is:
+
+```powershell
+$s = "$env:USERPROFILE\workspace\settings\bin\windows\Restore-Secrets.ps1"
+pwsh -ExecutionPolicy Bypass -File $s -DryRun   # nothing is written, nothing is prompted
+pwsh -ExecutionPolicy Bypass -File $s
+pwsh -ExecutionPolicy Bypass -File $s -Scope all
+```
+
+Same vault, same manifest item, same entries, same scopes — `-Scope` where the
+bash engine takes `SETTINGS_SECRETS_SCOPE` (which it also reads), falling back to
+the same `~/.config/settings/secrets.scope`, and to `personal` when nothing says
+otherwise. `jq` is not needed — `ConvertFrom-Json` replaces it — but `bw` is:
+`winget install Bitwarden.CLI`, or `npm install -g @bitwarden/cli@2026.8.0` for
+the pinned version.
+
+There is no Windows push. `scripts/secrets-push.sh` stays the only writer of the
+manifest; a second one would drift from it, and no secret's original copy lives on
+Windows anyway.
+
+**kitbag does not run here.** `./install.sh secrets` restores with
+[kitbag](kitbag.md) now and this manifest engine is what a machine that has not
+moved across still uses — but kitbag publishes macOS and Linux binaries only. On
+Windows the manifest engine is not the older path, it is the only one. The
+manifest and `secrets-push.sh` therefore outlive the last Mac that moves across.
+
+Four things differ from the bash engine, each forced by the platform:
+
+| | |
+| :--- | :--- |
+| **ACLs, not `chmod`** | Windows OpenSSH ignores POSIX modes and reads the ACL, so a restored key that still carries inherited ACEs is refused with `UNPROTECTED PRIVATE KEY FILE`. An entry whose `mode` ends in `00` gets inheritance disabled and one ACE for the current user; a `644` public key keeps the inherited ACL. The destination **directory** is left alone — the profile ACL already grants only the user, SYSTEM and Administrators, and OpenSSH checks the key file, not the directory it sits in. |
+| **`exec` is not a shell** | There is no `sh` to hand the string to. A command containing a pipe, `;`, `&`, redirection or `$(…)` is refused with a note to tag that entry `"platform": ["macos"]` instead; a plain one such as `gpg --batch --quiet --import` runs directly, with the payload piped to its stdin as bytes rather than as text. |
+| **`ssh:authorized_keys` merges natively** | Its `exec` is a shell one-liner, so the rule above would refuse it — and a machine that skips it is a machine none of your others can reach. The same contract is implemented directly instead: match on type and base64, add what is missing, delete nothing, skip comments, leave the file with a private ACL. When it adds a key it also says that `sshd` reads `C:\ProgramData\ssh\administrators_authorized_keys` for accounts in `Administrators`. |
+| **Line endings** | Payloads written to `dest` are normalised to LF, and a final newline is added when one is missing. OpenSSH and GPG both reject a key whose armor carries CRLF, which a note edited in the web vault from a Windows browser can pick up. The trailing newline matters just as much: `secrets-push.sh` stores notes through `$(cat …)`, which strips it, and the bash engine only gets it back because `jq -r` appends one. Without it `ssh-keygen` fails the restored key with `error in libcrypto`. |
+
+`scripts/tests/restore-secrets-smoke.ps1` covers all of it against a stubbed `bw`
+and a temporary home. The bash suite cannot run on Windows, so it is the only
+coverage this half has.
 
 ## Environment
 
@@ -280,7 +342,9 @@ SETTINGS_VAULT_MANIFEST=my-bootstrap \
 - Secret payloads are staged in a `umask 077` temp directory that is removed on
   exit, including on failure.
 - `scripts/tests/secrets-scope-smoke.sh` covers collection, scope routing and the
-  restore filter against a stubbed `bw`; it touches no vault and no real secret.
+  restore filters against a stubbed `bw`; it touches no vault and no real secret.
+  `scripts/tests/restore-secrets-smoke.ps1` is the same for the Windows engine,
+  which that one cannot reach.
 - The vault stays unlocked in the calling shell afterwards. Run `bw lock` when
   finished.
 - The vault is a single point of failure for bootstrapping. Keep an offline

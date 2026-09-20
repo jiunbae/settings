@@ -12,6 +12,7 @@ is installed automatically.
 | [PowerShell](#powershell) | `configs/powershell/` — `.zshrc` ported, starship prompt |
 | [NeoVim](#neovim) | `configs/nvim/` — same config as everywhere else |
 | [Nextcloud upload](#nextcloud-upload) | `bin/windows/cloud-upload.ps1` |
+| [Secrets](#secrets) | `bin/windows/Restore-Secrets.ps1` — SSH keys and private configs, from the vault |
 
 ## Windows Terminal
 
@@ -287,3 +288,126 @@ that item's remote path, including when its files are already uploaded. Multiple
 inputs are rejected before uploading; run each separately to create separate links.
 A folder link includes its existing remote contents. `-DryRun` also works with
 `-Sync` and never creates a public link.
+
+
+## Secrets
+
+SSH keys, GPG keys, `.env` files and the host configs too sensitive for a public
+repo are restored from a Bitwarden-compatible vault. On every other platform that is
+`./install.sh secrets`; here it is `bin/windows/Restore-Secrets.ps1`, for the same
+reason as everything else on this page.
+
+What gets restored is a JSON manifest stored **inside** the vault, not in this repo —
+[secrets.md](secrets.md) covers the format, the vault layout and how to populate it.
+This section is only the Windows half.
+
+### How to apply
+
+```powershell
+winget install Bitwarden.CLI          # or: npm install -g @bitwarden/cli@2026.8.0
+
+$s = "$env:USERPROFILE\workspace\settings\bin\windows\Restore-Secrets.ps1"
+pwsh -ExecutionPolicy Bypass -File $s -DryRun
+pwsh -ExecutionPolicy Bypass -File $s
+
+pwsh -ExecutionPolicy Bypass -File $s -Scope all            # everything
+pwsh -ExecutionPolicy Bypass -File $s -Scope personal,work
+```
+
+### How much it restores
+
+One vault holds several lives, so a restore takes **`personal` only** unless told
+otherwise — the same default, the same words and the same per-machine file as
+everywhere else ([Scopes](secrets.md#scopes)):
+
+```powershell
+mkdir "$HOME\.config\settings" -Force
+"work" | Set-Content "$HOME\.config\settings\secrets.scope"   # this machine's default
+$env:SETTINGS_SECRETS_SCOPE = "all"                           # or just this shell
+```
+
+`-Scope` beats the environment variable, which beats the file. A `mixed` entry —
+one blob holding more than one life — comes back under every scope, because it
+cannot be split from out here. Entries with no scope at all predate scopes and are
+treated as `mixed`, with a warning saying how many there were.
+
+The dry run names the scope in force before it reads anything, and ends with the
+number of entries it passed over. That line exists because "only some of it came
+back" is nearly always the default doing its job, not a failure.
+
+`-DryRun` writes nothing and never prompts for a password. With an existing
+`$env:BW_SESSION` it enumerates the real manifest; without one it says the vault is
+locked and stops. The vault stays unlocked in the calling shell afterwards — run
+`bw lock` when finished.
+
+It syncs first, which the bash engine's dry run does not. `bw` answers from a local
+cache and `bw unlock` only decrypts that cache, so a dry run right after pushing from
+another machine would otherwise describe a plan built from whatever this machine last
+downloaded — the one moment you are most likely to run it, and the worst thing a
+"here is what would happen" command can get wrong. When the manifest item is missing
+the error reports how many items this machine holds and when it last synced, because
+that one line is usually the whole answer.
+
+`jq` is not required, unlike the bash engine: `ConvertFrom-Json` does that work.
+
+### Restoring is all it does
+
+There is no Windows push. `scripts/secrets-push.sh` remains the only thing that
+writes the manifest. Two writers would drift from each other, and no secret's
+original copy lives on Windows to begin with.
+
+The same goes for `scripts/ssh-trust.sh`: this machine **receives** the list of
+keys that may log in — that is the `ssh:authorized_keys` entry below — but the list
+itself is maintained from a machine that has a shell.
+
+### Not kitbag, for now
+
+Elsewhere `./install.sh secrets` restores with [kitbag](kitbag.md) and the manifest
+engine is the older path. [kitbag](https://github.com/Open330/kitbag) publishes
+macOS and Linux binaries only, so on Windows the manifest is not the older path —
+it is the only one, and this script is its engine. That is also why the manifest
+and `secrets-push.sh` cannot be retired when the last Mac moves across.
+
+### Why it is not just the shell script under Git Bash
+
+`modules/secrets.sh` would run there, but four of the things it does are wrong on
+Windows:
+
+- **`chmod 600` does nothing.** Windows OpenSSH ignores POSIX modes and reads the
+  ACL. A key restored with its inherited ACEs intact is refused outright with
+  `UNPROTECTED PRIVATE KEY FILE`, and MSYS's `chmod` cannot express the fix. The
+  PowerShell version disables inheritance and leaves a single ACE for the current
+  user on any entry whose `mode` ends in `00`. Public keys (`644`) keep the
+  inherited ACL, and the **directory** is deliberately left alone: the profile's ACL
+  already grants only the user, SYSTEM and Administrators, and OpenSSH checks the
+  key file, not the directory holding it.
+- **The macOS app entries would run.** `app:aas`, `app:barshelf` and `app:otpeek`
+  restore into `~/Library` and call `open -a` and `pkill`. They now carry
+  `"platform": ["macos"]` in the manifest and are skipped everywhere else — by the
+  bash engine too, which gained the same filter.
+- **`exec` assumes a shell.** The bash engine pipes payloads into `bash -c`. The
+  PowerShell one has no `sh`, so it refuses any command containing a pipe, `;`, `&`,
+  redirection or `$(…)` — pointing at the `platform` tag as the fix — and runs plain
+  ones such as `gpg --batch --quiet --import` directly, piping the payload to stdin
+  as bytes.
+- **`ssh:authorized_keys` is a shell one-liner, and it has to work here.** Its
+  `exec` is `sh` for "merge these lines in, delete nothing", so the rule above would
+  refuse it — and a machine that silently skips it is a machine no other machine can
+  reach. Rather than imitate the command, the PowerShell side implements the same
+  contract: a key is matched on its type and base64, anything already there stays,
+  comments are not copied in, and the file ends up with a private ACL. Rerunning it
+  adds nothing. If the account is in `Administrators`, note that Windows `sshd`
+  reads `C:\ProgramData\ssh\administrators_authorized_keys` instead of this file —
+  the restore says so when it adds a key.
+
+### Checking it still works
+
+```powershell
+pwsh -NoProfile -File scripts\tests\restore-secrets-smoke.ps1
+```
+
+`bw` is a stub and `HOME` is a temp directory, so it touches no vault, no real
+secret and not this machine's `~/.ssh`. It covers the scope filter, the ACLs, the
+line-ending fix, the attachment round trip, the merge and the refusals. It is the
+only coverage this engine has: `scripts/tests/secrets-scope-smoke.sh`, the bash
+equivalent, cannot run here at all.

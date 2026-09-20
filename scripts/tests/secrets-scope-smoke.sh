@@ -63,11 +63,15 @@ make_tracked() {
   printf '%s\n' 'registry=https://example.test' '//example.test/:_authToken=abc' > "$home/.npmrc"
   printf '\x00\x01binary payload\x00' > "$home/Library/Keychains/fixture.keychain-db"
   printf '%s\n' '# scope: work' 'k = v' > "$home/self-marked.conf"
+  printf '%s\n' '# scope: personal' 'k = v' > "$home/tracked-bad.conf"
+  # The fifth column says where a path exists at all. scripts/kitbag-config.sh
+  # reads the same one, so the two engines must agree about this file.
   printf '%s\n' \
-    '# path                              scope     owner  name' \
-    '~/.npmrc                            personal' \
-    '~/Library/Keychains/fixture.keychain-db  work  acme  file:fixture-keychain' \
+    '# path                              scope     owner  name                   platforms' \
+    '~/.npmrc                            personal  me     file:npmrc             linux,macos' \
+    '~/Library/Keychains/fixture.keychain-db  work  acme  file:fixture-keychain  macos' \
     '~/self-marked.conf                  personal' \
+    '~/tracked-bad.conf                  personal  me     file:tracked-bad       nonsense' \
     '~/not-here.conf                     personal' \
     > "$home/.config/settings/secrets-paths"
 }
@@ -122,6 +126,10 @@ case "${1:-}" in
         jq --arg id "$id" '.id = $id' <<< "$payload" ;;
       attachment)
         # bw create attachment --file <f> --itemid <id>
+        if [[ -n "${BW_STUB_FAIL_ATTACH:-}" ]]; then
+          echo "FetchError: upload failed" >&2
+          exit 1
+        fi
         shift 2; file=""; itemid=""
         while [[ $# -gt 0 ]]; do
           case "$1" in --file) file=$2; shift 2 ;; --itemid) itemid=$2; shift 2 ;; *) shift ;; esac
@@ -158,12 +166,16 @@ STUB
 
 run_push() { # <home> [args...]
   local home=$1; shift
+  # Fixed width: the tree view wraps its detail column against the terminal, so
+  # without this what the test sees depends on the window it happens to run in.
+  COLUMNS=200 \
   HOME="$home" \
   BW_STUB_STATE="$home/.bwstate" \
   BW_SESSION="stub" \
   SETTINGS_VAULT_SERVER="https://vault.test" \
   BW_STUB_FAIL_NAME="${FAIL_NAME:-}" \
   BW_STUB_FAIL_TIMES="${FAIL_TIMES:-99}" \
+  BW_STUB_FAIL_ATTACH="${FAIL_ATTACH:-}" \
   PATH="$home/bin:$PATH" \
     bash "$REPO_ROOT/scripts/secrets-push.sh" "$@" 2>&1
 }
@@ -206,6 +218,10 @@ contains "a tracked binary is collected"     "file:fixture-keychain" "$TABLE"
 contains "binaries say so"                   "binary," "$TABLE"
 contains "the file's own marker wins"        "file:self-marked.conf" "$TABLE"
 contains "a missing path is reported"        "not-here.conf — listed in" "$DRY"
+contains "a path's platforms are shown before the push" "[macos]" "$TABLE"
+contains "a comma list becomes a list"       "[linux macos]" "$TABLE"
+lacks    "a bad platform name is not collected" "file:tracked-bad" "$TABLE"
+contains "and is reported with the valid names" "unknown platform 'nonsense'" "$DRY"
 lacks    "no phantom public field"       "~/.envs/personal.env  (+public)" "$TABLE"
 
 OUT="$(run_push "$HOME_A" --push)"
@@ -235,6 +251,14 @@ check "and lands back at its path" "~/Library/Keychains/fixture.keychain-db" \
   "$(jq -r '.entries[] | select(.item == "file:fixture-keychain") | .dest' <<< "$MANIFEST_A")"
 check "the marked file follows its own header, not the column" "work" \
   "$(jq -r '.entries[] | select(.item == "file:self-marked.conf") | .scope' <<< "$MANIFEST_A")"
+check "a tracked path's platform reaches the manifest" "macos" \
+  "$(jq -r '.entries[] | select(.item == "file:fixture-keychain") | .platform | join(" ")' <<< "$MANIFEST_A")"
+check "a text path carries one too" "linux macos" \
+  "$(jq -r '.entries[] | select(.item == "file:npmrc") | .platform | join(" ")' <<< "$MANIFEST_A")"
+check "a path without the column carries none" "" \
+  "$(jq -r '.entries[] | select(.item == "file:self-marked.conf") | .platform // empty | join(" ")' <<< "$MANIFEST_A")"
+check "and neither do the files collected by glob" "" \
+  "$(jq -r '.entries[] | select(.item == "env:personal") | .platform // empty | join(" ")' <<< "$MANIFEST_A")"
 check "manifest is version 2" "2" \
   "$(jq -r '.[] | select(.name == "bootstrap") | .notes' "$ITEMS" | jq -r '.version')"
 check "manifest entries carry scopes" "" \
@@ -294,6 +318,9 @@ make_home "$HOME_C"
 make_bw_stub "$HOME_C"
 run_push "$HOME_C" --push >/dev/null
 printf '%s\n' '# scope: work' '# owner: acme' 'export WORK_TOKEN=rotated' > "$HOME_C/.envs/work.env"
+# One item that really is stale, beside the one that merely failed, so the stale
+# report has to tell them apart rather than simply having nothing to say.
+printf '%s\n' '# scope: local' 'export SHARED_TOKEN=s' > "$HOME_C/.envs/shared.env"
 RC=0
 OUT_C="$(FAIL_NAME="env:work" run_push "$HOME_C" --push)" || RC=$?
 check "a write that keeps failing exits non-zero" "1" "$RC"
@@ -306,6 +333,57 @@ check "manifest excludes the failed item" "" \
 check "manifest keeps the others" "env:personal" \
   "$(jq -r '[.entries[] | select(.item == "env:personal")] | .[0].item // empty' <<< "$MANIFEST_C")"
 
+# An item that failed to write is still this machine's, and its vault copy is
+# still the only one. Offering to delete it is the worst thing the stale report
+# can do.
+STALE_C="$(sed -n '/In the vault but not sent/,/could not be written/p' <<< "$OUT_C")"
+contains "a genuinely stale item is still named" "env:shared" "$STALE_C"
+lacks "but a failed one is not offered for deletion" "env:work" "$STALE_C"
+
+# ------------------------------------------------------------------------------
+printf '\nsecrets-push: an attachment that does not land\n'
+
+# payload-hash is what the next run compares against. Written before the upload,
+# a failed upload leaves the item claiming bytes it does not hold - and every
+# later push believes the claim, so the attachment never goes up again.
+HOME_E="$TEST_ROOT/e"
+make_home "$HOME_E"
+make_bw_stub "$HOME_E"
+make_tracked "$HOME_E"
+run_push "$HOME_E" --push >/dev/null
+ITEMS_E="$HOME_E/.bwstate/items.json"
+
+printf '\x00\x01changed payload\x00' > "$HOME_E/Library/Keychains/fixture.keychain-db"
+NEW_HASH="$(shasum -a 256 < "$HOME_E/Library/Keychains/fixture.keychain-db" 2>/dev/null \
+            || sha256sum < "$HOME_E/Library/Keychains/fixture.keychain-db")"
+NEW_HASH="${NEW_HASH%% *}"
+
+RC=0
+OUT_E="$(FAIL_ATTACH=1 run_push "$HOME_E" --push)" || RC=$?
+check "a failed upload fails the run" "1" "$RC"
+STORED="$(jq -r '.[] | select(.name == "file:fixture-keychain")
+                 | (.fields // []) | map(select(.name == "payload-hash")) | .[0].value // ""' "$ITEMS_E")"
+if [[ "$STORED" == "$NEW_HASH" ]]; then
+  fail "the vault does not claim bytes it never received"
+else
+  pass "the vault does not claim bytes it never received"
+fi
+
+# ... so the next push, with the server back, actually re-uploads.
+: > "$HOME_E/.bwstate/calls.log"
+run_push "$HOME_E" --push >/dev/null
+check "the next push re-uploads it" "1" \
+  "$(grep -c '^create attachment' "$HOME_E/.bwstate/calls.log" || true)"
+check "and records the hash once it is there" "$NEW_HASH" \
+  "$(jq -r '.[] | select(.name == "file:fixture-keychain")
+            | (.fields // []) | map(select(.name == "payload-hash")) | .[0].value // ""' "$ITEMS_E")"
+
+: > "$HOME_E/.bwstate/calls.log"
+run_push "$HOME_E" --push >/dev/null
+check "and a third push sends nothing" "0" \
+  "$(grep -c '^create attachment' "$HOME_E/.bwstate/calls.log" || true)"
+
+# ------------------------------------------------------------------------------
 printf '\nsecrets-push: an unchanged push costs nothing\n'
 HOME_D="$TEST_ROOT/d"
 make_home "$HOME_D"
@@ -353,6 +431,60 @@ check "explicit work adds only work"  "app:aas env:work gpg:primary " "$(restore
 check "comma list"  "app:aas env:personal env:work gpg:primary " "$(restore_list personal,work)"
 check "all"         "app:aas env:personal env:shared env:work gpg:primary " "$(restore_list all)"
 check "machine file sets the default" "app:aas env:shared gpg:primary " "$(restore_list "" shared)"
+
+# ------------------------------------------------------------------------------
+printf '\nsecrets restore: platform filter\n'
+
+# Which machine this is. The entries below are written around it so the test
+# says the same thing wherever it runs.
+SELF_PLATFORM="$(bash -c '
+  source "'"$REPO_ROOT"'/lib/platform.sh"
+  detect_platform >/dev/null 2>&1
+  printf "%s" "$PLATFORM"')"
+
+PLAT_MANIFEST='{"version":2,"entries":[
+  {"item":"env:everywhere","source":"notes","dest":"~/.envs/a.env","scope":"personal"},
+  {"item":"env:here","source":"notes","dest":"~/.envs/b.env","scope":"personal","platform":"'"$SELF_PLATFORM"'"},
+  {"item":"env:windowsonly","source":"notes","dest":"~/.envs/c.env","scope":"personal","platform":["windows"]},
+  {"item":"env:broken","source":"notes","dest":"~/.envs/d.env","scope":"personal","platform":[5]},
+  {"item":"env:empty","source":"notes","dest":"~/.envs/e.env","scope":"personal","platform":[]}
+]}'
+
+plat_restore() { # prints the items a restore here would touch
+  local home="$TEST_ROOT/p$RANDOM"
+  mkdir -p "$home"
+  HOME="$home" DRY_RUN=true bash -c '
+    source "'"$REPO_ROOT"'/lib/core.sh"
+    source "'"$REPO_ROOT"'/lib/platform.sh"
+    detect_platform >/dev/null 2>&1
+    source "'"$REPO_ROOT"'/modules/secrets.sh"
+    VAULT_ITEMS_CACHE='"'"'[{"name":"bootstrap","notes":'"$(jq -Rs . <<< "$PLAT_MANIFEST")"'}]'"'"'
+    apply_manifest
+  ' 2>&1
+}
+
+PLAT_OUT="$(plat_restore)"
+PLAT_LIST="$(grep -o 'Would restore [a-z:]*' <<< "$PLAT_OUT" | awk '{print $3}' | sort | tr '\n' ' ')"
+check "an untagged entry restores anywhere, a foreign one does not" \
+  "env:empty env:everywhere env:here " "$PLAT_LIST"
+contains "the foreign entry says why it was skipped" \
+  "Skipped env:windowsonly (platform: windows)" "$PLAT_OUT"
+contains "a platform that is not a name is an error, not a guess" \
+  "env:broken" "$(sed -n '/non-string platform/p' <<< "$PLAT_OUT")"
+
+# The name matching itself, without a manifest in the way.
+plat_match() { # <entry-platforms> <this-machine>
+  bash -c '
+    source "'"$REPO_ROOT"'/lib/core.sh"
+    source "'"$REPO_ROOT"'/modules/secrets.sh"
+    PLATFORM="'"$2"'"
+    _platform_matches "'"$1"'" && echo yes || echo no'
+}
+check "macos entry on a mac"        "yes" "$(plat_match macos macos)"
+check "macos entry on linux"        "no"  "$(plat_match macos linux)"
+check "linux entry under wsl"       "yes" "$(plat_match linux wsl)"
+check "a list matches on any name"  "yes" "$(plat_match "macos linux" linux)"
+check "windows entry nowhere here"  "no"  "$(plat_match windows macos)"
 
 printf '\n'
 if [[ "$FAILURES" -gt 0 ]]; then

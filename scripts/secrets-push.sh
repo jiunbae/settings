@@ -24,10 +24,14 @@
 # Anything else is tracked by listing it in ~/.config/settings/secrets-paths,
 # one per line - because the next secret will not live where this script guessed:
 #
-#   <path>  <scope>  [owner]  [item-name]
+#   <path>  <scope>  [owner]  [item-name]  [platforms]
 #   ~/.npmrc                                    personal
 #   ~/.aws/config                               work      acme
-#   ~/Library/Keychains/x.keychain-db           work      acme   file:x-keychain
+#   ~/Library/Keychains/x.keychain-db           work      acme   file:x-keychain  macos
+#
+# The fifth column is comma-separated and says where the path exists at all, so
+# a restore elsewhere skips it instead of writing a macOS keychain into a Linux
+# home. scripts/kitbag-config.sh reads the same column out of the same file.
 #
 # A path's own `# scope:` header still wins over the column, so a file that can
 # carry the marker keeps carrying it. Text goes up as notes; anything binary
@@ -57,6 +61,11 @@
 #   OTPeek CLI config+vault  -> app:otpeek    otpeek.tar.gz    | tar -x into $HOME, repoint the vault path
 # `aas export` reads the Claude credential from the login keychain, so run this
 # from a Terminal on the Mac itself, not over SSH.
+#
+# All three restore into ~/Library and shell out to macOS-only commands, so each
+# is tagged "platform": ["macos"] in the manifest. A restore on another platform
+# skips them instead of running `open -a` or writing an Application Support path
+# that means nothing there.
 #
 # Everything is stored as a Secure Note. Bitwarden's native SSH Key item type
 # would also work for the key pairs, but the exact shape of its template could
@@ -123,6 +132,19 @@ _owner_of() {
         | sed -nE 's/^[[:space:]]*#[[:space:]]*owner:[[:space:]]*(.+)$/\1/p' | head -1
 }
 
+# Where an entry can be restored at all. A name that is not one of these is a
+# typo, and a typo here is an entry that restores on no machine ever again -
+# which is worth the same treatment as an unknown scope: reported, not pushed.
+PLATFORMS_VALID="macos windows linux wsl"
+
+_platform_valid() {
+    local p
+    for p in ${1//,/ }; do
+        case " $PLATFORMS_VALID " in *" $p "*) ;; *) return 1 ;; esac
+    done
+    return 0
+}
+
 _scope_valid() {
     case " $SCOPES_VALID " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
@@ -148,7 +170,8 @@ _scope_gate() {
 # ==============================================================================
 # Collection
 # ==============================================================================
-# One line per entry: <srcpath> <item> <dest> <mode> <pubpath> <scope> <owner>.
+# One line per entry:
+#   <srcpath> <item> <dest> <mode> <pubpath> <scope> <owner> <platforms>.
 # Fields are separated by US (0x1f), not by a tab: bash counts a tab as IFS
 # whitespace, so a run of them collapses and an empty field - a key with no
 # .pub, a file with no owner - would shift every column after it.
@@ -165,8 +188,8 @@ collect() {
         case "$base" in _*) continue ;; esac
         scope="$(_scope_gate "$f" "env:$base")" || continue
         owner="$(_owner_of "$f")"
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-            "$f" "env:$base" "~/.envs/$base.env" 600 "" "$scope" "$owner" >> "$COLLECTED"
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+            "$f" "env:$base" "~/.envs/$base.env" 600 "" "$scope" "$owner" "" >> "$COLLECTED"
     done
 
     # ~/.ssh/id_* private keys, with the matching .pub carried as a field. A key
@@ -179,8 +202,8 @@ collect() {
         scope="$(_scope_gate "$f" "ssh:$base" personal)" || continue
         local pub=""
         [[ -f "$f.pub" ]] && pub="$f.pub"
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-            "$f" "ssh:$base" "~/.ssh/$base" 600 "$pub" "$scope" "" >> "$COLLECTED"
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+            "$f" "ssh:$base" "~/.ssh/$base" 600 "$pub" "$scope" "" "" >> "$COLLECTED"
     done
 
     # ~/.ssh/config.d/*.conf, minus whatever the repo already manages. Anything
@@ -196,8 +219,8 @@ collect() {
         fi
         scope="$(_scope_gate "$f" "ssh:config-${base%.conf}")" || continue
         owner="$(_owner_of "$f")"
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-            "$f" "ssh:config-${base%.conf}" "~/.ssh/config.d/$base" 600 "" "$scope" "$owner" >> "$COLLECTED"
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+            "$f" "ssh:config-${base%.conf}" "~/.ssh/config.d/$base" 600 "" "$scope" "$owner" "" >> "$COLLECTED"
     done
 
     collect_tracked_paths
@@ -208,8 +231,8 @@ collect() {
     if [[ -f "$ak" ]]; then
         if scope="$(_scope_gate "$ak" "ssh:authorized_keys")"; then
             owner="$(_owner_of "$ak")"
-            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-                "$ak" "ssh:authorized_keys" "~/.ssh/authorized_keys" 600 "" "$scope" "$owner" >> "$COLLECTED"
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$ak" "ssh:authorized_keys" "~/.ssh/authorized_keys" 600 "" "$scope" "$owner" "" >> "$COLLECTED"
         fi
     fi
 }
@@ -239,12 +262,12 @@ _is_text() { grep -Iq . "$1" 2>/dev/null; }
 
 collect_tracked_paths() {
     [[ -f "$TRACKED_PATHS" ]] || return 0
-    local line path scope owner name expanded
+    local line path scope owner name platform expanded
     while IFS= read -r line; do
         case "$line" in ''|\#*) continue ;; esac
         # shellcheck disable=SC2086
         set -- $line
-        path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}
+        path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}; platform=${5:-}
         [[ -n "$path" ]] || continue
         expanded="${path/#\~/$HOME}"
         if [[ ! -e "$expanded" ]]; then
@@ -267,21 +290,28 @@ collect_tracked_paths() {
             continue
         fi
         [[ "$declared" == "local" ]] && continue
+        if [[ -n "$platform" ]] && ! _platform_valid "$platform"; then
+            printf '  %s — unknown platform '"'"'%s'"'"' (want: %s)\n' \
+                "$path" "$platform" "${PLATFORMS_VALID// /, }" >> "$UNSCOPED"
+            continue
+        fi
+        platform="${platform//,/ }"
         [[ -n "$name" ]] || name="$(_path_item_name "$expanded")"
         [[ -n "$owner" ]] || owner="$(_owner_of "$expanded")"
 
         if _is_text "$expanded"; then
-            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" >> "$COLLECTED"
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" "$platform" >> "$COLLECTED"
         else
             # Binary: goes up as an attachment and is placed back as a file.
-            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
-                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" >> "$BINARIES"
+            printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" \
+                "$expanded" "$name" "$path" 600 "" "$declared" "$owner" "$platform" >> "$BINARIES"
         fi
     done < "$TRACKED_PATHS"
 }
 
-# App data. Each line: <item> <attachment-file-name> <restore-exec> <kind> <scope>
+# App data. Each line:
+#   <item> <attachment-file-name> <restore-exec> <kind> <scope> <platforms>
 BARSHELF_DIR="$HOME/Library/Application Support/BarShelf"
 # OTPeek's app and CLI share one encrypted vault in the app group container; the
 # CLI finds it through active_vault in its config, an absolute path.
@@ -298,25 +328,37 @@ SCOPE_OTPEEK="${SETTINGS_SCOPE_OTPEEK:-mixed}"
 
 collect_apps() {
     if command_exists aas && aas list 2>/dev/null | grep -q '@'; then
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" "app:aas" "aas-bundle.json" \
-            'aas import -' aas "$SCOPE_AAS" >> "$APPS"
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" "app:aas" "aas-bundle.json" \
+            'aas import -' aas "$SCOPE_AAS" macos >> "$APPS"
     fi
 
     if [[ -d "$BARSHELF_DIR" ]]; then
         # Quit the app first so it cannot write its old state back over the restore,
         # then start it again on the restored data.
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" "app:barshelf" "barshelf.tar.gz" \
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" "app:barshelf" "barshelf.tar.gz" \
             'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' \
-            barshelf "$SCOPE_BARSHELF" >> "$APPS"
+            barshelf "$SCOPE_BARSHELF" macos >> "$APPS"
     fi
 
     if [[ -f "$HOME/$OTPEEK_CONFIG" && -f "$HOME/$OTPEEK_VAULT" ]]; then
         # The vault is encrypted with the OTPeek master password; it stays that way
         # in the attachment. active_vault is rewritten for the restoring user's home.
-        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" "app:otpeek" "otpeek.tar.gz" \
+        printf "%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s${SEP}%s\n" "app:otpeek" "otpeek.tar.gz" \
             'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' \
-            otpeek "$SCOPE_OTPEEK" >> "$APPS"
+            otpeek "$SCOPE_OTPEEK" macos >> "$APPS"
     fi
+}
+
+# _platform_json <space-separated names> - the manifest's platform array, or [].
+# jq -R on empty input prints nothing and --argjson refuses an empty string,
+# which under `set -e` would abort a push after the attachments are uploaded
+# and the old ones pruned, but before the manifest is written.
+_platform_json() {
+    if [[ -z "${1:-}" ]]; then
+        printf '[]'
+        return 0
+    fi
+    printf '%s' "$1" | jq -R 'split(" ") | map(select(length > 0))'
 }
 
 _sha256() {   # hashes stdin
@@ -572,15 +614,22 @@ upsert_attachment() {
     local id fname old
     fname="$(basename "$file")"
     id="$(_item_id "$name")"
+    # The hash is what the next run compares against, so it must not be written
+    # until the bytes it describes are in the vault. Writing it here and then
+    # failing the upload leaves the item claiming content it does not hold, and
+    # every later push reads that claim and reports "unchanged" - the attachment
+    # never goes up again, and the manifest points restores at the old bytes.
+    # Clearing it first means a run that dies here re-uploads next time, which
+    # is the safe direction to be wrong in.
     if [[ -z "$id" ]]; then
-        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope" "" "$phash" || return 1
+        upsert_note "$name" "Restored by 'install.sh secrets' from the attachment $fname." "$fid" "" "$scope" "" "" || return 1
         _load_items
         id="$(_item_id "$name")"
     else
         # Keep folder and scope current even when the attachment is all that changes.
         local notes
         notes="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes=""
-        upsert_note "$name" "$notes" "$fid" "" "$scope" "" "$phash" >/dev/null || return 1
+        upsert_note "$name" "$notes" "$fid" "" "$scope" "" "" >/dev/null || return 1
     fi
 
     local before after
@@ -605,6 +654,16 @@ upsert_attachment() {
         log_success "attached $name/$fname"
     else
         log_warn "attached $name/$fname, but the item now has $after attachments with that name"
+    fi
+
+    # Now, and only now, record what the vault holds. A failure here costs one
+    # needless upload next time and nothing else.
+    if [[ -n "$phash" ]]; then
+        local notes_now
+        notes_now="$(_bw_read bw get item "$id" | jq -r '.notes // ""')" || notes_now=""
+        if ! upsert_note "$name" "$notes_now" "$fid" "" "$scope" "" "$phash" >/dev/null; then
+            log_warn "$name: the attachment is up but its payload-hash was not written; the next push re-uploads it"
+        fi
     fi
 }
 
@@ -719,32 +778,38 @@ print_collected() {   # <section title>
     local rows="$TMPDIR_ROWS"
     : > "$rows"
 
-    local src item dest mode pub scope owner detail spans group
-    while IFS="$SEP" read -r src item dest mode pub scope owner; do
+    local src item dest mode pub scope owner platforms detail spans group
+    while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
         detail="$(_detail "$item" "$src" "$mode" "$pub")"
         if [[ "$scope" == "mixed" ]]; then
             spans="$(_spans_of "$src")"
             [[ -n "$spans" ]] && detail="${detail:+$detail  }— $spans"
         fi
+        [[ -n "$platforms" ]] && detail="$detail  [$platforms]"
         group="$scope"
         [[ -n "$owner" ]] && group="$scope · $owner"
         printf '%s\t%s\t%s\n' "$group" "$item" "$detail" >> "$rows"
     done < "$COLLECTED"
 
-    while IFS="$SEP" read -r src item dest mode pub scope owner; do
+    while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
         detail="binary, $(wc -c < "$src" | tr -d ' ') bytes → $dest"
+        [[ -n "$platforms" ]] && detail="$detail  [$platforms]"
         group="$scope"
         [[ -n "$owner" ]] && group="$scope · $owner"
         printf '%s\t%s\t%s\n' "$group" "$item" "$detail" >> "$rows"
     done < "$BINARIES"
 
-    local fname exec_cmd kind
-    while IFS="$SEP" read -r item fname exec_cmd kind scope; do
+    local fname exec_cmd kind platforms
+    while IFS="$SEP" read -r item fname exec_cmd kind scope platforms; do
         detail="$fname"
         if [[ "$scope" == "mixed" ]]; then
             spans="$(_app_spans "$kind")"
             [[ -n "$spans" ]] && detail="$detail  — $spans"
         fi
+        # Where it restores, when that is not everywhere. An entry nobody can
+        # apply on the machine in front of them should say so before the push,
+        # not only in the manifest.
+        [[ -n "$platforms" ]] && detail="$detail  [$platforms]"
         printf '%s\t%s\t%s\n' "$scope" "$item" "$detail" >> "$rows"
     done < "$APPS"
 
@@ -837,7 +902,7 @@ ENTRIES="$(mktemp)"
 PAYLOADS="$(umask 077; mktemp -d "${TMPDIR:-/tmp}/settings-push.XXXXXX")"
 
 print_section "Pushing"
-while IFS="$SEP" read -r src item dest mode pub scope owner; do
+while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
     content="$(cat "$src")"
     if [[ -z "$content" ]]; then
         log_warn "skipped  $item (empty file: $src)"
@@ -858,7 +923,9 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
             '{item: $item, source: "notes", exec: $exec, scope: $scope}' >> "$ENTRIES"
     else
         jq -n --arg item "$item" --arg dest "$dest" --arg mode "$mode" --arg scope "$scope" \
-            '{item: $item, source: "notes", dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
+            --argjson plat "$(_platform_json "$platforms")" \
+            '{item: $item, source: "notes", dest: $dest, mode: $mode, scope: $scope}
+             | if ($plat | length) > 0 then .platform = $plat else . end' >> "$ENTRIES"
     fi
 
     if [[ -n "$pubval" ]]; then
@@ -869,7 +936,7 @@ done < "$COLLECTED"
 
 # Tracked paths that are not text: the file itself is the attachment, and the
 # restore writes it back byte for byte.
-while IFS="$SEP" read -r src item dest mode pub scope owner; do
+while IFS="$SEP" read -r src item dest mode pub scope owner platforms; do
     fid="$(_folder_id "$(_scope_folder "$scope")")"
     fp="$(_sha256 < "$src")"
     fname="$(basename "$src")"
@@ -883,13 +950,18 @@ while IFS="$SEP" read -r src item dest mode pub scope owner; do
     fi
     jq -n --arg item "$item" --arg src "attachment:$fname" --arg dest "$dest" \
           --arg mode "$mode" --arg scope "$scope" \
-        '{item: $item, source: $src, dest: $dest, mode: $mode, scope: $scope}' >> "$ENTRIES"
+          --argjson plat "$(_platform_json "$platforms")" \
+        '{item: $item, source: $src, dest: $dest, mode: $mode, scope: $scope}
+         | if ($plat | length) > 0 then .platform = $plat else . end' >> "$ENTRIES"
 done < "$BINARIES"
 
-while IFS="$SEP" read -r item fname exec_cmd kind scope; do
+while IFS="$SEP" read -r item fname exec_cmd kind scope platforms; do
+    plat_json="$(_platform_json "$platforms")"
     manifest_entry() {
         jq -n --arg item "$item" --arg src "attachment:$fname" --arg exec "$exec_cmd" --arg scope "$scope" \
-            '{item: $item, source: $src, exec: $exec, scope: $scope}' >> "$ENTRIES"
+            --argjson plat "$plat_json" \
+            '{item: $item, source: $src, exec: $exec, scope: $scope}
+             | if ($plat | length) > 0 then .platform = $plat else . end' >> "$ENTRIES"
     }
 
     fid="$(_folder_id "$(_scope_folder "$scope")")"
@@ -932,7 +1004,16 @@ done < "$APPS"
 # but not the exec entries this run just rewrote, or every push would add a copy.
 print_section "Manifest"
 PUSHED_ITEMS="$(jq -s '[.[].item]' < "$ENTRIES")"
+# An item this run failed to write is not "not sent by this machine" - it is
+# "sent, and did not land". Leaving it out of KEEP puts it in the stale report
+# with a ready-made `bw delete item`, which is an offer to destroy the vault's
+# only copy of a secret that is still on this disk and still being pushed.
 KEEP="$PUSHED_ITEMS"
+if [[ -s "$FAILED" ]]; then
+    KEEP="$(jq -n --argjson pushed "$PUSHED_ITEMS" \
+        --argjson failed "$(sed 's/^[[:space:]]*//' "$FAILED" | jq -Rs 'split("\n") | map(select(length > 0))')" \
+        '$pushed + $failed')"
+fi
 MANIFEST_ID="$(_item_id "$VAULT_MANIFEST")"
 EXISTING_EXTRA="$([[ -n "$MANIFEST_ID" ]] && bw get item "$MANIFEST_ID" 2>/dev/null \
     | jq -r '.notes // empty' 2>/dev/null \
