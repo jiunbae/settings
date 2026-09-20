@@ -1,5 +1,9 @@
 # Secrets
 
+> **Replaced.** `./install.sh secrets` restores with [kitbag](kitbag.md) now.
+> This page describes the engine underneath it, which still runs for a machine
+> that has not moved across: `SETTINGS_SECRETS_ENGINE=bash ./install.sh secrets`.
+
 `./install.sh secrets` restores private material — SSH keys, GPG keys, `.env`
 files, host configs that are too sensitive for a public repo, and app state such as aas
 accounts, BarShelf data and the OTPeek vault — from a
@@ -25,15 +29,68 @@ itself, behind the master password and verification code.
 Anyone can reuse this: point `SETTINGS_VAULT_SERVER` at your own vault, write
 your own manifest, done. Nothing in this repo needs forking or editing.
 
+## Scopes
+
+One vault, several lives. Every secret declares whose it is, and a machine
+restores only the scopes it asks for — so a personal laptop never has to hold an
+employer's credentials, and the machine that does can still get everything from
+the same place.
+
+| Scope | What it means |
+| --- | --- |
+| `personal` | Your own accounts and infrastructure |
+| `work` | An employer's or client's credentials |
+| `shared` | An account someone else owns that you were given access to |
+| `mixed` | One blob holding several of the above (aas accounts, an OTP vault, a GPG key with more than one identity) |
+| `local` | Machine-only — collected by nothing, pushed by nothing (a cached vault session, for instance) |
+
+The marker lives in the file, never in this repository: a public repo must not
+carry the list of which employer or which service each secret belongs to.
+
+```sh
+# ~/.envs/<service>.env, ~/.ssh/config.d/*.conf — a comment in the first 5 lines
+# scope: work
+# owner: acme        # optional, free text, kept as a vault field
+```
+
+A private key holds no comments, so it takes a sidecar instead —
+`~/.ssh/id_work.scope` containing the word `work`. A key with neither is the
+machine owner's own key (`personal`); **every other file without a marker is
+skipped and listed**, so a new secret is never filed into the wrong life by
+default.
+
+In the vault, scopes become folders under the bootstrap folder and a `scope`
+custom field on each item:
+
+    bootstrap/                 manifest
+    bootstrap/personal/        env:…, ssh:…
+    bootstrap/work/            env:…, ssh:config-…
+    bootstrap/shared/          env:…
+
+Changing a file's marker moves the item on the next push; items left in those
+folders that no machine pushes any more are reported with the command to delete
+them.
+
 ## New machine
 
 ```bash
 # 1. Public settings — unchanged
 curl -LsSf https://settings.jiun.dev | bash -s -- --all
 
-# 2. Secrets — separate, explicit command
+# 2. Secrets — separate, explicit command. Personal only, by default.
 cd ~/.settings && ./install.sh secrets
+
+# Everything, or a specific set:
+SETTINGS_SECRETS_SCOPE=all ./install.sh secrets
+SETTINGS_SECRETS_SCOPE=personal,work ./install.sh secrets
+
+# Or decide once per machine, and plain `./install.sh secrets` follows it:
+mkdir -p ~/.config/settings && echo all > ~/.config/settings/secrets.scope
 ```
+
+`./install.sh -n secrets` lists what each entry would do, with its scope, and
+writes nothing. `mixed` entries restore under every scope — they cannot be split
+from out here.
 
 Step 2 installs the Bitwarden CLI pinned to a version verified against the vault
 (`npm install -g @bitwarden/cli@2026.8.0`; override with `SETTINGS_BW_CLI_VERSION`),
@@ -79,6 +136,87 @@ brew install open330/tap/aas                              # + install BarShelf.a
 cd ~/.settings && ./install.sh secrets                     # keys, envs, app data
 ```
 
+## Seeing where things stand
+
+```bash
+scripts/secrets-push.sh            # what this machine holds, grouped by scope. Reads nothing remote.
+scripts/secrets-push.sh --status   # the same, marked against the vault. Writes nothing.
+scripts/secrets-push.sh --push     # apply
+./install.sh -n secrets            # what a restore would write here
+```
+
+`--status` unlocks the vault read-only and marks every item with what a push
+would do to it:
+
+    + new         the vault has never seen it
+    ~ changed     the vault holds something else
+    = unchanged   nothing to send
+    ? built on push   only building the payload would tell (the aas bundle,
+                      whose tokens rotate on their own)
+
+It ends with the items sitting in the vault that this machine no longer sends —
+a file that turned `local`, was deleted, or lost its marker — each with the
+command to remove it.
+
+## Tracking a path that is not where this script guessed
+
+`~/.envs/*.env`, `~/.ssh/id_*`, `~/.ssh/config.d/*.conf` and
+`~/.ssh/authorized_keys` are collected because they are where these things
+usually live. Everything else is listed, one per line, in
+`~/.config/settings/secrets-paths` (override with `SETTINGS_TRACKED_PATHS`):
+
+```
+# <path>  <scope>  [owner]  [item-name]
+~/.npmrc                                   personal
+~/.aws/config                              work      acme
+~/Library/Keychains/x.keychain-db          work      acme   file:x-keychain
+```
+
+- A `# scope:` header **inside** the file still wins over the column, so a file
+  that can carry its own marker keeps carrying it.
+- Text goes up as notes; **anything binary goes up as an attachment** and is
+  written back byte for byte, which is how a keychain or a `.db` travels.
+- A listed path that is missing on this machine is reported, not silently
+  skipped — that is usually a machine that has not been set up yet, not a typo.
+- Directories are refused: track the files inside them, so a restore never
+  writes a tree you did not look at.
+
+The item name defaults to a slug of the path (`~/.aws/config` → `file:aws-config`).
+
+## Machine trust
+
+`scripts/ssh-trust.sh` keeps one list of the keys your own machines log in with,
+so adding a machine does not mean editing `authorized_keys` on every other one.
+
+```bash
+scripts/ssh-trust.sh list                   # who is trusted where
+scripts/ssh-trust.sh register [--new-key]   # this machine joins the list
+scripts/ssh-trust.sh sync [host...]         # collect every host's key, give every host the union
+scripts/ssh-trust.sh revoke <fp|comment>    # drop a key here and everywhere
+```
+
+Hosts are ssh aliases read from `~/.ssh/trusted-hosts` (one per line), or passed
+as arguments — no machine name lives in this repository.
+
+**One key per machine, not one key for all of them.** A key every machine holds
+cannot be revoked for one machine, and tells you nothing about which machine
+logged in. `register --new-key` gives this machine its own; the list says which
+keys are yours.
+
+`~/.ssh/authorized_keys` carries a `# scope: personal` header, so it rides the
+vault like everything else — and that is what closes the loop on a new machine:
+
+1. New machine runs `./install.sh secrets`, which **merges** the list into its
+   `authorized_keys`. Your existing machines can now reach it.
+2. From any machine, `scripts/ssh-trust.sh sync` collects the new machine's key
+   and hands the union to everyone.
+3. `scripts/secrets-push.sh --push` puts the updated list back in the vault.
+
+The restore **merges and never deletes**: a host may hold keys the list has
+never seen — a CI runner, an agent, a phone — and overwriting the file would
+lock them out silently. `revoke` is the only thing that removes, and only what
+you name.
+
 ## Manifest format
 
 Stored in the **notes** field of the vault item named by
@@ -86,16 +224,16 @@ Stored in the **notes** field of the vault item named by
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "entries": [
-    {"item": "ssh:id_ed25519", "source": "sshkey",       "dest": "~/.ssh/id_ed25519",     "mode": "600"},
-    {"item": "ssh:id_ed25519", "source": "field:public", "dest": "~/.ssh/id_ed25519.pub", "mode": "644"},
+    {"item": "ssh:id_ed25519", "source": "sshkey",       "dest": "~/.ssh/id_ed25519",     "mode": "600", "scope": "personal"},
+    {"item": "ssh:id_ed25519", "source": "field:public", "dest": "~/.ssh/id_ed25519.pub", "mode": "644", "scope": "personal"},
     {"item": "ssh:company",    "source": "attachment:20-company.conf",
-                               "dest": "~/.ssh/config.d/20-company.conf", "mode": "600"},
-    {"item": "gpg:primary",    "source": "notes", "exec": "gpg --batch --quiet --import"},
-    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust"},
+                               "dest": "~/.ssh/config.d/20-company.conf", "mode": "600", "scope": "work"},
+    {"item": "gpg:primary",    "source": "notes", "exec": "gpg --batch --quiet --import",    "scope": "mixed"},
+    {"item": "gpg:ownertrust", "source": "notes", "exec": "gpg --quiet --import-ownertrust", "scope": "mixed"},
     {"item": "app:barshelf",   "source": "attachment:barshelf.tar.gz",
-                               "exec": "tar -xzf - -C ...", "platform": ["macos"]}
+                               "exec": "tar -xzf - -C ...", "scope": "personal", "platform": ["macos"]}
   ]
 }
 ```
@@ -107,6 +245,7 @@ Stored in the **notes** field of the vault item named by
 | `dest` | File to write. `~` is expanded. Mutually exclusive with `exec` |
 | `exec` | Command to pipe the payload into. Mutually exclusive with `dest` |
 | `mode` | `chmod` for `dest`, default `600`. On Windows a mode whose group/other digits are `0` means "strip inherited ACEs, leave only this user" |
+| `scope` | `personal`, `work`, `shared` or `mixed`. Missing (version 1 manifests) is treated as `mixed`, with a warning |
 | `platform` | Where the entry applies — `macos`, `windows`, `linux`, as a string or an array. Absent means everywhere; WSL matches `linux` too |
 
 Restores are idempotent: an unchanged `dest` is skipped, and a changed one is
@@ -152,6 +291,7 @@ Three things differ from the bash engine, each forced by the platform:
 | :--- | :--- |
 | **ACLs, not `chmod`** | Windows OpenSSH ignores POSIX modes and reads the ACL, so a restored key that still carries inherited ACEs is refused with `UNPROTECTED PRIVATE KEY FILE`. An entry whose `mode` ends in `00` gets inheritance disabled and one ACE for the current user; a `644` public key keeps the inherited ACL. The destination **directory** is left alone — the profile ACL already grants only the user, SYSTEM and Administrators, and OpenSSH checks the key file, not the directory it sits in. |
 | **`exec` is not a shell** | There is no `sh` to hand the string to. A command containing a pipe, `;`, `&`, redirection or `$(…)` is refused with a note to tag that entry `"platform": ["macos"]` instead; a plain one such as `gpg --batch --quiet --import` runs directly, with the payload piped to its stdin as bytes rather than as text. |
+| **`ssh:authorized_keys` merges natively** | Its `exec` is a shell one-liner, so the rule above would refuse it — and a machine that skips it is a machine none of your others can reach. The same contract is implemented directly instead: match on type and base64, add what is missing, delete nothing, skip comments, leave the file with a private ACL. When it adds a key it also says that `sshd` reads `C:\ProgramData\ssh\administrators_authorized_keys` for accounts in `Administrators`. |
 | **Line endings** | Payloads written to `dest` are normalised to LF, and a final newline is added when one is missing. OpenSSH and GPG both reject a key whose armor carries CRLF, which a note edited in the web vault from a Windows browser can pick up. The trailing newline matters just as much: `secrets-push.sh` stores notes through `$(cat …)`, which strips it, and the bash engine only gets it back because `jq -r` appends one. Without it `ssh-keygen` fails the restored key with `error in libcrypto`. |
 
 ## Environment
@@ -161,6 +301,9 @@ Three things differ from the bash engine, each forced by the platform:
 | `SETTINGS_VAULT_SERVER` | `https://vault.jiun.dev` | Vault base URL |
 | `SETTINGS_VAULT_MANIFEST` | `bootstrap` | Item holding the manifest |
 | `SETTINGS_VAULT_2FA_METHOD` | `0` | `0` authenticator, `1` email, `3` YubiKey |
+| `SETTINGS_SECRETS_SCOPE` | `personal` | Scopes to restore: a comma-separated list, or `all` |
+| `SETTINGS_SECRETS_SCOPE_FILE` | `~/.config/settings/secrets.scope` | Per-machine default for the above |
+| `SETTINGS_SCOPE_AAS` / `_BARSHELF` / `_OTPEEK` | `mixed` / `personal` / `mixed` | Scope pushed for each app blob |
 
 ```bash
 SETTINGS_VAULT_SERVER=https://vault.example.com \
@@ -174,6 +317,8 @@ SETTINGS_VAULT_MANIFEST=my-bootstrap \
   enumerates the manifest for real; otherwise it reports that the vault is locked.
 - Secret payloads are staged in a `umask 077` temp directory that is removed on
   exit, including on failure.
+- `scripts/tests/secrets-scope-smoke.sh` covers collection, scope routing and the
+  restore filter against a stubbed `bw`; it touches no vault and no real secret.
 - The vault stays unlocked in the calling shell afterwards. Run `bw lock` when
   finished.
 - The vault is a single point of failure for bootstrapping. Keep an offline

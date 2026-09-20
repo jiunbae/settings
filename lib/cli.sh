@@ -16,7 +16,7 @@ readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra s
 # Opt-in only components. Kept OUT of COMPONENTS_ORDER on purpose so that --all
 # and the interactive menu can never restore private keys onto a machine that
 # just wanted dotfiles. These are valid only when named explicitly.
-readonly OPTIN_COMPONENTS=(secrets)
+readonly OPTIN_COMPONENTS=(secrets kitbag)
 
 # Basic components for --basic option
 readonly BASIC_COMPONENTS=(base zsh nvim tmux)
@@ -49,7 +49,7 @@ get_component_desc() {
         claude)      echo "Claude Code settings, hooks, skill index, memory, MCP servers" ;;
         cship)       echo "cship + Starship (fast Claude Code statusline, replaces ccstatusline)" ;;
         scripts)     echo "Personal CLI scripts linked into ~/.local/bin" ;;
-        secrets)     echo "SSH/GPG keys, env files and app data (aas, BarShelf, OTPeek) restored from the vault (opt-in, never in --all)" ;;
+        secrets)     echo "SSH/GPG keys, env files and app data restored from the vault by kitbag (opt-in, never in --all)" ;;
         *)           echo "" ;;
     esac
 }

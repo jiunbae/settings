@@ -21,18 +21,11 @@ Post-install: exec zsh
 <div><img src="https://quickstart-for-agents.vercel.app/api/footer.svg?theme=claude-code&project=jiunbae/settings" width="100%" /></div>
 </div>
 
-```
-╔══════════════════════════════════════════════════════════════╗
-║  Settings Installer                                          ║
-╠══════════════════════════════════════════════════════════════╣
-║ [████████████████████████████████████████░░░░░░░░░░]  80%    ║
-║  [6/8] Rust toolchain                                        ║
-╚══════════════════════════════════════════════════════════════╝
-
-  ✓ Installing Rust via rustup
-  ✓ Installing cargo-binstall
-  ⠋ Installing eza...
-```
+<div align="center">
+  <img src="docs/demo.gif" alt="./install.sh --core: the progress box filling across base, zsh, nvim, tmux and tools, then the summary of what was installed, skipped and symlinked" width="900" />
+  <br />
+  <sub><code>./install.sh --core</code> — five components, then what was installed, skipped and linked.</sub>
+</div>
 
 ## Quick Start
 
@@ -190,7 +183,8 @@ settings/
 ├── bin/                    # Personal CLI scripts, linked onto PATH
 │   └── windows/            #   Windows-only; install.sh never sees this dir
 ├── scripts/                # Build and maintenance helpers
-├── docs/                   # The guides linked below
+├── docs/                   # The guides linked below, plus the README GIF
+│   └── demo.tape           #   and the VHS tape and sandbox that record it
 ├── .gitea/workflows/       # Releases run on the self-hosted Gitea runner
 └── worker/                 # Cloudflare Worker — written, never deployed
 ```
@@ -217,6 +211,20 @@ syncs it automatically.
 > After changing `bootstrap.sh`, run `scripts/sync-gh-pages.sh --push`. The copy once
 > went stale for five months — long enough that the published installer was missing the
 > guard that refuses to `git reset --hard` over uncommitted local changes.
+
+The GIF at the top is recorded with [VHS](https://github.com/charmbracelet/vhs) and
+checked in, so it goes stale the same way. After changing the progress display, the
+component list or the summary, re-record it:
+
+```bash
+vhs docs/demo.tape                 # ~35s, rewrites docs/demo.gif
+```
+
+It installs nothing and never touches `$HOME`: the tape's prelude points the installer
+at a scratch `HOME` and a directory of shims, and its postlude removes them. The
+installer itself is real and has no demo mode — see
+[demo-README.md](docs/demo-README.md), including the note about pinning VHS to v0.11.0,
+because v0.12.0 exits 0 without writing the file.
 
 ## License
 
