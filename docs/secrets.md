@@ -126,6 +126,40 @@ brew install open330/tap/aas                              # + install BarShelf.a
 cd ~/.settings && ./install.sh secrets                     # keys, envs, app data
 ```
 
+## Machine trust
+
+`scripts/ssh-trust.sh` keeps one list of the keys your own machines log in with,
+so adding a machine does not mean editing `authorized_keys` on every other one.
+
+```bash
+scripts/ssh-trust.sh list                   # who is trusted where
+scripts/ssh-trust.sh register [--new-key]   # this machine joins the list
+scripts/ssh-trust.sh sync [host...]         # collect every host's key, give every host the union
+scripts/ssh-trust.sh revoke <fp|comment>    # drop a key here and everywhere
+```
+
+Hosts are ssh aliases read from `~/.ssh/trusted-hosts` (one per line), or passed
+as arguments — no machine name lives in this repository.
+
+**One key per machine, not one key for all of them.** A key every machine holds
+cannot be revoked for one machine, and tells you nothing about which machine
+logged in. `register --new-key` gives this machine its own; the list says which
+keys are yours.
+
+`~/.ssh/authorized_keys` carries a `# scope: personal` header, so it rides the
+vault like everything else — and that is what closes the loop on a new machine:
+
+1. New machine runs `./install.sh secrets`, which **merges** the list into its
+   `authorized_keys`. Your existing machines can now reach it.
+2. From any machine, `scripts/ssh-trust.sh sync` collects the new machine's key
+   and hands the union to everyone.
+3. `scripts/secrets-push.sh --push` puts the updated list back in the vault.
+
+The restore **merges and never deletes**: a host may hold keys the list has
+never seen — a CI runner, an agent, a phone — and overwriting the file would
+lock them out silently. `revoke` is the only thing that removes, and only what
+you name.
+
 ## Manifest format
 
 Stored in the **notes** field of the vault item named by

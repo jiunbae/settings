@@ -1,5 +1,28 @@
 {
-  "model": "opus[1m]",
+  "cleanupPeriodDays": 30,
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
+      "Read(**/.env.production)",
+      "Read(**/.env.staging)",
+      "Read(**/.env.development)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/credentials)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.claude/.credentials.json)"
+    ]
+  },
+  "model": "claude-fable-5-1[1m]",
   "hooks": {
     "Notification": [
       {
@@ -133,28 +156,5 @@
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
-  "theme": "dark",
-  "cleanupPeriodDays": 30,
-  "permissions": {
-    "deny": [
-      "Read(**/.env)",
-      "Read(**/.env.local)",
-      "Read(**/.env.*.local)",
-      "Read(**/.env.production)",
-      "Read(**/.env.staging)",
-      "Read(**/.env.development)",
-      "Read(**/*.pem)",
-      "Read(**/*.key)",
-      "Read(**/*.p12)",
-      "Read(**/*.pfx)",
-      "Read(**/id_rsa*)",
-      "Read(**/id_ed25519*)",
-      "Read(**/secrets/**)",
-      "Read(**/credentials/**)",
-      "Read(~/.ssh/**)",
-      "Read(~/.aws/credentials)",
-      "Read(~/.gnupg/**)",
-      "Read(~/.claude/.credentials.json)"
-    ]
-  }
+  "theme": "dark"
 }
