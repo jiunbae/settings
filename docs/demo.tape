@@ -76,12 +76,15 @@ Enter
 # delays in demo-setup.sh, not of any real work — and the remaining ~5s
 # hold on the summary and the completion box.
 #
-# This is a fixed sleep rather than `Wait+Screen /Installation Complete!/`
-# because Wait and the recorder contend for the same CDP connection: the
-# terminal stops draining partway through the run, the screen freezes
-# mid-summary, and the wait times out on a recording that had in fact
-# already finished. If you change a shim delay, re-time the run and change
-# this number with it.
+# A fixed sleep rather than `Wait+Screen /Installation Complete!/`, which
+# cannot work here at any timeout. VHS reads the screen with
+# `getLine(0 … term.rows-1)` — absolute buffer indices, not viewport-relative
+# ones — so once the terminal scrolls it is comparing against a frozen
+# snapshot of the first screenful. The summary is longer than a screen, so it
+# scrolls, and that snapshot ends at `• NeoVim`; the completion box is never
+# in it. 45s and 300s timeouts both fail on the identical 25 lines
+# (charmbracelet/vhs#659). If you change a shim delay, re-time the run and
+# change this number with it.
 Sleep 22s
 
 # ── Postlude — remove the sandbox ────────────────────────────────────────
