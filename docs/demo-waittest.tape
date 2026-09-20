@@ -82,7 +82,7 @@ Enter
 # mid-summary, and the wait times out on a recording that had in fact
 # already finished. If you change a shim delay, re-time the run and change
 # this number with it.
-Wait+Screen@300s /Installation Complete!/
+Wait+Screen@60s /Installation Complete!/
 Sleep 2s
 
 # ── Postlude — remove the sandbox ────────────────────────────────────────
