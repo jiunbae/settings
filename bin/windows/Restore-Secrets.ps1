@@ -12,8 +12,22 @@
   정합니다. 레포에는 엔진만 있고 목록은 마스터 비밀번호 뒤에 있으므로, 이 파일은
   공개 레포에 그대로 둘 수 있습니다.
 
+  어디까지 복원할지는 scope 가 정합니다. 한 vault 가 여러 삶을 담으므로
+  (personal / work / shared / mixed), 기본값은 personal 하나뿐입니다. bash 판과
+  같은 규칙이고 같은 파일(~/.config/settings/secrets.scope)을 읽습니다.
+
   push(= vault 에 올리는 쪽, scripts/secrets-push.sh)는 포팅하지 않았습니다.
   Windows 에만 있는 비밀은 없고, manifest 를 쓰는 주체가 둘이면 갈리기 때문입니다.
+
+  main 의 secrets 엔진은 kitbag 으로 넘어갔지만(docs/kitbag.md) kitbag 은 아직
+  macOS·Linux 바이너리만 냅니다. 그래서 Windows 에서는 manifest 엔진이 유일한
+  경로이고, 이 스크립트가 그 엔진입니다. bash 쪽에서 같은 것을 부르는 이름은
+  SETTINGS_SECRETS_ENGINE=bash 입니다.
+
+.PARAMETER Scope
+  복원할 scope. 쉼표로 여러 개, 또는 all. 지정하지 않으면
+  $env:SETTINGS_SECRETS_SCOPE, 그다음 ~/.config/settings/secrets.scope,
+  그래도 없으면 personal.
 
 .PARAMETER DryRun
   아무것도 쓰지 않고 무엇이 복원될지만 출력합니다. 비밀번호를 묻지 않습니다.
@@ -22,10 +36,11 @@
 .EXAMPLE
   .\Restore-Secrets.ps1 -DryRun
   .\Restore-Secrets.ps1
+  .\Restore-Secrets.ps1 -Scope all
   .\Restore-Secrets.ps1 -VaultServer https://vault.example.com -Manifest my-bootstrap
 
 .NOTES
-  bash 판과 다른 점은 셋뿐입니다.
+  bash 판과 다른 점은 넷뿐입니다.
 
   1. 퍼미션. Windows OpenSSH 는 POSIX 모드를 무시하고 ACL 을 봅니다. chmod 600 을
      그대로 옮기면 상속된 ACE 가 남아 ssh 가 UNPROTECTED PRIVATE KEY FILE 로 키를
@@ -35,8 +50,12 @@
      app:aas / app:barshelf / app:otpeek 은 ~/Library 와 open -a 를 쓰므로
      Windows 에서 실행되면 안 됩니다.
   3. exec 항목. bash 판은 bash -c 로 실행하지만 여기엔 sh 가 없습니다. 파이프나
-     리다이렉션이 섞인 명령은 실행하지 않고 platform 태그를 붙이라고 안내합니다.
+     리다이렉션이 섞인 명령은 실행하지 않고 왜 못 하는지를 말합니다.
      gpg --import 처럼 단순한 것만 stdin 으로 바이트 그대로 흘려보냅니다.
+  4. ssh:authorized_keys. 그 exec 는 sh 로 쓰인 "합쳐라, 지우지 마라" 한 줄인데,
+     3번 때문에 여기서는 돌지 않습니다. 명령을 흉내내는 대신 같은 규칙을
+     PowerShell 로 구현합니다. 새 기기가 기존 기기들에서 닿을 수 있게 되는
+     경로라서, 건너뛰면 그 기기만 조용히 고립됩니다.
 
   jq 는 필요 없습니다. ConvertFrom-Json 이 대신합니다.
 #>
@@ -53,6 +72,12 @@ param(
 
   # Vaultwarden 에 대해 검증된 bw 버전. 다르면 경고만 합니다.
   [string]$BwVersion = $(if ($env:SETTINGS_BW_CLI_VERSION) { $env:SETTINGS_BW_CLI_VERSION } else { "2026.8.0" }),
+
+  # 복원할 scope. 빈 값이면 환경변수 -> 파일 -> personal 순으로 정해집니다.
+  [string]$Scope = $(if ($env:SETTINGS_SECRETS_SCOPE) { $env:SETTINGS_SECRETS_SCOPE } else { "" }),
+
+  # scope 를 이 기기의 기본값으로 적어두는 파일. bash 판과 같은 경로입니다.
+  [string]$ScopeFile = $(if ($env:SETTINGS_SECRETS_SCOPE_FILE) { $env:SETTINGS_SECRETS_SCOPE_FILE } else { Join-Path $HOME ".config\settings\secrets.scope" }),
 
   # 쓰지 않고 계획만 출력
   [switch]$DryRun
@@ -396,15 +421,84 @@ function Split-Command([string]$Cmd) {
   return $tokens
 }
 
+# ------------------------------------------------------------------------------
+# 뜻만 같게 다시 구현한 exec
+# ------------------------------------------------------------------------------
+# manifest 의 exec 는 sh 한 줄입니다. 대부분은 그 항목이 macOS 전용이라 여기서
+# 돌 필요가 없지만, 하나는 다릅니다: ssh:authorized_keys 는 새 기기가 기존
+# 기기들에서 닿을 수 있게 만드는 경로라 Windows 에서도 반드시 적용돼야 합니다.
+# 명령 문자열을 흉내내는 대신, 그 명령이 말하는 계약("합쳐라, 아무것도 지우지
+# 마라")을 PowerShell 로 구현합니다. push 가 항목 이름을 바꾸면 여기서 못 찾고
+# 아래의 거부 메시지로 떨어집니다 - 조용히 건너뛰는 것보다 낫습니다.
+function Get-NativeExec([string]$ItemName) {
+  if ($ItemName -eq "ssh:authorized_keys") {
+    return [pscustomobject]@{
+      Describe = "~/.ssh/authorized_keys 에 병합 (추가만, 삭제 없음)"
+      Action   = "Merge-AuthorizedKeys"
+    }
+  }
+  return $null
+}
+
+# authorized_keys 는 덮어쓰면 안 되는 단 하나의 파일입니다. 이 기기에는 목록이
+# 본 적 없는 키(CI 러너, 에이전트, 휴대폰)가 있을 수 있고, 통째로 바꾸면 그것들이
+# 말없이 잠깁니다. 그래서 없는 줄만 더하고 아무것도 지우지 않습니다 - bash 쪽
+# AUTHORIZED_KEYS_MERGE 와 같은 규칙이고, 같은 판정(타입 + base64 부분 일치)입니다.
+function Merge-AuthorizedKeys {
+  param([string]$ItemName, [string]$PayloadFile)
+
+  $sshDir = Join-Path $HOME ".ssh"
+  if (-not (Test-Path -LiteralPath $sshDir)) {
+    New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+  }
+  $dest = Join-Path $sshDir "authorized_keys"
+
+  $lines = @()
+  if (Test-Path -LiteralPath $dest -PathType Leaf) {
+    $lines = @([System.IO.File]::ReadAllLines($dest))
+  }
+  # 비교는 파일 전체에 대한 부분 일치입니다. 같은 키가 다른 코멘트나 다른 옵션을
+  # 달고 있어도 두 번 들어가지 않습니다.
+  $haystack = ($lines -join "`n")
+
+  $added = 0
+  foreach ($raw in [System.IO.File]::ReadAllLines($PayloadFile)) {
+    $line = $raw.Trim()
+    if ($line.Length -eq 0 -or $line.StartsWith("#")) { continue }
+    $parts = @($line -split '\s+')
+    if ($parts.Count -lt 2) { continue }
+    $material = $parts[0] + " " + $parts[1]
+    if ($haystack.Contains($material)) { continue }
+    $lines += $line
+    $haystack = $haystack + "`n" + $line
+    $added++
+  }
+
+  if ($added -eq 0) {
+    Ok "$ItemName (이미 다 있음, $dest 그대로)"
+  } else {
+    [System.IO.File]::WriteAllText($dest, (($lines -join "`n") + "`n"),
+      (New-Object System.Text.UTF8Encoding($false)))
+    Ok "$ItemName -> $dest ($added 개 추가, 삭제 없음)"
+    # 이 계정이 관리자면 sshd 는 이 파일이 아니라 ProgramData 쪽을 봅니다.
+    # 키를 넣었는데 여전히 로그인이 안 되는 경우의 답이 거의 항상 이것입니다.
+    Info "이 계정이 Administrators 면 Windows sshd 는 C:\ProgramData\ssh\administrators_authorized_keys 를 읽습니다"
+  }
+  # 내용이 그대로여도 ACL 은 다시 맞춥니다. sshd 는 상속된 ACE 가 남은
+  # authorized_keys 를 거부합니다.
+  Protect-Path $dest
+}
+
 function Invoke-ExecEntry {
   param([string]$ItemName, [string]$Cmd, [string]$PayloadFile)
 
   # sh 가 없으므로 셸 문법이 섞이면 실행하지 않습니다. 조용히 반쯤 실행되는
-  # 것보다, 그 항목에 platform 태그가 빠졌다고 알려주는 편이 낫습니다.
+  # 것보다, 무엇을 못 했는지 말하는 편이 낫습니다.
   if ($Cmd -match '[|;&<>`]' -or $Cmd.Contains('$(')) {
     Warn "$ItemName 건너뜀 - 셸 문법이 있는 exec 는 Windows 에서 실행할 수 없습니다:"
     Info "  $Cmd"
     Info '  해당 항목이 macOS 전용이면 manifest 에 "platform": ["macos"] 를 넣으세요.'
+    Info "  Windows 에도 필요한 것이면 Get-NativeExec 에 구현을 추가해야 합니다."
     return
   }
 
@@ -440,6 +534,33 @@ function Invoke-ExecEntry {
 
   if ($proc.ExitCode -eq 0) { Ok "$ItemName -> $Cmd" }
   else { Warn "$ItemName 실패 (exit $($proc.ExitCode)): $Cmd" }
+}
+
+# ==============================================================================
+# scope
+# ==============================================================================
+
+# 이 기기가 복원할 scope. -Scope, 그다음 환경변수(파라미터 기본값에서 이미
+# 읽었습니다), 그다음 기기가 스스로 적어둔 파일, 마지막이 안전한 기본값
+# personal. 순서도 파일 경로도 bash 판(secrets_scope)과 같습니다 - 같은 기기에서
+# WSL 과 PowerShell 이 서로 다른 것을 복원하면 그 자체가 버그입니다.
+function Resolve-Scope {
+  if (-not [string]::IsNullOrWhiteSpace($Scope)) { return ($Scope -replace '\s', '') }
+  if (Test-Path -LiteralPath $ScopeFile) {
+    $fromFile = (Get-Content -LiteralPath $ScopeFile -Raw -ErrorAction SilentlyContinue) -replace '\s', ''
+    if (-not [string]::IsNullOrWhiteSpace($fromFile)) { return $fromFile }
+  }
+  return "personal"
+}
+
+# 항목의 scope 가 요청한 scope 에 드는가.
+# 여러 삶이 한 덩어리에 섞인 항목(mixed)은 밖에서 쪼갤 수 없으므로 어느 scope 로도
+# 복원합니다. scope 가 아예 없는 항목은 scope 가 생기기 전에 쓰인 manifest 이고,
+# bash 판과 같이 mixed 로 봅니다.
+function Test-ScopeWanted([string]$EntryScope, [string]$Want) {
+  if ($Want -eq "all") { return $true }
+  if ([string]::IsNullOrWhiteSpace($EntryScope) -or $EntryScope -eq "mixed") { return $true }
+  return (@($Want -split ',') -contains $EntryScope)
 }
 
 # ==============================================================================
@@ -496,8 +617,16 @@ function Invoke-Manifest([string]$TmpDir) {
   $entriesRaw = $parsed.entries
   if ($entriesRaw -isnot [System.Array]) { Die "manifest '$Manifest' 의 entries 가 배열이 아닙니다" }
   $entries = @($entriesRaw)
-  Info "manifest '$Manifest': $($entries.Count) entries"
 
+  $want = Resolve-Scope
+  Info "manifest '$Manifest': $($entries.Count) entries, scope '$want'"
+
+  $legacy = @($entries | Where-Object { -not $_.PSObject.Properties['scope'] }).Count
+  if ($legacy -gt 0) {
+    Warn "$legacy 개 항목에 scope 가 없습니다 (scope 이전에 쓰인 manifest) - mixed 로 복원합니다"
+  }
+
+  $skipped = 0
   foreach ($e in $entries) {
     $item = Get-Prop $e "item"
 
@@ -513,6 +642,14 @@ function Invoke-Manifest([string]$TmpDir) {
       $mode = Get-Prop $e "mode";   if (-not $mode) { $mode = "600" }
       $exec = Get-Prop $e "exec"
       $plat = Get-Prop $e "platform"
+      $escope = Get-Prop $e "scope"
+
+      # scope 가 먼저입니다. 이 기기가 아예 원하지 않는 삶의 비밀은 dest 가
+      # 멀쩡한지조차 따질 필요가 없습니다.
+      if (-not (Test-ScopeWanted $escope $want)) {
+        $skipped++
+        continue
+      }
 
       if (($dest -and $exec) -or (-not $dest -and -not $exec)) {
         Warn "$item 항목에는 dest 와 exec 중 정확히 하나가 필요합니다"
@@ -531,9 +668,12 @@ function Invoke-Manifest([string]$TmpDir) {
         continue
       }
 
+      $native = if ($exec) { Get-NativeExec $item } else { $null }
+
       if ($DryRun) {
-        $sink = if ($dest) { $dest } else { $exec }
-        Info "[DRY-RUN] $item ($src) -> $sink"
+        $sink = if ($dest) { $dest } elseif ($native) { $native.Describe } else { $exec }
+        $label = if ($escope) { $escope } else { "mixed" }
+        Info "[DRY-RUN] $item [$label] ($src) -> $sink"
         continue
       }
 
@@ -543,6 +683,9 @@ function Invoke-Manifest([string]$TmpDir) {
 
       if ($dest) {
         Copy-Into -Tmp $payload -Dest (Expand-DestPath $dest) -Mode $mode
+      } elseif ($native) {
+        & $native.Action -ItemName $item -PayloadFile $payload
+        Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
       } else {
         Invoke-ExecEntry -ItemName $item -Cmd $exec -PayloadFile $payload
         Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
@@ -550,6 +693,10 @@ function Invoke-Manifest([string]$TmpDir) {
     } catch {
       Warn "$item 실패: $($_.Exception.Message)"
     }
+  }
+
+  if ($skipped -gt 0) {
+    Info "scope '$want' 밖이라 건너뛴 항목 $skipped 개 (-Scope all 이면 전부)"
   }
 }
 
@@ -575,7 +722,10 @@ if ($DryRun) {
   } else {
     Info "[DRY-RUN] 설치 필요: @bitwarden/cli@$BwVersion"
   }
-  Info "[DRY-RUN] $VaultServer 를 열고 manifest '$Manifest' 을 적용합니다"
+  # scope 는 vault 가 잠겨 있어도 말할 수 있고, 잠겨 있을 때 제일 알고 싶은
+  # 값이기도 합니다. 기본값이 personal 하나라는 것을 모르고 "일부만 복원됐다"로
+  # 읽는 것이 이 스크립트의 가장 흔한 오해입니다.
+  Info "[DRY-RUN] $VaultServer 를 열고 manifest '$Manifest' 을 scope '$(Resolve-Scope)' 로 적용합니다"
   if ($env:BW_SESSION) {
     # 여기서만 bash 판과 다르게 굽니다. bw 는 로컬 캐시를 읽고 unlock 은 그걸
     # 복호화만 하므로, 동기화 없이 열거하면 다른 기기에서 방금 push 한 내용을

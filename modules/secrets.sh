@@ -49,6 +49,13 @@
 #
 # "mixed" entries restore under any scope. Entries without a scope predate this
 # and are treated as "mixed", with a warning.
+#
+# platform limits an entry to the machines it can actually work on — "macos",
+# "windows", "linux", as a string or an array, and absent means everywhere. WSL
+# answers to "linux" as well. The app entries carry ["macos"] because they write
+# into ~/Library and shell out to `open -a`. Windows restores from this same
+# manifest through bin/windows/Restore-Secrets.ps1, which reads scope and
+# platform the same way — see docs/windows.md.
 
 # ==============================================================================
 # Standalone execution support

@@ -3,6 +3,8 @@
 > **Replaced.** `./install.sh secrets` restores with [kitbag](kitbag.md) now.
 > This page describes the engine underneath it, which still runs for a machine
 > that has not moved across: `SETTINGS_SECRETS_ENGINE=bash ./install.sh secrets`.
+> On [Windows](#windows) it is not a fallback — kitbag has no binary there, so
+> the manifest engine is the whole story.
 
 `./install.sh secrets` restores private material — SSH keys, GPG keys, `.env`
 files, host configs that are too sensitive for a public repo, and app state such as aas
@@ -275,17 +277,27 @@ placed the way everything else in [windows.md](windows.md) is:
 $s = "$env:USERPROFILE\workspace\settings\bin\windows\Restore-Secrets.ps1"
 pwsh -ExecutionPolicy Bypass -File $s -DryRun   # nothing is written, nothing is prompted
 pwsh -ExecutionPolicy Bypass -File $s
+pwsh -ExecutionPolicy Bypass -File $s -Scope all
 ```
 
-Same vault, same manifest item, same entries. `jq` is not needed —
-`ConvertFrom-Json` replaces it — but `bw` is: `winget install Bitwarden.CLI`, or
-`npm install -g @bitwarden/cli@2026.8.0` for the pinned version.
+Same vault, same manifest item, same entries, same scopes — `-Scope` where the
+bash engine takes `SETTINGS_SECRETS_SCOPE` (which it also reads), falling back to
+the same `~/.config/settings/secrets.scope`, and to `personal` when nothing says
+otherwise. `jq` is not needed — `ConvertFrom-Json` replaces it — but `bw` is:
+`winget install Bitwarden.CLI`, or `npm install -g @bitwarden/cli@2026.8.0` for
+the pinned version.
 
 There is no Windows push. `scripts/secrets-push.sh` stays the only writer of the
 manifest; a second one would drift from it, and no secret's original copy lives on
 Windows anyway.
 
-Three things differ from the bash engine, each forced by the platform:
+**kitbag does not run here.** `./install.sh secrets` restores with
+[kitbag](kitbag.md) now and this manifest engine is what a machine that has not
+moved across still uses — but kitbag publishes macOS and Linux binaries only. On
+Windows the manifest engine is not the older path, it is the only one. The
+manifest and `secrets-push.sh` therefore outlive the last Mac that moves across.
+
+Four things differ from the bash engine, each forced by the platform:
 
 | | |
 | :--- | :--- |
@@ -293,6 +305,10 @@ Three things differ from the bash engine, each forced by the platform:
 | **`exec` is not a shell** | There is no `sh` to hand the string to. A command containing a pipe, `;`, `&`, redirection or `$(…)` is refused with a note to tag that entry `"platform": ["macos"]` instead; a plain one such as `gpg --batch --quiet --import` runs directly, with the payload piped to its stdin as bytes rather than as text. |
 | **`ssh:authorized_keys` merges natively** | Its `exec` is a shell one-liner, so the rule above would refuse it — and a machine that skips it is a machine none of your others can reach. The same contract is implemented directly instead: match on type and base64, add what is missing, delete nothing, skip comments, leave the file with a private ACL. When it adds a key it also says that `sshd` reads `C:\ProgramData\ssh\administrators_authorized_keys` for accounts in `Administrators`. |
 | **Line endings** | Payloads written to `dest` are normalised to LF, and a final newline is added when one is missing. OpenSSH and GPG both reject a key whose armor carries CRLF, which a note edited in the web vault from a Windows browser can pick up. The trailing newline matters just as much: `secrets-push.sh` stores notes through `$(cat …)`, which strips it, and the bash engine only gets it back because `jq -r` appends one. Without it `ssh-keygen` fails the restored key with `error in libcrypto`. |
+
+`scripts/tests/restore-secrets-smoke.ps1` covers all of it against a stubbed `bw`
+and a temporary home. The bash suite cannot run on Windows, so it is the only
+coverage this half has.
 
 ## Environment
 
@@ -318,7 +334,9 @@ SETTINGS_VAULT_MANIFEST=my-bootstrap \
 - Secret payloads are staged in a `umask 077` temp directory that is removed on
   exit, including on failure.
 - `scripts/tests/secrets-scope-smoke.sh` covers collection, scope routing and the
-  restore filter against a stubbed `bw`; it touches no vault and no real secret.
+  restore filters against a stubbed `bw`; it touches no vault and no real secret.
+  `scripts/tests/restore-secrets-smoke.ps1` is the same for the Windows engine,
+  which that one cannot reach.
 - The vault stays unlocked in the calling shell afterwards. Run `bw lock` when
   finished.
 - The vault is a single point of failure for bootstrapping. Keep an offline

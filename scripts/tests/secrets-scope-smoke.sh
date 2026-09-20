@@ -354,6 +354,60 @@ check "comma list"  "app:aas env:personal env:work gpg:primary " "$(restore_list
 check "all"         "app:aas env:personal env:shared env:work gpg:primary " "$(restore_list all)"
 check "machine file sets the default" "app:aas env:shared gpg:primary " "$(restore_list "" shared)"
 
+# ------------------------------------------------------------------------------
+printf '\nsecrets restore: platform filter\n'
+
+# Which machine this is. The entries below are written around it so the test
+# says the same thing wherever it runs.
+SELF_PLATFORM="$(bash -c '
+  source "'"$REPO_ROOT"'/lib/platform.sh"
+  detect_platform >/dev/null 2>&1
+  printf "%s" "$PLATFORM"')"
+
+PLAT_MANIFEST='{"version":2,"entries":[
+  {"item":"env:everywhere","source":"notes","dest":"~/.envs/a.env","scope":"personal"},
+  {"item":"env:here","source":"notes","dest":"~/.envs/b.env","scope":"personal","platform":"'"$SELF_PLATFORM"'"},
+  {"item":"env:windowsonly","source":"notes","dest":"~/.envs/c.env","scope":"personal","platform":["windows"]},
+  {"item":"env:broken","source":"notes","dest":"~/.envs/d.env","scope":"personal","platform":[5]},
+  {"item":"env:empty","source":"notes","dest":"~/.envs/e.env","scope":"personal","platform":[]}
+]}'
+
+plat_restore() { # prints the items a restore here would touch
+  local home="$TEST_ROOT/p$RANDOM"
+  mkdir -p "$home"
+  HOME="$home" DRY_RUN=true bash -c '
+    source "'"$REPO_ROOT"'/lib/core.sh"
+    source "'"$REPO_ROOT"'/lib/platform.sh"
+    detect_platform >/dev/null 2>&1
+    source "'"$REPO_ROOT"'/modules/secrets.sh"
+    VAULT_ITEMS_CACHE='"'"'[{"name":"bootstrap","notes":'"$(jq -Rs . <<< "$PLAT_MANIFEST")"'}]'"'"'
+    apply_manifest
+  ' 2>&1
+}
+
+PLAT_OUT="$(plat_restore)"
+PLAT_LIST="$(grep -o 'Would restore [a-z:]*' <<< "$PLAT_OUT" | awk '{print $3}' | sort | tr '\n' ' ')"
+check "an untagged entry restores anywhere, a foreign one does not" \
+  "env:empty env:everywhere env:here " "$PLAT_LIST"
+contains "the foreign entry says why it was skipped" \
+  "Skipped env:windowsonly (platform: windows)" "$PLAT_OUT"
+contains "a platform that is not a name is an error, not a guess" \
+  "env:broken" "$(sed -n '/non-string platform/p' <<< "$PLAT_OUT")"
+
+# The name matching itself, without a manifest in the way.
+plat_match() { # <entry-platforms> <this-machine>
+  bash -c '
+    source "'"$REPO_ROOT"'/lib/core.sh"
+    source "'"$REPO_ROOT"'/modules/secrets.sh"
+    PLATFORM="'"$2"'"
+    _platform_matches "'"$1"'" && echo yes || echo no'
+}
+check "macos entry on a mac"        "yes" "$(plat_match macos macos)"
+check "macos entry on linux"        "no"  "$(plat_match macos linux)"
+check "linux entry under wsl"       "yes" "$(plat_match linux wsl)"
+check "a list matches on any name"  "yes" "$(plat_match "macos linux" linux)"
+check "windows entry nowhere here"  "no"  "$(plat_match windows macos)"
+
 printf '\n'
 if [[ "$FAILURES" -gt 0 ]]; then
   printf '%s test(s) failed\n' "$FAILURES"
