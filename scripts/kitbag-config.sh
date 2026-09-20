@@ -187,6 +187,10 @@ EOF
 
 # The OTP vault stays encrypted with its own master password inside this.
 #
+# The restore rewrites `active_vault`, which the OTPeek CLI uses to find the
+# vault and which is an absolute path: restored onto a machine with a different
+# user name, it would go on pointing into the previous home.
+#
 # `gzip -n` rather than `tar -czf`: gzip stamps the current time into its
 # header, so the same unchanged files produce different bytes every second and
 # the item is reported as changed on every run, forever.
@@ -199,18 +203,21 @@ name = "app:otpeek"
 scope = "mixed"
 spans = ["personal", "work"]
 platform = ["macos"]
-command = { export = "set -o pipefail; tar -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = "tar -xzf - -C \"$HOME\"" }
+command = { export = "set -o pipefail; tar -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = 'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' }
 EOF
     fi
 
     if [[ -d "$HOME/Library/Application Support/BarShelf" ]]; then
         cat <<'EOF'
 
+# Quit the app before writing over its data, or it writes its own state back
+# on the way out and the restore is quietly undone. Started again afterwards,
+# but only if it is installed here.
 [[track]]
 name = "app:barshelf"
 scope = "personal"
 platform = ["macos"]
-command = { export = "set -o pipefail; tar -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf | gzip -n", restore = "tar -xzf - -C \"$HOME/Library/Application Support\"" }
+command = { export = "set -o pipefail; tar -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf | gzip -n", restore = 'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' }
 EOF
     fi
 }
