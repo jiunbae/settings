@@ -279,20 +279,17 @@ collect_tracked_paths() {
         # shellcheck disable=SC2086
         set -- $line
         path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}; platform=${5:-}
+        [[ -n "$path" ]] || continue
         # The columns are positional, so a later one cannot be set without the
         # ones before it. `-` is how a line says "not this one" rather than
         # inventing an owner: without it, a platform written after a bare scope
-        # lands in the owner column, and nothing validates an owner.
+        # lands in the owner column, and nothing validates an owner. Every
+        # column takes it, scope included — a file carrying its own `# scope:`
+        # marker has no need to repeat it here.
+        [[ "$scope" == "-" ]] && scope=""
         [[ "$owner" == "-" ]] && owner=""
         [[ "$name" == "-" ]] && name=""
         [[ "$platform" == "-" ]] && platform=""
-        [[ -n "$path" ]] || continue
-        # The columns are positional, so a path that wants only the last one has
-        # to say something in the ones before it. "-" is that something, and
-        # means exactly what leaving the column off the end means.
-        [[ "$scope" == "-" ]] && scope=""
-        [[ "$owner" == "-" ]] && owner=""
-        [[ "$name"  == "-" ]] && name=""
         expanded="${path/#\~/$HOME}"
         if [[ ! -e "$expanded" ]]; then
             printf '  %s — listed in %s but not on this machine\n' "$path" "$TRACKED_PATHS" >> "$UNSCOPED"
