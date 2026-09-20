@@ -64,6 +64,7 @@ make_tracked() {
   printf '\x00\x01binary payload\x00' > "$home/Library/Keychains/fixture.keychain-db"
   printf '%s\n' '# scope: work' 'k = v' > "$home/self-marked.conf"
   printf '%s\n' '# scope: personal' 'k = v' > "$home/tracked-bad.conf"
+  printf '%s\n' 'token = t' > "$home/tracked-dash.conf"
   # The fifth column says where a path exists at all. scripts/kitbag-config.sh
   # reads the same one, so the two engines must agree about this file.
   printf '%s\n' \
@@ -72,6 +73,7 @@ make_tracked() {
     '~/Library/Keychains/fixture.keychain-db  work  acme  file:fixture-keychain  macos' \
     '~/self-marked.conf                  personal' \
     '~/tracked-bad.conf                  personal  me     file:tracked-bad       nonsense' \
+    '~/tracked-dash.conf                 personal  -      -                      linux,macos' \
     '~/not-here.conf                     personal' \
     > "$home/.config/settings/secrets-paths"
 }
@@ -222,6 +224,9 @@ contains "a path's platforms are shown before the push" "[macos]" "$TABLE"
 contains "a comma list becomes a list"       "[linux macos]" "$TABLE"
 lacks    "a bad platform name is not collected" "file:tracked-bad" "$TABLE"
 contains "and is reported with the valid names" "unknown platform 'nonsense'" "$DRY"
+# The columns are positional, so a path that wants only the last one has to put
+# something in the ones before it.
+contains "a dash stands in for an empty column" "file:tracked-dash.conf" "$TABLE"
 lacks    "no phantom public field"       "~/.envs/personal.env  (+public)" "$TABLE"
 
 OUT="$(run_push "$HOME_A" --push)"
@@ -253,6 +258,10 @@ check "the marked file follows its own header, not the column" "work" \
   "$(jq -r '.entries[] | select(.item == "file:self-marked.conf") | .scope' <<< "$MANIFEST_A")"
 check "a tracked path's platform reaches the manifest" "macos" \
   "$(jq -r '.entries[] | select(.item == "file:fixture-keychain") | .platform | join(" ")' <<< "$MANIFEST_A")"
+check "the dashed columns really are empty" "personal" \
+  "$(jq -r '.entries[] | select(.item == "file:tracked-dash.conf") | .scope' <<< "$MANIFEST_A")"
+check "while its fifth column was read" "linux macos" \
+  "$(jq -r '.entries[] | select(.item == "file:tracked-dash.conf") | .platform | join(" ")' <<< "$MANIFEST_A")"
 check "a text path carries one too" "linux macos" \
   "$(jq -r '.entries[] | select(.item == "file:npmrc") | .platform | join(" ")' <<< "$MANIFEST_A")"
 check "a path without the column carries none" "" \

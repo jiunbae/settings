@@ -18,6 +18,10 @@
 #   ~/.config/gh/hosts.yml               personal  -     -   macos,linux
 #   ~/.aws/config                        work  rtzr
 #   ~/Library/Keychains/x.keychain-db    work  rtzr  file:x-keychain  macos
+#   ~/.config/gh/hosts.yml               personal  -  -  linux,macos
+#
+# The columns are positional, so "-" is how one is left empty when a later one
+# is wanted.
 #
 # The fifth column is comma-separated and says where the path exists at all.
 # Without it every machine takes the item, and a keychain written onto a Linux
@@ -153,9 +157,12 @@ EOF
         local path scope owner name platform
         while read -r path scope owner name platform; do
             case "${path:-}" in ''|\#*) continue ;; esac
-            # `-` is a column that does not apply. The columns are positional,
-            # so without it a platform written after a bare scope becomes the
-            # owner, and nothing would say so.
+            # `-` is a column that does not apply. The columns are
+            # positional, so without it a platform written after a bare scope
+            # becomes the owner, and nothing would say so. Every column takes
+            # it, including scope: a file carrying its own `# scope:` marker
+            # has no need to repeat it here.
+            [[ "${scope:-}" == "-" ]] && scope=""
             [[ "${owner:-}" == "-" ]] && owner=""
             [[ "${name:-}" == "-" ]] && name=""
             [[ "${platform:-}" == "-" ]] && platform=""

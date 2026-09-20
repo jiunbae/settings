@@ -335,6 +335,29 @@ The dry run names the scope in force before it reads anything, and ends with the
 number of entries it passed over. That line exists because "only some of it came
 back" is nearly always the default doing its job, not a failure.
 
+### One item this machine keeps for itself
+
+`scope` says whose secret it is and `platform` says where it can work, and
+neither answers "this machine already has its own". The vault's
+`ssh:id_ed25519` is some machine's key, filed `personal`; restoring it onto a
+machine that already has a key gives two machines one key, which cannot be
+revoked for one of them and tells you nothing about which of them logged in —
+the thing [ssh-trust](secrets.md#machine-trust) exists to avoid.
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File $s -Skip ssh:id_ed25519
+"ssh:id_ed25519" | Set-Content "$HOME\.config\settings\secrets.skip"   # or once, here
+```
+
+`-Skip` beats `SETTINGS_SECRETS_SKIP`, which beats that file (`#` comments
+allowed). The names are listed before anything is read and each one says why it
+was passed over, because a silent exclusion is how you later believe you have
+something you do not.
+
+This lives on the machine, not in the manifest: it is not a fact about the
+vault, and another machine may well need the entry. The bash engine has no
+equivalent — it is the retiring one, and this is a Windows problem.
+
 `-DryRun` writes nothing and never prompts for a password. With an existing
 `$env:BW_SESSION` it enumerates the real manifest; without one it says the vault is
 locked and stops. The vault stays unlocked in the calling shell afterwards — run

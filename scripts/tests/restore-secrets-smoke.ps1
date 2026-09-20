@@ -267,6 +267,21 @@ $envScope = Invoke-Restore $fx @("-DryRun") -Env @{ SETTINGS_SECRETS_SCOPE = "sh
 Contains "the environment sets the scope" "env:shared" $envScope
 Lacks    "and replaces the default"       "ssh:id_ed25519" $envScope
 
+# -Skip: scope 도 platform 도 "이 기기가 아니다" 라고 말하지 못하는 항목.
+$skipped = Invoke-Restore $fx @("-DryRun", "-Skip", "ssh:id_ed25519")
+Contains "the skip list is named up front" "건너뛰도록 지정된 항목: ssh:id_ed25519" $skipped
+Contains "and the entry says why"          "ssh:id_ed25519 (이 기기에서 제외)" $skipped
+Lacks    "so it is not in the plan"        "[DRY-RUN] ssh:id_ed25519" $skipped
+Contains "the rest of the scope still is"  "[DRY-RUN] file:fixture" $skipped
+
+$skipFile = Join-Path $fx.HomeDir ".config\settings\secrets.skip"
+New-Item -ItemType Directory -Path (Split-Path -Parent $skipFile) -Force | Out-Null
+Set-Content -LiteralPath $skipFile -Value "# this machine keeps its own`nssh:id_ed25519"
+$fromSkipFile = Invoke-Restore $fx @("-DryRun")
+Contains "the machine's own skip file is read" "ssh:id_ed25519 (이 기기에서 제외)" $fromSkipFile
+Lacks    "and its comments are not items"     "# this machine" $fromSkipFile
+Remove-Item -LiteralPath $skipFile -Force
+
 $scopeFile = Join-Path $fx.HomeDir ".config\settings\secrets.scope"
 New-Item -ItemType Directory -Path (Split-Path -Parent $scopeFile) -Force | Out-Null
 Set-Content -LiteralPath $scopeFile -Value "work" -NoNewline
