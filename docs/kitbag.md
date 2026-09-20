@@ -105,14 +105,45 @@ Still true, and worth keeping in view:
 
 - **No machine has been restored from the vault with kitbag.** The round trip
   above used a local store. Reading these items back out of Bitwarden is
-  covered by tests against a stub, not by having done it. `kitbag restore
-  --backend bw --dry-run` reads the real thing and writes nothing.
+  covered by tests against a stub, not by having done it.
+- `kitbag restore --backend bw --dry-run` has been run, and it proves less than
+  it looks like it does. It is fast *because* it reads nothing: the store
+  reports each item's hash, the file on disk is hashed here, and matching items
+  are never fetched. So the path that pulls a payload back out of Bitwarden —
+  the attachment path in particular, which four items use — has still not run
+  against the real vault. Restoring into a throwaway `$HOME` is what would
+  settle it.
 - The other machines still restore with `SETTINGS_SECRETS_ENGINE=bash`, and
   their manifest is untouched. They move across one at a time.
 - The `op` and `pass` stores are tested against stub clients, not real accounts.
 - `kitbag apply` covers packages, links, macOS defaults, downloads, clones,
   merges and commands. The modules here are not ported to it, and
   `./install.sh` remains what installs a machine.
+
+## Where an item belongs
+
+Scope decides whose an item is. `platform` decides whether a machine has
+anywhere to put it:
+
+```toml
+[[track]]
+name = "app:barshelf"
+scope = "personal"
+platform = ["macos"]
+```
+
+Four items here are macOS and nowhere else — the `aws-vault` keychain and the
+aas, OTPeek and BarShelf bundles, all of which restore into `~/Library`.
+Without the `platform` tag, the Linux server would take them, write them, and
+report a restore that worked.
+
+`platform` travels **in the envelope**, like `path` and for the same reason: the
+machine that has to act on it is the one being restored, and that machine has
+no config yet. `~/.config/settings/secrets-paths` takes it as a fifth,
+comma-separated column.
+
+The words are `macos`, `linux` and `windows` — the same ones the manifest uses,
+so one vault answers both engines the same way.
 
 ## One item reads `?`, and that is the answer
 
