@@ -25,6 +25,9 @@
 # one per line - because the next secret will not live where this script guessed:
 #
 #   <path>  <scope>  [owner]  [item-name]  [platforms]
+#
+# The columns are positional: write `-` for one that does not apply, or a
+# platform written after a bare scope becomes the owner.
 #   ~/.npmrc                                    personal
 #   ~/.aws/config                               work      acme
 #   ~/Library/Keychains/x.keychain-db           work      acme   file:x-keychain  macos
@@ -272,6 +275,13 @@ collect_tracked_paths() {
         # shellcheck disable=SC2086
         set -- $line
         path=${1:-}; scope=${2:-}; owner=${3:-}; name=${4:-}; platform=${5:-}
+        # The columns are positional, so a later one cannot be set without the
+        # ones before it. `-` is how a line says "not this one" rather than
+        # inventing an owner: without it, a platform written after a bare scope
+        # lands in the owner column, and nothing validates an owner.
+        [[ "$owner" == "-" ]] && owner=""
+        [[ "$name" == "-" ]] && name=""
+        [[ "$platform" == "-" ]] && platform=""
         [[ -n "$path" ]] || continue
         expanded="${path/#\~/$HOME}"
         if [[ ! -e "$expanded" ]]; then
