@@ -104,24 +104,41 @@ shared files and would have pushed **16 of its 39 items**, reporting only that
 it sent what it sent. So `scripts/kitbag-config.sh` now reads the scopes off
 the markers already on disk when nothing is declared, and says that it did.
 
-## What has not been tried yet
+## What has been done, and what has not
 
-- **Nothing has been pushed to the real vault with kitbag** — see below.
-- The `op` and `pass` stores are tested against stub clients, not against real
-  accounts — neither client is installed here.
+The vault holds 39 kitbag items, pushed from this machine. `./install.sh
+secrets` restores with kitbag. The round trip has been checked with this
+machine's own files, through an `age` store into a throwaway `$HOME`: 36 of 36
+came back byte for byte, every one of them `0600`. The public half of the SSH
+key is not stored and does not need to be — `ssh-keygen -y` derives it from the
+private key, and it matches.
+
+Still true, and worth keeping in view:
+
+- **No machine has been restored from the vault with kitbag.** The round trip
+  above used a local store. Reading these items back out of Bitwarden is
+  covered by tests against a stub, not by having done it. `kitbag restore
+  --backend bw --dry-run` reads the real thing and writes nothing.
+- The other machines still restore with `SETTINGS_SECRETS_ENGINE=bash`, and
+  their manifest is untouched. They move across one at a time.
+- The `op` and `pass` stores are tested against stub clients, not real accounts.
 - `kitbag apply` covers packages, links, macOS defaults, downloads, clones,
-  merges and commands. The modules in this repository are not ported to it, and
+  merges and commands. The modules here are not ported to it, and
   `./install.sh` remains what installs a machine.
 
-The restore path is switched, but a restore reads what a push wrote, and that
-push needs the master password:
+## One item reads `?`, and that is the answer
 
-```bash
-export BW_SESSION=$(bw unlock --raw)
-kitbag push --backend bw --dry-run     # 39 items expected
-kitbag push --backend bw
-kitbag status --backend bw             # every item '=' against the store
+```
+= 38 unchanged   ? 1 not comparable
 ```
 
-Until that runs, `./install.sh secrets` finds nothing of kitbag's in the vault,
-and the machine to restore is the one to run it from.
+`app:aas` exports credentials that rotate on their own, so its bytes differ
+between two exports a moment apart. It is marked `volatile`: kitbag sends it
+every time and declines to call that a change, because nothing was observed to
+change. An item that can never read `=` would otherwise shout on every run
+until the report stopped being read.
+
+The other two application bundles pipe through `gzip -n`. Plain `tar -czf`
+stamps the current time into the gzip header, so the same unchanged files
+produce different bytes once a second — which two exports run back to back will
+not show you.

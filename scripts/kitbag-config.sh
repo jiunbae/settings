@@ -12,6 +12,16 @@
 # `# scope:` markers - kitbag reads the same markers, which is why this is a
 # translation rather than a migration.
 #
+# ~/.config/settings/secrets-paths is read for the extra paths, one per line:
+#
+#   <path>  <scope>  [owner]  [item-name]  [platforms]
+#   ~/.aws/config                        work  rtzr
+#   ~/Library/Keychains/x.keychain-db    work  rtzr  file:x-keychain  macos
+#
+# The fifth column is comma-separated and says where the path exists at all.
+# Without it every machine takes the item, and a keychain written onto a Linux
+# server looks like a restore that worked.
+#
 # The file is written for review, never applied: the next step is `kitbag
 # status`, which reads and reports and changes nothing.
 
@@ -139,13 +149,17 @@ EOF
     # Extra paths, with the scope column the bash engine used. A file that
     # carries its own marker still overrides this.
     if [[ -f "$TRACKED_PATHS" ]]; then
-        local path scope owner name
-        while read -r path scope owner name; do
+        local path scope owner name platform
+        while read -r path scope owner name platform; do
             case "${path:-}" in ''|\#*) continue ;; esac
             printf '\n[[track]]\npath = "%s"\n' "$path"
             [[ -n "${scope:-}" ]] && printf 'scope = "%s"\n' "$scope"
             [[ -n "${owner:-}" ]] && printf 'owner = "%s"\n' "$owner"
             [[ -n "${name:-}" ]] && printf 'name = "%s"\n' "$name"
+            # A fifth column names the platforms, for a path that only exists
+            # on some of them. A keychain is the reason this column exists.
+            [[ -n "${platform:-}" ]] &&
+                printf 'platform = ["%s"]\n' "$(printf '%s' "$platform" | sed 's/,/", "/g')"
         done < "$TRACKED_PATHS"
     fi
 
@@ -155,10 +169,15 @@ EOF
     if command_exists aas; then
         cat <<'EOF'
 
+# The bundle carries credentials that rotate on their own, so two exports a
+# moment apart differ. Nothing can make it stable, so it is marked as what it
+# is: kitbag sends it and reports that it cannot tell whether it changed.
 [[track]]
 name = "app:aas"
 scope = "mixed"
 spans = ["personal", "work"]
+platform = ["macos"]
+volatile = true
 command = { export = "aas export --all", restore = "aas import -" }
 EOF
     fi
@@ -167,11 +186,20 @@ EOF
         cat <<'EOF'
 
 # The OTP vault stays encrypted with its own master password inside this.
+#
+# `gzip -n` rather than `tar -czf`: gzip stamps the current time into its
+# header, so the same unchanged files produce different bytes every second and
+# the item is reported as changed on every run, forever.
+#
+# `set -o pipefail` because a pipeline reports the last command's status: a tar
+# that failed halfway would be gzipped successfully and stored as a backup of
+# part of the directory, with nothing saying so.
 [[track]]
 name = "app:otpeek"
 scope = "mixed"
 spans = ["personal", "work"]
-command = { export = "tar -czf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault'", restore = "tar -xzf - -C \"$HOME\"" }
+platform = ["macos"]
+command = { export = "set -o pipefail; tar -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = "tar -xzf - -C \"$HOME\"" }
 EOF
     fi
 
@@ -181,7 +209,8 @@ EOF
 [[track]]
 name = "app:barshelf"
 scope = "personal"
-command = { export = "tar -czf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf", restore = "tar -xzf - -C \"$HOME/Library/Application Support\"" }
+platform = ["macos"]
+command = { export = "set -o pipefail; tar -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf | gzip -n", restore = "tar -xzf - -C \"$HOME/Library/Application Support\"" }
 EOF
     fi
 }
