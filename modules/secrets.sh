@@ -17,20 +17,33 @@
 # Manifest format — the `notes` field of the item named by SETTINGS_VAULT_MANIFEST:
 #
 #   {
-#     "version": 1,
+#     "version": 2,
 #     "entries": [
-#       {"item":"ssh:id_ed25519","source":"sshkey",              "dest":"~/.ssh/id_ed25519",      "mode":"600"},
-#       {"item":"ssh:id_ed25519","source":"field:public",        "dest":"~/.ssh/id_ed25519.pub",  "mode":"644"},
+#       {"item":"ssh:id_ed25519","source":"sshkey",              "dest":"~/.ssh/id_ed25519",      "mode":"600", "scope":"personal"},
+#       {"item":"ssh:id_ed25519","source":"field:public",        "dest":"~/.ssh/id_ed25519.pub",  "mode":"644", "scope":"personal"},
 #       {"item":"ssh:company",   "source":"attachment:20-company.conf",
-#                                                                "dest":"~/.ssh/config.d/20-company.conf","mode":"600"},
-#       {"item":"gpg:primary",   "source":"notes", "exec":"gpg --batch --quiet --import"},
-#       {"item":"gpg:ownertrust","source":"notes", "exec":"gpg --quiet --import-ownertrust"}
+#                                                                "dest":"~/.ssh/config.d/20-company.conf","mode":"600","scope":"work"},
+#       {"item":"gpg:primary",   "source":"notes", "exec":"gpg --batch --quiet --import",   "scope":"mixed"},
+#       {"item":"gpg:ownertrust","source":"notes", "exec":"gpg --quiet --import-ownertrust","scope":"mixed"}
 #     ]
 #   }
 #
 # source: notes | sshkey | password | field:<name> | attachment:<filename>
 # Each entry needs exactly one sink: `dest` (write a file) or `exec` (pipe into
 # a command). `mode` applies to `dest` only and defaults to 600.
+#
+# scope separates the lives that share one vault — personal, work, shared (an
+# account someone else owns), mixed (one blob holding several). A machine
+# restores only the scopes it asks for, so a personal laptop never has to hold
+# an employer's credentials:
+#
+#   ./install.sh secrets                                  personal only (default)
+#   SETTINGS_SECRETS_SCOPE=all ./install.sh secrets       everything
+#   SETTINGS_SECRETS_SCOPE=personal,work ./install.sh secrets
+#   echo work > ~/.config/settings/secrets.scope          this machine's default
+#
+# "mixed" entries restore under any scope. Entries without a scope predate this
+# and are treated as "mixed", with a warning.
 
 # ==============================================================================
 # Standalone execution support
@@ -50,6 +63,28 @@ VAULT_SERVER="${SETTINGS_VAULT_SERVER:-https://vault.jiun.dev}"
 VAULT_MANIFEST="${SETTINGS_VAULT_MANIFEST:-bootstrap}"
 # Bitwarden 2FA method: 0=authenticator app, 1=email, 3=YubiKey OTP
 VAULT_2FA_METHOD="${SETTINGS_VAULT_2FA_METHOD:-0}"
+
+# Which scopes this machine restores. Precedence: environment, then the file a
+# machine keeps for itself, then the safe default of personal only.
+SECRETS_SCOPE_FILE="${SETTINGS_SECRETS_SCOPE_FILE:-$HOME/.config/settings/secrets.scope}"
+
+secrets_scope() {
+    local scope="${SETTINGS_SECRETS_SCOPE:-}"
+    if [[ -z "$scope" && -f "$SECRETS_SCOPE_FILE" ]]; then
+        scope="$(tr -d '[:space:]' < "$SECRETS_SCOPE_FILE")"
+    fi
+    printf '%s' "${scope:-personal}"
+}
+
+# _scope_wanted <entry-scope> <requested>
+_scope_wanted() {
+    local entry=$1 want=$2
+    [[ "$want" == "all" ]] && return 0
+    # One blob holding several lives cannot be split on the way out.
+    [[ "$entry" == "mixed" || -z "$entry" ]] && return 0
+    case ",$want," in *",$entry,"*) return 0 ;; esac
+    return 1
+}
 
 # Scratch space for secret material in flight. Created by install_secrets.
 SECRETS_TMPDIR=""
@@ -294,17 +329,30 @@ apply_manifest() {
         return 1
     fi
 
-    local count
+    local count want legacy
     count="$(printf '%s' "$manifest" | jq '.entries | length')"
-    log_info "Manifest '$VAULT_MANIFEST': $count entries"
+    want="$(secrets_scope)"
+    log_info "Manifest '$VAULT_MANIFEST': $count entries, scope '$want'"
 
-    local entry item src dest mode exec_cmd tmp
+    legacy="$(printf '%s' "$manifest" | jq '[.entries[] | select(has("scope") | not)] | length')"
+    if [[ "$legacy" != "0" ]]; then
+        log_warn "$legacy entries carry no scope (written before scopes existed) — restored as 'mixed'"
+    fi
+
+    local entry item src dest mode exec_cmd tmp scope skipped=0
     while IFS= read -r entry; do
         item="$(printf '%s' "$entry" | jq -r '.item')"
         src="$(printf '%s' "$entry" | jq -r '.source // "notes"')"
         dest="$(printf '%s' "$entry" | jq -r '.dest // empty')"
         mode="$(printf '%s' "$entry" | jq -r '.mode // "600"')"
         exec_cmd="$(printf '%s' "$entry" | jq -r '.exec // empty')"
+        scope="$(printf '%s' "$entry" | jq -r '.scope // empty')"
+
+        if ! _scope_wanted "$scope" "$want"; then
+            log_debug "Skipped $item (scope $scope)"
+            skipped=$((skipped + 1))
+            continue
+        fi
 
         if [[ -n "$dest" && -n "$exec_cmd" ]] || [[ -z "$dest" && -z "$exec_cmd" ]]; then
             log_error "Entry '$item' needs exactly one of 'dest' or 'exec'"
@@ -314,7 +362,7 @@ apply_manifest() {
         dest="${dest/#\~/$HOME}"
 
         if [[ "$DRY_RUN" == "true" ]]; then
-            log_info "[DRY-RUN] Would restore $item ($src) -> ${dest:-$exec_cmd}"
+            log_info "[DRY-RUN] Would restore $item [${scope:-mixed}] ($src) -> ${dest:-$exec_cmd}"
             continue
         fi
 
@@ -335,6 +383,10 @@ apply_manifest() {
             rm -f "$tmp"
         fi
     done < <(printf '%s' "$manifest" | jq -c '.entries[]')
+
+    if [[ "$skipped" -gt 0 ]]; then
+        log_info "Skipped $skipped entries outside scope '$want' (SETTINGS_SECRETS_SCOPE=all for everything)"
+    fi
 }
 
 # ==============================================================================
