@@ -46,7 +46,15 @@ embed_file() {
             return 1
             ;;
     esac
+    # The guard matches names, because a name is all it has before the file is
+    # read. Engine code named after what it handles trips it and holds nothing,
+    # so each exception is listed by exact path rather than by loosening the
+    # pattern for everything that comes after.
     case "$rel_path" in
+        # Generic vault engine: no item names, no destinations, no values. What
+        # to restore is a manifest inside the vault. It is in this public
+        # repository already, so embedding it exposes nothing new.
+        modules/secrets.sh) ;;
         *.example|*.sample.*) ;;
         */.env|*/.env.*|*credentials*|*secret*|*auth.json|*.pem|*.key)
             printf 'bundle: refusing to embed sensitive-looking file: %s\n' "$rel_path" >&2

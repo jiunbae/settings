@@ -8,6 +8,21 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
 TEST_ROOT=$(mktemp -d)
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
+# A bare `[[ ... ]]` under `set -e` ends the run with no output at all, which
+# is how this file sat broken for three weeks: it exited 1 and said nothing.
+expect() {  # <what> <wanted> <got>
+  if [[ "$2" == "$3" ]]; then
+    return 0
+  fi
+  printf '  FAIL %s: wanted %s, got %s\n' "$1" "$2" "$3" >&2
+  return 1
+}
+
+# One entry per line that is not blank and not a comment.
+manifest_count() {
+  grep -cvE '^[[:space:]]*(#|$)' "$REPO_ROOT/configs/claude/skills.manifest"
+}
+
 make_skill_sources() {
   local test_home=$1
   local manifest="$REPO_ROOT/configs/claude/skills.manifest"
@@ -83,9 +98,15 @@ test_claude_modes() {
   env HOME="$copy_home" PATH=/usr/bin:/bin \
     "$REPO_ROOT/install.sh" --no-sudo --copy claude >/dev/null 2>&1
 
-  [[ $(find "$copy_home/.claude/skills" -mindepth 2 -maxdepth 2 -type l | wc -l) -eq 0 ]]
-  [[ $(find "$copy_home/.claude/skills" -mindepth 2 -maxdepth 2 -type d | wc -l) -eq 46 ]]
-  [[ $(find "$copy_home" -name '*.backup.*' | wc -l) -eq 0 ]]
+  expect "copied skills are not links" 0 \
+    "$(find "$copy_home/.claude/skills" -mindepth 2 -maxdepth 2 -type l | wc -l | tr -d ' ')"
+  # Counted from the manifest, which is also what the fixtures were built from.
+  # The hardcoded 46 stopped being true when the manifest was cut back, and the
+  # number was never the point: one directory per entry is.
+  expect "one directory per manifest entry" "$(manifest_count)" \
+    "$(find "$copy_home/.claude/skills" -mindepth 2 -maxdepth 2 -type d | wc -l | tr -d ' ')"
+  expect "a second run makes no backups" 0 \
+    "$(find "$copy_home" -name '*.backup.*' | wc -l | tr -d ' ')"
 
   local link_home="$TEST_ROOT/claude-link"
   make_skill_sources "$link_home"
@@ -96,7 +117,8 @@ test_claude_modes() {
     "$REPO_ROOT/install.sh" --no-sudo claude >/dev/null 2>&1
 
   [[ -L "$occupied" ]]
-  [[ $(find "$link_home/.claude/skills/agents" -path '*/background-implementer.backup.*/keep.txt' | wc -l) -eq 1 ]]
+  expect "the occupied directory was kept as a backup" 1 \
+    "$(find "$link_home/.claude/skills/agents" -path '*/background-implementer.backup.*/keep.txt' | wc -l | tr -d ' ')"
 
   HOME="$link_home" "$REPO_ROOT/scripts/claude/capture-skills.sh" --dry-run \
     > "$TEST_ROOT/captured-skills.manifest"
