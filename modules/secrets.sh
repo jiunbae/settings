@@ -88,6 +88,30 @@ secrets_scope() {
     printf '%s' "${scope:-personal}"
 }
 
+# Items this machine keeps for itself, by name. The Windows restore has had
+# this as -Skip; it is not a Windows question.
+#
+# Scope says whose an item is and `platform` says where it can live. Neither
+# answers this one: the vault's ssh:id_ed25519 is personal and belongs on every
+# platform, and a machine that already has its own key must not take it —
+# two machines on one key means revoking it locks out both. That is a fact
+# about the machine, so the machine holds it.
+SECRETS_SKIP_FILE="${SETTINGS_SECRETS_SKIP_FILE:-$HOME/.config/settings/secrets.skip}"
+
+secrets_skip_list() {
+    local raw="${SETTINGS_SECRETS_SKIP:-}"
+    if [[ -z "$raw" && -f "$SECRETS_SKIP_FILE" ]]; then
+        raw="$(grep -v '^[[:space:]]*#' "$SECRETS_SKIP_FILE" 2>/dev/null | tr '\n' ',')"
+    fi
+    printf '%s' "$raw" | tr ',' '\n' | sed 's/[[:space:]]//g' | grep -v '^$' || true
+}
+
+# _skipped_here <item-name> <newline-separated list>
+_skipped_here() {
+    [[ -n "$2" ]] || return 1
+    printf '%s\n' "$2" | grep -qxF "$1"
+}
+
 # _scope_wanted <entry-scope> <requested>
 _scope_wanted() {
     local entry=$1 want=$2
@@ -365,6 +389,11 @@ apply_manifest() {
         log_warn "$legacy entries carry no scope (written before scopes existed) — restored as 'mixed'"
     fi
 
+    local keep_own
+    keep_own="$(secrets_skip_list)"
+    [[ -n "$keep_own" ]] &&
+        log_info "This machine keeps its own: $(printf '%s' "$keep_own" | tr '\n' ' ')"
+
     local entry item src dest mode exec_cmd platforms ptype tmp scope skipped=0
     while IFS= read -r entry; do
         item="$(printf '%s' "$entry" | jq -r '.item')"
@@ -373,6 +402,12 @@ apply_manifest() {
         mode="$(printf '%s' "$entry" | jq -r '.mode // "600"')"
         exec_cmd="$(printf '%s' "$entry" | jq -r '.exec // empty')"
         scope="$(printf '%s' "$entry" | jq -r '.scope // empty')"
+
+        if _skipped_here "$item" "$keep_own"; then
+            log_info "Kept this machine's own $item"
+            skipped=$((skipped + 1))
+            continue
+        fi
 
         if ! _scope_wanted "$scope" "$want"; then
             log_debug "Skipped $item (scope $scope)"
@@ -491,6 +526,13 @@ restore_with_kitbag() {
     local scope
     scope="$(secrets_scope_declared)"
     [[ -n "$scope" ]] && args+=(--scope "$scope")
+
+    # kitbag keeps its own list in machine.toml and reads KITBAG_SKIP as well,
+    # so the one file a machine already has says the same thing to all three
+    # engines — this one, kitbag, and the Windows restore.
+    local keep_own
+    keep_own="$(secrets_skip_list | tr '\n' ',' | sed 's/,$//')"
+    [[ -n "$keep_own" ]] && args+=(--skip "$keep_own")
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would restore from $VAULT_SERVER with kitbag"
