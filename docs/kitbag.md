@@ -177,7 +177,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.12.1
+cargo	kitbag	0.12.2
 npm	@bitwarden/cli	2026.8.0
 ```
 
@@ -311,6 +311,37 @@ An answer that is not understood is a skip, and so is an empty line: one of
 the two real answers writes over a credential, so the key easiest to hit by
 accident does nothing. With no terminal it asks nothing and lists what is
 left.
+
+## Four machines pushing at the same moment
+
+That is the ordinary case here, not the unlucky one, and the first time all
+four ran together two of them came back refused:
+
+```
+✗ app:barshelf   bw edit: The client copy of this cipher is out of date.
+```
+
+Which is the store being right. Another machine wrote between this one's
+decision and its write. What kitbag does about it now is look again rather
+than send again: it re-reads the store and compares the item afresh, and the
+comparison decides.
+
+```
+still this machine's to send   →  sent, second time
+the other machine sent this    →  already there, and recorded
+both moved, differently        →  held as a conflict
+```
+
+The difference matters. An item that became a conflict four seconds ago is a
+conflict, and a retry that just pushed harder would write somebody's work away
+with nothing saying so.
+
+The other half of that run was worse and easier to fix: two machines reported
+the reason as `(node:73029) [DEP0040] DeprecationWarning: the punycode module
+is deprecated`. Node's chatter arrives on the same stream as the reason, and
+being first, it was read as the reason. It is skipped now.
+
+Both need kitbag v0.12.2 or newer.
 
 Then one item, one direction:
 
