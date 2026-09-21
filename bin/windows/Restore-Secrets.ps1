@@ -247,9 +247,18 @@ function Get-VaultItem([string]$Name) {
     if (-not $json) { Die "bw list items 실패 - vault 가 잠겨 있지 않은지 확인하세요" }
     $script:ItemsCache = @($json | ConvertFrom-Json)
   }
-  $hit = @($script:ItemsCache | Where-Object { $_.name -eq $Name })
-  if ($hit.Count -eq 0) { return $null }
-  return $hit[0]
+  # kitbag writes its own items into this vault under the same names, in its
+  # own folder and marked with a `kitbag` custom field. Its notes are an
+  # envelope — a header and then the payload — so restoring one writes the
+  # header into the file as though it belonged there. Take only ours.
+  $mine = @($script:ItemsCache | Where-Object {
+    $_.name -eq $Name -and -not (@(Get-Prop $_ "fields") | Where-Object { $_ -and $_.name -eq "kitbag" })
+  })
+  if ($mine.Count -eq 0) { return $null }
+  if ($mine.Count -gt 1) {
+    Warn "$Name : 이 이름의 항목이 $($mine.Count) 개입니다 - 첫 번째를 씁니다"
+  }
+  return $mine[0]
 }
 
 # bw 가 마지막으로 받아온 항목 수. "없다" 는 말에 근거를 달기 위한 것입니다.
