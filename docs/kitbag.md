@@ -191,6 +191,44 @@ in a rewrite:
   data is written over and started again afterwards. Extracting over a running
   app leaves the app to undo the restore.
 
+## When two machines disagree
+
+`status` says an item changed. It cannot say what changed, and moving the
+other machines across is where that stops being enough — one of them held
+`DOCS_HOST DOCS_URL` where the store held those two plus `DOCS_USER
+DOCS_ROOT`, and pushing from it would have dropped two keys with nothing
+saying so.
+
+```bash
+kitbag diff --backend bw
+```
+
+```
+~ env:docs-publish
+    here   3 lines
+    store  5 lines
+    only there:  DOCS_ROOT DOCS_USER
+    differ:      DOCS_URL
+```
+
+Key names, counts, sizes and hashes — never a value from either side. A key
+holding something different is named; what it holds is not.
+
+Then one item, one direction:
+
+```bash
+kitbag restore --backend bw --only env:docs-publish   # take the store's
+kitbag push    --backend bw --only app:barshelf       # send this machine's
+```
+
+That is different from `skip`, which says *never exchange this* and is right
+for a machine's own SSH key. `--only` is for an item that has to go one way,
+once.
+
+What neither does is decide. Which side should win is not a thing a tool can
+know: of those two machines one had been through a credential split and the
+other had not.
+
 ## One item reads `?`, and that is the answer
 
 ```
