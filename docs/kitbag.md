@@ -177,7 +177,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.12.2
+cargo	kitbag	0.12.3
 npm	@bitwarden/cli	2026.8.0
 ```
 
@@ -336,12 +336,26 @@ The difference matters. An item that became a conflict four seconds ago is a
 conflict, and a retry that just pushed harder would write somebody's work away
 with nothing saying so.
 
+One kind of item is exempt, and it is the one that collided hardest.
+`app:barshelf` and `app:aas` are `volatile`: they are sent on every push,
+because no comparison can say they were not needed. Four machines doing that
+to one item collide by design, and there is nothing to win — nobody can
+compare those bytes, so a copy that arrived from another machine four seconds
+ago is exactly as good as this one. A refused write on a volatile item yields:
+
+```
+? app:barshelf                 another machine's copy landed first
+1 left to another machine's copy: app:barshelf
+```
+
+Not an error, not a retry, and not a fight that resumes on the next push.
+
 The other half of that run was worse and easier to fix: two machines reported
 the reason as `(node:73029) [DEP0040] DeprecationWarning: the punycode module
 is deprecated`. Node's chatter arrives on the same stream as the reason, and
 being first, it was read as the reason. It is skipped now.
 
-Both need kitbag v0.12.2 or newer.
+All of this needs kitbag v0.12.3 or newer.
 
 Then one item, one direction:
 
