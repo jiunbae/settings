@@ -349,12 +349,26 @@ function Protect-Path([string]$Path) {
   $isDir = Test-Path -LiteralPath $Path -PathType Container
   $inherit = if ($isDir) { "ContainerInherit,ObjectInherit" } else { "None" }
 
-  $acl = Get-Acl -LiteralPath $Path
-  $acl.SetAccessRuleProtection($true, $false)
-  foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRule($rule) }
-  $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+  $sec = if ($isDir) { New-Object System.Security.AccessControl.DirectorySecurity }
+         else        { New-Object System.Security.AccessControl.FileSecurity }
+  $sec.SetAccessRuleProtection($true, $false)
+  $sec.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
     $me, "FullControl", $inherit, "None", "Allow")))
-  Set-Acl -LiteralPath $Path -AclObject $acl
+  Set-DaclOnly $Path $sec
+}
+
+# ACL 은 새 보안 객체에 DACL 만 담아 씁니다. Get-Acl 로 읽은 객체를 고쳐 Set-Acl
+# 로 되쓰던 예전 방식은, 관리자가 아닌 셸에서 이미 잠긴 파일에 대해
+# SeSecurityPrivilege(감사 목록 SACL 을 쓰는 권한)를 요구하며 실패합니다. 일반
+# 사용자 토큰에는 그 권한이 아예 없습니다. 재실행의 "변경 없음" 경로가 정확히
+# 그 경우라, 처음엔 되던 복원이 두 번째에 .env 전부에서 실패했습니다. 새 객체는
+# 손댄 구획(DACL)만 쓰므로 SACL 을 건드릴 일 자체가 없습니다.
+function Set-DaclOnly([string]$Path, $Security) {
+  if (Test-Path -LiteralPath $Path -PathType Container) {
+    [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.DirectoryInfo]::new($Path), $Security)
+  } else {
+    [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.FileInfo]::new($Path), $Security)
+  }
 }
 
 # 상속을 되돌립니다. payload 는 잠긴 작업 디렉터리 안에서 만들어지고, 같은 볼륨
@@ -365,7 +379,7 @@ function Protect-Path([string]$Path) {
 function Reset-InheritedAcl([string]$Path) {
   $fresh = New-Object System.Security.AccessControl.FileSecurity
   $fresh.SetAccessRuleProtection($false, $false)
-  Set-Acl -LiteralPath $Path -AclObject $fresh
+  Set-DaclOnly $Path $fresh
 }
 
 # mode 의 group/other 자리가 0 이면 비공개 파일로 봅니다 (600, 700, 400, 0600...).
@@ -523,6 +537,7 @@ function Merge-AuthorizedKeys {
 }
 
 function Invoke-ExecEntry {
+  # 적용됐으면 $true. 호출하는 쪽이 끝의 요약에 넣을지를 이것으로 정합니다.
   param([string]$ItemName, [string]$Cmd, [string]$PayloadFile)
 
   # sh 가 없으므로 셸 문법이 섞이면 실행하지 않습니다. 조용히 반쯤 실행되는
@@ -532,14 +547,14 @@ function Invoke-ExecEntry {
     Info "  $Cmd"
     Info '  해당 항목이 macOS 전용이면 manifest 에 "platform": ["macos"] 를 넣으세요.'
     Info "  Windows 에도 필요한 것이면 Get-NativeExec 에 구현을 추가해야 합니다."
-    return
+    return $false
   }
 
   $tokens = @(Split-Command $Cmd)
-  if ($tokens.Count -eq 0) { Warn "$ItemName 의 exec 가 비어 있습니다"; return }
+  if ($tokens.Count -eq 0) { Warn "$ItemName 의 exec 가 비어 있습니다"; return $false }
 
   $exe = Get-Command $tokens[0] -CommandType Application -ErrorAction SilentlyContinue
-  if (-not $exe) { Warn "$ItemName 건너뜀 - '$($tokens[0])' 를 찾을 수 없습니다"; return }
+  if (-not $exe) { Warn "$ItemName 건너뜀 - '$($tokens[0])' 를 찾을 수 없습니다"; return $false }
 
   $psi = [System.Diagnostics.ProcessStartInfo]::new()
   $psi.FileName = @($exe)[0].Source
@@ -561,12 +576,13 @@ function Invoke-ExecEntry {
     try { $proc.StandardInput.Close() } catch { }
     try { if (-not $proc.HasExited) { $proc.Kill() } } catch { }
     $proc.WaitForExit()
-    return
+    return $false
   }
   $proc.WaitForExit()
 
-  if ($proc.ExitCode -eq 0) { Ok "$ItemName -> $Cmd" }
-  else { Warn "$ItemName 실패 (exit $($proc.ExitCode)): $Cmd" }
+  if ($proc.ExitCode -eq 0) { Ok "$ItemName -> $Cmd"; return $true }
+  Warn "$ItemName 실패 (exit $($proc.ExitCode)): $Cmd"
+  return $false
 }
 
 # ==============================================================================
@@ -634,6 +650,15 @@ function Get-PlatformVerdict($Platform) {
   if ($named.Count -eq 0) { return "match" }
   if ($named -contains $script:Platform) { return "match" }
   return "skip"
+}
+
+# 이 실행에서 복원되지 않은 항목. 항목 하나의 실패는 그 자리에서 경고로 끝나고
+# 나머지는 계속 가는데(그게 맞습니다), 그러면 마지막 줄만 보는 사람에게는
+# 실패가 스크롤 위로 사라집니다. 끝에서 한 번 더, 개수와 이름으로 말합니다.
+$script:NotRestored = New-Object System.Collections.Generic.List[string]
+
+function Add-NotRestored([string]$Item, [string]$Why) {
+  $script:NotRestored.Add("$Item - $Why")
 }
 
 function Invoke-Manifest([string]$TmpDir) {
@@ -712,6 +737,7 @@ function Invoke-Manifest([string]$TmpDir) {
 
       if (($dest -and $exec) -or (-not $dest -and -not $exec)) {
         Warn "$item 항목에는 dest 와 exec 중 정확히 하나가 필요합니다"
+        Add-NotRestored $item "manifest 항목에 dest 와 exec 중 정확히 하나가 필요합니다"
         continue
       }
 
@@ -724,6 +750,7 @@ function Invoke-Manifest([string]$TmpDir) {
       }
       if ($verdict -eq "invalid") {
         Warn "$item 건너뜀 - platform 은 문자열이거나 문자열 배열이어야 합니다"
+        Add-NotRestored $item "manifest 의 platform 값을 읽을 수 없습니다"
         continue
       }
 
@@ -738,7 +765,10 @@ function Invoke-Manifest([string]$TmpDir) {
 
       $payload = Join-Path $TmpDir "payload"
       if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload -Force }
-      if (-not (Get-Payload -ItemName $item -Source $src -OutFile $payload)) { continue }
+      if (-not (Get-Payload -ItemName $item -Source $src -OutFile $payload)) {
+        Add-NotRestored $item "vault 에서 내용을 가져오지 못했습니다"
+        continue
+      }
 
       if ($dest) {
         Copy-Into -Tmp $payload -Dest (Expand-DestPath $dest) -Mode $mode
@@ -746,11 +776,13 @@ function Invoke-Manifest([string]$TmpDir) {
         & $native.Action -ItemName $item -PayloadFile $payload
         Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
       } else {
-        Invoke-ExecEntry -ItemName $item -Cmd $exec -PayloadFile $payload
+        $applied = Invoke-ExecEntry -ItemName $item -Cmd $exec -PayloadFile $payload
         Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
+        if (-not $applied) { Add-NotRestored $item "exec 가 적용되지 않았습니다" }
       }
     } catch {
       Warn "$item 실패: $($_.Exception.Message)"
+      Add-NotRestored $item $_.Exception.Message
     }
   }
 
@@ -815,4 +847,13 @@ try {
 
 Write-Host ""
 Info "이 셸에서 vault 는 열린 채로 남습니다. 끝나면 bw lock."
+
+# 항목마다의 경고는 이미 위에 있습니다. 여기서는 개수와 이름만 모아서, 마지막
+# 줄만 보는 사람이 "다 됐다" 로 읽지 않게 합니다. 종료 코드도 같은 말을 합니다.
+if ($script:NotRestored.Count -gt 0) {
+  Warn "복원되지 않은 항목 $($script:NotRestored.Count) 개:"
+  foreach ($n in $script:NotRestored) { Info "  $n" }
+  Info "원인을 고친 뒤 다시 실행하세요. 이미 복원된 항목은 '변경 없음' 으로 지나갑니다."
+  exit 1
+}
 Ok "복원 완료"

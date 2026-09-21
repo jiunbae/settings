@@ -191,6 +191,7 @@ function Invoke-Restore {
     BW_SESSION               = "stub-session"
     SETTINGS_VAULT_SERVER    = "https://vault.test"
     SETTINGS_SECRETS_SCOPE   = ""
+    SETTINGS_SECRETS_SKIP    = ""
   }
   foreach ($k in $Env.Keys) { $vars[$k] = $Env[$k] }
 
@@ -200,6 +201,7 @@ function Invoke-Restore {
   }
   try {
     $out = & pwsh -NoProfile -ExecutionPolicy Bypass -File $Target @ScriptArgs 2>&1
+    $script:LastExit = $LASTEXITCODE
     return ($out | Out-String)
   } finally {
     foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
@@ -221,6 +223,55 @@ function Test-SshKeyReadable([string]$Path) {
   $p.StandardInput.Close()
   if (-not $p.WaitForExit(15000)) { try { $p.Kill() } catch { }; return $false }
   return ($p.ExitCode -eq 0)
+}
+
+# 같은 복원을 관리자가 아닌 토큰으로 돌립니다. 이 스위트는 보통 관리자 셸에서
+# 돌기 때문에, 일반 셸에서만 나는 실패(이미 잠긴 파일의 ACL 을 다시 맞추다
+# SeSecurityPrivilege 로 죽던 것)는 이게 없으면 영원히 보이지 않습니다.
+#
+# runas /trustlevel:0x20000 은 같은 사용자의 기본(비관리자) 토큰으로 새 창을
+# 띄웁니다. 그 프로세스는 우리 환경이 아니라 사용자의 기본 환경을 받으므로,
+# 그대로 두면 대상 스크립트의 $HOME 이 진짜 홈이 되어 이 사용자의 ~/.ssh 에
+# 씁니다. 그래서 래퍼가 환경을 전부 다시 세우고, 가짜 홈이 TEMP 아래가 아니면
+# 아예 실행하지 않습니다. 창이 잠깐 떴다 사라집니다.
+function Invoke-RestoreAsBasicUser {
+  param([object]$Fixture)
+
+  $out = Join-Path $Fixture.State "basic-user.out"
+  $wrapper = Join-Path $Fixture.Bin "run-as-basic.ps1"
+  [System.IO.File]::WriteAllText($wrapper, @'
+param([string]$Target, [string]$HomeDir, [string]$Bin, [string]$State, [string]$Out)
+$id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$elevated = ([Security.Principal.WindowsPrincipal]$id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $HomeDir.StartsWith($env:TEMP, [StringComparison]::OrdinalIgnoreCase)) {
+  [IO.File]::WriteAllText("$Out.meta", "refused|$elevated|-1"); exit
+}
+$env:USERPROFILE = $HomeDir; $env:HOME = $HomeDir
+$env:PATH = "$Bin;$env:PATH"
+$env:BW_STUB_STATE = $State; $env:BW_SESSION = "stub-session"
+$env:SETTINGS_VAULT_SERVER = "https://vault.test"
+$env:SETTINGS_SECRETS_SCOPE = ""; $env:SETTINGS_SECRETS_SKIP = ""
+$o = & pwsh -NoProfile -ExecutionPolicy Bypass -File $Target 2>&1 | Out-String
+$rc = $LASTEXITCODE
+[IO.File]::WriteAllText($Out, $o)
+[IO.File]::WriteAllText("$Out.meta", "ran|$elevated|$rc")
+'@, (New-Object System.Text.UTF8Encoding($false)))
+
+  Remove-Item -LiteralPath $out, "$out.meta" -ErrorAction SilentlyContinue
+  $pwsh = (Get-Command pwsh).Source
+  & runas.exe /trustlevel:0x20000 ("`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$wrapper`" " +
+    "-Target `"$Target`" -HomeDir `"$($Fixture.HomeDir)`" -Bin `"$($Fixture.Bin)`" " +
+    "-State `"$($Fixture.State)`" -Out `"$out`"") | Out-Null
+  for ($i = 0; $i -lt 180 -and -not (Test-Path -LiteralPath "$out.meta"); $i++) { Start-Sleep -Milliseconds 500 }
+  if (-not (Test-Path -LiteralPath "$out.meta")) { return $null }
+
+  $meta = ([System.IO.File]::ReadAllText("$out.meta")).Split("|")
+  return [pscustomobject]@{
+    Ran      = ($meta[0] -eq "ran")
+    Elevated = $meta[1]
+    Exit     = [int]$meta[2]
+    Output   = $(if (Test-Path -LiteralPath $out) { [System.IO.File]::ReadAllText($out) } else { "" })
+  }
 }
 
 # 이 파일의 ACL 이 상속을 끊고 이 사용자만 남겼는가 - 즉 chmod 600 에 해당하는가.
@@ -304,6 +355,9 @@ $ciKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIccccccccccccccccccccccccccccccccc
 [System.IO.File]::WriteAllText((Join-Path $sshDir "authorized_keys"), "$ciKey`n")
 
 $run = Invoke-Restore $fx
+Check    "a restore where everything landed exits 0" 0 $script:LastExit
+Contains "and says it is done"                       "복원 완료" $run
+Lacks    "without a list of what did not come back"  "복원되지 않은 항목" $run
 $key = Join-Path $sshDir "id_ed25519"
 $pub = Join-Path $sshDir "id_ed25519.pub"
 
@@ -347,6 +401,21 @@ $authorized2 = [System.IO.File]::ReadAllText((Join-Path $sshDir "authorized_keys
 Check "authorized_keys is byte-identical" $authorized $authorized2
 Check "and no backup was made" 0 @(Get-ChildItem -LiteralPath $sshDir -Filter "*.backup.*").Count
 
+# 일반 셸에서의 재실행. 여기서 "변경 없음" 경로가 이미 잠긴 파일의 ACL 을 다시
+# 맞추는데, 예전 방식은 SeSecurityPrivilege 를 요구했고 일반 사용자 토큰에는 그
+# 권한이 없습니다. 실제 PC 에서 .env 9 개가 전부 이것으로 실패했습니다.
+$basic = Invoke-RestoreAsBasicUser $fx
+if ($null -eq $basic) {
+  Write-Host "  - 일반 사용자 토큰으로 실행하지 못해 건너뜀 (runas /trustlevel 이 막혀 있음)" -ForegroundColor Yellow
+} else {
+  Check    "the fixture home was accepted"            $true   $basic.Ran
+  Check    "the second run really was not elevated"   "False" $basic.Elevated
+  Check    "a re-run as a normal user exits 0"        0       $basic.Exit
+  Lacks    "and needs no privilege it does not hold"  "SeSecurityPrivilege" $basic.Output
+  Contains "the private key's ACL is re-applied all the same" "id_ed25519 (변경 없음)" $basic.Output
+  Check    "and the key is still private afterwards"  $true   (Test-PrivateAcl $key)
+}
+
 # ------------------------------------------------------------------------------
 Write-Host ""
 Write-Host "Restore-Secrets: things it must refuse"
@@ -364,6 +433,9 @@ $entry.exec = 'tar -xzf - -C "$HOME" && open -a BarShelf'
 [System.IO.File]::WriteAllText($itemsPath, ($items | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
 
 $refused = Invoke-Restore $fx
+Check    "a refused exec makes the run exit 1" 1 $script:LastExit
+Contains "and is named at the end"           "app:barshelf - exec 가 적용되지 않았습니다" $refused
+Lacks    "so the run does not claim to be done" "복원 완료" $refused
 Contains "a shell exec is refused, not half-run" "셸 문법이 있는 exec" $refused
 Contains "and says how to mark it macOS-only"    'platform": ["macos"]' $refused
 Contains "the rest of the manifest still runs"   "복원:" $refused
@@ -379,12 +451,60 @@ $items = Get-Content -LiteralPath $itemsPath -Raw | ConvertFrom-Json
 [System.IO.File]::WriteAllText($itemsPath, ($items | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
 
 $empty = Invoke-Restore $fx
+Check    "nothing to merge is not a failure" 0 $script:LastExit
 Contains "a list of nothing creates no file" "만들지 않았습니다" $empty
 Lacks    "and is not reported as a failure"  "ssh:authorized_keys 실패" $empty
 Check    "the file really is absent" $false `
   (Test-Path -LiteralPath (Join-Path $fx.HomeDir ".ssh\authorized_keys"))
 Check    "while the rest of the manifest landed" $true `
   (Test-Path -LiteralPath (Join-Path $fx.HomeDir ".ssh\id_ed25519"))
+
+# 실제로 있었던 PC 상태: ~/.ssh 가 상속을 끊으면서 ACE 에 (OI)(CI) 를 빼먹어,
+# 상속에만 기대던 authorized_keys 가 빈 DACL 이 됐습니다. 소유자도 못 읽습니다.
+# 그 항목만 실패하고 나머지는 복원되며, 마지막 줄은 "완료" 라고 하지 않아야 합니다.
+$fx = New-Fixture (Join-Path $TestRoot "lockedssh")
+$lockedSsh = Join-Path $fx.HomeDir ".ssh"
+New-Item -ItemType Directory -Path $lockedSsh -Force | Out-Null
+[System.IO.File]::WriteAllText((Join-Path $lockedSsh "authorized_keys"),
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIccccccccccccccccccccccccccccccccccccccccccc ci@runner`n")
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+& icacls $lockedSsh /inheritance:r /grant:r "*${sid}:F" "*S-1-5-18:F" "*S-1-5-32-544:F" | Out-Null
+$lockedDacl = (Get-Acl -LiteralPath (Join-Path $lockedSsh "authorized_keys")).Sddl -replace '^.*D:', ''
+Check "the fixture really is locked out" 0 ([regex]::Matches($lockedDacl, '\(A;')).Count
+
+try {
+  $partial = Invoke-Restore $fx
+  Check    "one entry that cannot be written makes the run exit 1" 1 $script:LastExit
+  Contains "the count is given at the end"      "복원되지 않은 항목 1 개" $partial
+  Contains "with the entry's name"              "ssh:authorized_keys - " $partial
+  Lacks    "and the run does not say it is done" "복원 완료" $partial
+  Check    "while everything else still landed" $true `
+    (Test-Path -LiteralPath (Join-Path $fx.HomeDir "fixture.bin"))
+} finally {
+  # 소유자는 빈 DACL 이어도 DACL 을 바꿀 수 있습니다. 풀어두지 않으면 아래
+  # 정리가 이 디렉터리를 지우지 못하고 TEMP 에 남깁니다.
+  & icacls $lockedSsh /grant:r "*${sid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+}
+
+# manifest 자체가 잘못된 항목 둘: dest 와 exec 를 둘 다 가진 것, platform 이
+# 이름이 아닌 것. 둘 다 이 기기의 scope 안이라 복원됐어야 하는 항목이고, 경고
+# 한 줄로 흘려보내면 마지막 줄은 다시 "완료" 라고 거짓말을 합니다.
+$fx = New-Fixture (Join-Path $TestRoot "malformed")
+$itemsPath = Join-Path $fx.State "items.json"
+$items = Get-Content -LiteralPath $itemsPath -Raw | ConvertFrom-Json
+$boot = $items | Where-Object { $_.name -eq "bootstrap" }
+$m = $boot.notes | ConvertFrom-Json
+$m.entries += [pscustomobject]@{ item = "bad:both"; source = "notes"; dest = "~/both.txt"; exec = "gpg --import"; scope = "personal" }
+$m.entries += [pscustomobject]@{ item = "bad:platform"; source = "notes"; dest = "~/plat.txt"; scope = "personal"; platform = [pscustomobject]@{ os = "windows" } }
+$boot.notes = ($m | ConvertTo-Json -Depth 10)
+[System.IO.File]::WriteAllText($itemsPath, ($items | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+
+$malformed = Invoke-Restore $fx
+Check    "a malformed manifest entry makes the run exit 1" 1 $script:LastExit
+Contains "both sinks at once is named at the end"  "bad:both - " $malformed
+Contains "a platform that is not a name is too"    "bad:platform - " $malformed
+Contains "and the count covers exactly those two"  "복원되지 않은 항목 2 개" $malformed
+Lacks    "so the run does not claim to be done"    "복원 완료" $malformed
 
 # manifest 항목이 없는 경우: 이 자리에서 제일 흔한 원인은 낡은 캐시입니다.
 $fx = New-Fixture (Join-Path $TestRoot "nomanifest")
