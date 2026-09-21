@@ -214,6 +214,39 @@ kitbag diff --backend bw
 Key names, counts, sizes and hashes — never a value from either side. A key
 holding something different is named; what it holds is not.
 
+Most of what used to look like a question is not one. kitbag records the
+fingerprint at the last exchange — the third point git calls a merge base —
+so a difference sorts itself:
+
+```
+>  this machine moved, the store did not     push sends it
+<  the store moved, this machine did not     restore takes it
+!  both moved since they agreed              yours to settle
+~  differs, and nothing recorded when        as before
+```
+
+A push no longer sends a `<` and a restore no longer takes a `>`: both were
+writing an older copy over a newer one. A `!` stops both, writes nothing
+over anything, and waits.
+
+```bash
+kitbag resolve --backend bw
+```
+
+```
+! env:one  (1/2)
+    here   3 lines
+    store  2 lines
+    only here:   EXTRA
+    differ:      A
+    [m]ine  [t]heirs  [s]kip  [q]uit >
+```
+
+An answer that is not understood is a skip, and so is an empty line: one of
+the two real answers writes over a credential, so the key easiest to hit by
+accident does nothing. With no terminal it asks nothing and lists what is
+left.
+
 Then one item, one direction:
 
 ```bash
