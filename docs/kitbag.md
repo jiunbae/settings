@@ -177,7 +177,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.13.0
+cargo	kitbag	0.13.1
 npm	@bitwarden/cli	2026.8.0
 ```
 
@@ -229,7 +229,7 @@ being rebuilt, and it has no config yet. kitbag prints the line before running
 it.
 
 This is the same list the modules here have always kept, in the one form that
-survives the machine they are on. Needs kitbag v0.13.0 or newer.
+survives the machine they are on. Needs kitbag v0.13.1 or newer.
 
 ## Where an item belongs
 
