@@ -737,6 +737,7 @@ function Invoke-Manifest([string]$TmpDir) {
 
       if (($dest -and $exec) -or (-not $dest -and -not $exec)) {
         Warn "$item 항목에는 dest 와 exec 중 정확히 하나가 필요합니다"
+        Add-NotRestored $item "manifest 항목에 dest 와 exec 중 정확히 하나가 필요합니다"
         continue
       }
 
@@ -749,6 +750,7 @@ function Invoke-Manifest([string]$TmpDir) {
       }
       if ($verdict -eq "invalid") {
         Warn "$item 건너뜀 - platform 은 문자열이거나 문자열 배열이어야 합니다"
+        Add-NotRestored $item "manifest 의 platform 값을 읽을 수 없습니다"
         continue
       }
 

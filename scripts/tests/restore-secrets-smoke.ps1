@@ -486,6 +486,26 @@ try {
   & icacls $lockedSsh /grant:r "*${sid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
 }
 
+# manifest 자체가 잘못된 항목 둘: dest 와 exec 를 둘 다 가진 것, platform 이
+# 이름이 아닌 것. 둘 다 이 기기의 scope 안이라 복원됐어야 하는 항목이고, 경고
+# 한 줄로 흘려보내면 마지막 줄은 다시 "완료" 라고 거짓말을 합니다.
+$fx = New-Fixture (Join-Path $TestRoot "malformed")
+$itemsPath = Join-Path $fx.State "items.json"
+$items = Get-Content -LiteralPath $itemsPath -Raw | ConvertFrom-Json
+$boot = $items | Where-Object { $_.name -eq "bootstrap" }
+$m = $boot.notes | ConvertFrom-Json
+$m.entries += [pscustomobject]@{ item = "bad:both"; source = "notes"; dest = "~/both.txt"; exec = "gpg --import"; scope = "personal" }
+$m.entries += [pscustomobject]@{ item = "bad:platform"; source = "notes"; dest = "~/plat.txt"; scope = "personal"; platform = [pscustomobject]@{ os = "windows" } }
+$boot.notes = ($m | ConvertTo-Json -Depth 10)
+[System.IO.File]::WriteAllText($itemsPath, ($items | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+
+$malformed = Invoke-Restore $fx
+Check    "a malformed manifest entry makes the run exit 1" 1 $script:LastExit
+Contains "both sinks at once is named at the end"  "bad:both - " $malformed
+Contains "a platform that is not a name is too"    "bad:platform - " $malformed
+Contains "and the count covers exactly those two"  "복원되지 않은 항목 2 개" $malformed
+Lacks    "so the run does not claim to be done"    "복원 완료" $malformed
+
 # manifest 항목이 없는 경우: 이 자리에서 제일 흔한 원인은 낡은 캐시입니다.
 $fx = New-Fixture (Join-Path $TestRoot "nomanifest")
 $itemsPath = Join-Path $fx.State "items.json"
