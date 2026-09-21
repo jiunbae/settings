@@ -347,7 +347,28 @@ entries with them, but the mtimes cannot be normalised: macOS `tar` is bsdtar
 and has no `--mtime`, and there is no GNU tar on any of these machines. So the
 track says what is true rather than pretending otherwise.
 
-The other two application bundles pipe through `gzip -n`. Plain `tar -czf`
-stamps the current time into the gzip header, so the same unchanged files
-produce different bytes once a second — which two exports run back to back will
-not show you.
+`app:otpeek` nearly became the third, and the reason it did not is worth
+keeping. Four machines held a byte-identical OTP vault and produced four
+different archives. Comparing the archives to each other, rather than each
+machine to itself, found four separate causes stacked on one another:
+
+| Cause | Fix |
+| --- | --- |
+| gzip stamps the current time into its own header | `gzip -n` |
+| `tar` writes `._name` companions for extended attributes, which differ between identical copies | `COPYFILE_DISABLE=1 tar --no-mac-metadata` |
+| the archive records who owns the file, and these machines do not all run under one user name | `--uid 0 --gid 0 --uname '' --gname ''` |
+| bsdtar writes **pax** by default, and pax headers carry `atime` and `ctime`, which differ on any machine that has so much as read the file | `--format ustar` |
+
+The last one was the largest and the least visible: an export is byte-stable on
+one machine all day and still differs from every other machine's.
+
+The fifth cause was not a tar flag. `config.toml` holds one line — an absolute
+path to the vault — which the restore has to rewrite for the restoring user
+anyway, so shipping it carried no information and one guaranteed difference.
+It is no longer in the archive; the restore writes that line, editing in place
+if the file already exists so that a machine keeping other settings there keeps
+them.
+
+Every one of those was applied to `app:barshelf` too, and it still differs
+four ways, which is what settled it: the app rewrites its files as it runs and
+tar records mtimes. That is `volatile`, and no flag fixes it.

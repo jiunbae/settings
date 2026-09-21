@@ -233,37 +233,49 @@ EOF
 
 # The OTP vault stays encrypted with its own master password inside this.
 #
-# The restore rewrites `active_vault`, which the OTPeek CLI uses to find the
-# vault and which is an absolute path: restored onto a machine with a different
-# user name, it would go on pointing into the previous home.
+# Only the vault travels. `config.toml` holds one line — `active_vault`, an
+# absolute path — and the restore has to rewrite it for the restoring user
+# anyway, so shipping it carries no information and one guaranteed difference,
+# since these machines do not all run under the same user name.
+# The restore writes that line itself, and edits in place if the file is
+# already there, so a machine that keeps other settings there keeps them.
 #
-# `gzip -n` rather than `tar -czf`: gzip stamps the current time into its
-# header, so the same unchanged files produce different bytes every second and
-# the item is reported as changed on every run, forever.
+# Everything else here is about producing the same bytes on four machines that
+# hold the same vault. Each of these was a real difference, found by comparing
+# the archives machine to machine:
+#
+#   --format ustar     bsdtar writes pax by default, and pax headers carry
+#                      atime and ctime — which differ on every machine that
+#                      has so much as read the file. This is the big one.
+#   --uid/--gid/       the archive records who owns the file, and these
+#   --uname/--gname    machines do not all run under one user name.
+#   COPYFILE_DISABLE=1 drops the `._name` companions tar writes for extended
+#   --no-mac-metadata  attributes, which differ between identical copies.
+#   gzip -n            gzip stamps the current time into its own header, so
+#                      the same files differ every second, forever.
+#
+# With all five, four machines now produce one identical archive, checked.
 #
 # `set -o pipefail` because a pipeline reports the last command's status: a tar
 # that failed halfway would be gzipped successfully and stored as a backup of
 # part of the directory, with nothing saying so.
-#
-# COPYFILE_DISABLE=1 and --no-mac-metadata drop the `._name` files tar writes
-# for extended attributes. They differ between machines that hold the same
-# data, so without this every machine reports every other one as changed.
 [[track]]
 name = "app:otpeek"
 scope = "mixed"
 spans = ["personal", "work"]
 platform = ["macos"]
-command = { export = "set -o pipefail; COPYFILE_DISABLE=1 tar --no-mac-metadata -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = 'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' }
+command = { export = "set -o pipefail; COPYFILE_DISABLE=1 tar --format ustar --no-mac-metadata --uid 0 --gid 0 --uname '' --gname '' -cf - -C \"$HOME\" 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = 'tar -xzf - -C "$HOME" && c="$HOME/Library/Application Support/otpeek/config.toml" && v="$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault" && mkdir -p "$HOME/Library/Application Support/otpeek" && if grep -q "^active_vault = " "$c" 2>/dev/null; then sed -i "" "s#^active_vault = .*#active_vault = \"$v\"#" "$c"; else printf "active_vault = \"%s\"\n" "$v" >> "$c"; fi' }
 EOF
     fi
 
     if [[ -d "$HOME/Library/Application Support/BarShelf" ]]; then
         cat <<'EOF'
 
-# Marked volatile, after trying not to. The app rewrites files while it runs —
-# the same bytes, a new mtime — and tar records mtimes, so the archive differs
-# even when nothing in it does. macOS tar is bsdtar and has no `--mtime`, and
-# there is no GNU tar on any of these machines, so the archive cannot be made
+# Marked volatile, after trying not to. Every normalisation the OTPeek track
+# above uses is applied here too, and four machines still produce four
+# archives: the app rewrites its files while it runs — the same bytes, a new
+# mtime — and tar records mtimes. macOS tar is bsdtar and has no `--mtime`,
+# and there is no GNU tar on any of these machines, so this one cannot be made
 # deterministic. `volatile` says what is true: comparing it answers nothing.
 #
 # Two files are left out because the app rewrites them every time it runs:
@@ -280,7 +292,7 @@ name = "app:barshelf"
 scope = "personal"
 platform = ["macos"]
 volatile = true
-command = { export = "set -o pipefail; COPYFILE_DISABLE=1 tar --no-mac-metadata -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' --exclude 'BarShelf/launch-receipt.json' --exclude 'BarShelf/refresh-stats.json' BarShelf | gzip -n", restore = 'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' }
+command = { export = "set -o pipefail; COPYFILE_DISABLE=1 tar --format ustar --no-mac-metadata --uid 0 --gid 0 --uname '' --gname '' -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' --exclude 'BarShelf/launch-receipt.json' --exclude 'BarShelf/refresh-stats.json' BarShelf | gzip -n", restore = 'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' }
 EOF
     fi
 
