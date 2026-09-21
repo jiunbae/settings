@@ -349,12 +349,26 @@ function Protect-Path([string]$Path) {
   $isDir = Test-Path -LiteralPath $Path -PathType Container
   $inherit = if ($isDir) { "ContainerInherit,ObjectInherit" } else { "None" }
 
-  $acl = Get-Acl -LiteralPath $Path
-  $acl.SetAccessRuleProtection($true, $false)
-  foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRule($rule) }
-  $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+  $sec = if ($isDir) { New-Object System.Security.AccessControl.DirectorySecurity }
+         else        { New-Object System.Security.AccessControl.FileSecurity }
+  $sec.SetAccessRuleProtection($true, $false)
+  $sec.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
     $me, "FullControl", $inherit, "None", "Allow")))
-  Set-Acl -LiteralPath $Path -AclObject $acl
+  Set-DaclOnly $Path $sec
+}
+
+# ACL 은 새 보안 객체에 DACL 만 담아 씁니다. Get-Acl 로 읽은 객체를 고쳐 Set-Acl
+# 로 되쓰던 예전 방식은, 관리자가 아닌 셸에서 이미 잠긴 파일에 대해
+# SeSecurityPrivilege(감사 목록 SACL 을 쓰는 권한)를 요구하며 실패합니다. 일반
+# 사용자 토큰에는 그 권한이 아예 없습니다. 재실행의 "변경 없음" 경로가 정확히
+# 그 경우라, 처음엔 되던 복원이 두 번째에 .env 전부에서 실패했습니다. 새 객체는
+# 손댄 구획(DACL)만 쓰므로 SACL 을 건드릴 일 자체가 없습니다.
+function Set-DaclOnly([string]$Path, $Security) {
+  if (Test-Path -LiteralPath $Path -PathType Container) {
+    [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.DirectoryInfo]::new($Path), $Security)
+  } else {
+    [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.FileInfo]::new($Path), $Security)
+  }
 }
 
 # 상속을 되돌립니다. payload 는 잠긴 작업 디렉터리 안에서 만들어지고, 같은 볼륨
@@ -365,7 +379,7 @@ function Protect-Path([string]$Path) {
 function Reset-InheritedAcl([string]$Path) {
   $fresh = New-Object System.Security.AccessControl.FileSecurity
   $fresh.SetAccessRuleProtection($false, $false)
-  Set-Acl -LiteralPath $Path -AclObject $fresh
+  Set-DaclOnly $Path $fresh
 }
 
 # mode 의 group/other 자리가 0 이면 비공개 파일로 봅니다 (600, 700, 400, 0600...).
