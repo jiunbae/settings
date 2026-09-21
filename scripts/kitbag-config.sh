@@ -318,6 +318,44 @@ per_machine = true
 command = { export = "kitbag programs", restore = "kitbag programs --restore" }
 EOF
     fi
+
+    # The escape hatch, and it is the same list this repository has always
+    # kept: the things that arrive as `curl … | sh` because nobody packaged
+    # them. No manager will ever list these, so the list that says what is
+    # installed here is incomplete without them — and a list that is missing
+    # the toolchain is a list you cannot rebuild a machine from.
+    #
+    # Each is written only if it is actually here. A declaration that has never
+    # been acted on is a plan, not a fact, and this file records facts.
+    #
+    # The install line travels with the item and kitbag prints it before it
+    # runs it. That is the same trust the app tracks above already ask for, and
+    # the same reason: the machine being restored is the one that has to run
+    # it, and it has no config yet.
+    declare_program() {
+        printf '\n[[program]]\nname = "%s"\ninstall = "%s"\n' "$1" "$2"
+        [[ -n "${3:-}" ]] && printf 'version_from = "%s"\n' "$3"
+        return 0
+    }
+
+    command_exists rustup &&
+        declare_program rustup \
+            "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y" \
+            "rustup --version"
+    command_exists uv &&
+        declare_program uv \
+            "curl -LsSf https://astral.sh/uv/install.sh | sh" \
+            "uv --version"
+    command_exists cargo-binstall &&
+        declare_program cargo-binstall \
+            "curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash" \
+            "cargo-binstall -V"
+    command_exists claude &&
+        declare_program claude "curl -fsSL https://claude.ai/install.sh | bash" "claude --version"
+    command_exists kitbag &&
+        declare_program kitbag "curl -LsSf https://raw.githubusercontent.com/Open330/kitbag/main/install.sh | sh" "kitbag --version"
+
+    return 0
 }
 
 # ==============================================================================

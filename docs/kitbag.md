@@ -177,7 +177,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.12.3
+cargo	kitbag	0.13.0
 npm	@bitwarden/cli	2026.8.0
 ```
 
@@ -197,6 +197,39 @@ machine that would rather not do this can name `programs` in
 asked for rather than that plus everything dragged in behind it. Sorted, too —
 an unordered list differs from itself between two runs, and the store would
 report a machine as changed for having named the same things in another order.
+
+### Reading another machine's
+
+```bash
+kitbag programs --list                              # which machines wrote one
+kitbag programs --from jiun-mbp --backend bw        # read it
+kitbag programs --from jiun-mbp --backend bw --restore   # or become it
+```
+
+The last one is the point of keeping the list at all: the machine worth copying
+is usually the one that is gone.
+
+### The things no manager will list
+
+`rustup`, `uv`, `cargo-binstall`, `claude`, kitbag itself — everything this
+repository installs with `curl … | sh`, which is roughly the fifth of a machine
+that no package list describes. `scripts/kitbag-config.sh` declares them:
+
+```toml
+[[program]]
+name = "uv"
+install = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+version_from = "uv --version"
+```
+
+Each is written out **only if it is actually here** — a declaration nobody has
+acted on is a plan, not a fact. The install line travels with the item, for the
+same reason a restore command does: the machine that has to run it is the one
+being rebuilt, and it has no config yet. kitbag prints the line before running
+it.
+
+This is the same list the modules here have always kept, in the one form that
+survives the machine they are on. Needs kitbag v0.13.0 or newer.
 
 ## Where an item belongs
 
