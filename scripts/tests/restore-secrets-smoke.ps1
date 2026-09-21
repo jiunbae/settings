@@ -200,6 +200,7 @@ function Invoke-Restore {
   }
   try {
     $out = & pwsh -NoProfile -ExecutionPolicy Bypass -File $Target @ScriptArgs 2>&1
+    $script:LastExit = $LASTEXITCODE
     return ($out | Out-String)
   } finally {
     foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
@@ -304,6 +305,9 @@ $ciKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIccccccccccccccccccccccccccccccccc
 [System.IO.File]::WriteAllText((Join-Path $sshDir "authorized_keys"), "$ciKey`n")
 
 $run = Invoke-Restore $fx
+Check    "a restore where everything landed exits 0" 0 $script:LastExit
+Contains "and says it is done"                       "복원 완료" $run
+Lacks    "without a list of what did not come back"  "복원되지 않은 항목" $run
 $key = Join-Path $sshDir "id_ed25519"
 $pub = Join-Path $sshDir "id_ed25519.pub"
 
@@ -364,6 +368,9 @@ $entry.exec = 'tar -xzf - -C "$HOME" && open -a BarShelf'
 [System.IO.File]::WriteAllText($itemsPath, ($items | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
 
 $refused = Invoke-Restore $fx
+Check    "a refused exec makes the run exit 1" 1 $script:LastExit
+Contains "and is named at the end"           "app:barshelf - exec 가 적용되지 않았습니다" $refused
+Lacks    "so the run does not claim to be done" "복원 완료" $refused
 Contains "a shell exec is refused, not half-run" "셸 문법이 있는 exec" $refused
 Contains "and says how to mark it macOS-only"    'platform": ["macos"]' $refused
 Contains "the rest of the manifest still runs"   "복원:" $refused
@@ -379,12 +386,40 @@ $items = Get-Content -LiteralPath $itemsPath -Raw | ConvertFrom-Json
 [System.IO.File]::WriteAllText($itemsPath, ($items | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
 
 $empty = Invoke-Restore $fx
+Check    "nothing to merge is not a failure" 0 $script:LastExit
 Contains "a list of nothing creates no file" "만들지 않았습니다" $empty
 Lacks    "and is not reported as a failure"  "ssh:authorized_keys 실패" $empty
 Check    "the file really is absent" $false `
   (Test-Path -LiteralPath (Join-Path $fx.HomeDir ".ssh\authorized_keys"))
 Check    "while the rest of the manifest landed" $true `
   (Test-Path -LiteralPath (Join-Path $fx.HomeDir ".ssh\id_ed25519"))
+
+# 실제로 있었던 PC 상태: ~/.ssh 가 상속을 끊으면서 ACE 에 (OI)(CI) 를 빼먹어,
+# 상속에만 기대던 authorized_keys 가 빈 DACL 이 됐습니다. 소유자도 못 읽습니다.
+# 그 항목만 실패하고 나머지는 복원되며, 마지막 줄은 "완료" 라고 하지 않아야 합니다.
+$fx = New-Fixture (Join-Path $TestRoot "lockedssh")
+$lockedSsh = Join-Path $fx.HomeDir ".ssh"
+New-Item -ItemType Directory -Path $lockedSsh -Force | Out-Null
+[System.IO.File]::WriteAllText((Join-Path $lockedSsh "authorized_keys"),
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIccccccccccccccccccccccccccccccccccccccccccc ci@runner`n")
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+& icacls $lockedSsh /inheritance:r /grant:r "*${sid}:F" "*S-1-5-18:F" "*S-1-5-32-544:F" | Out-Null
+$lockedDacl = (Get-Acl -LiteralPath (Join-Path $lockedSsh "authorized_keys")).Sddl -replace '^.*D:', ''
+Check "the fixture really is locked out" 0 ([regex]::Matches($lockedDacl, '\(A;')).Count
+
+try {
+  $partial = Invoke-Restore $fx
+  Check    "one entry that cannot be written makes the run exit 1" 1 $script:LastExit
+  Contains "the count is given at the end"      "복원되지 않은 항목 1 개" $partial
+  Contains "with the entry's name"              "ssh:authorized_keys - " $partial
+  Lacks    "and the run does not say it is done" "복원 완료" $partial
+  Check    "while everything else still landed" $true `
+    (Test-Path -LiteralPath (Join-Path $fx.HomeDir "fixture.bin"))
+} finally {
+  # 소유자는 빈 DACL 이어도 DACL 을 바꿀 수 있습니다. 풀어두지 않으면 아래
+  # 정리가 이 디렉터리를 지우지 못하고 TEMP 에 남깁니다.
+  & icacls $lockedSsh /grant:r "*${sid}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+}
 
 # manifest 항목이 없는 경우: 이 자리에서 제일 흔한 원인은 낡은 캐시입니다.
 $fx = New-Fixture (Join-Path $TestRoot "nomanifest")

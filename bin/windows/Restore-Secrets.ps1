@@ -523,6 +523,7 @@ function Merge-AuthorizedKeys {
 }
 
 function Invoke-ExecEntry {
+  # 적용됐으면 $true. 호출하는 쪽이 끝의 요약에 넣을지를 이것으로 정합니다.
   param([string]$ItemName, [string]$Cmd, [string]$PayloadFile)
 
   # sh 가 없으므로 셸 문법이 섞이면 실행하지 않습니다. 조용히 반쯤 실행되는
@@ -532,14 +533,14 @@ function Invoke-ExecEntry {
     Info "  $Cmd"
     Info '  해당 항목이 macOS 전용이면 manifest 에 "platform": ["macos"] 를 넣으세요.'
     Info "  Windows 에도 필요한 것이면 Get-NativeExec 에 구현을 추가해야 합니다."
-    return
+    return $false
   }
 
   $tokens = @(Split-Command $Cmd)
-  if ($tokens.Count -eq 0) { Warn "$ItemName 의 exec 가 비어 있습니다"; return }
+  if ($tokens.Count -eq 0) { Warn "$ItemName 의 exec 가 비어 있습니다"; return $false }
 
   $exe = Get-Command $tokens[0] -CommandType Application -ErrorAction SilentlyContinue
-  if (-not $exe) { Warn "$ItemName 건너뜀 - '$($tokens[0])' 를 찾을 수 없습니다"; return }
+  if (-not $exe) { Warn "$ItemName 건너뜀 - '$($tokens[0])' 를 찾을 수 없습니다"; return $false }
 
   $psi = [System.Diagnostics.ProcessStartInfo]::new()
   $psi.FileName = @($exe)[0].Source
@@ -561,12 +562,13 @@ function Invoke-ExecEntry {
     try { $proc.StandardInput.Close() } catch { }
     try { if (-not $proc.HasExited) { $proc.Kill() } } catch { }
     $proc.WaitForExit()
-    return
+    return $false
   }
   $proc.WaitForExit()
 
-  if ($proc.ExitCode -eq 0) { Ok "$ItemName -> $Cmd" }
-  else { Warn "$ItemName 실패 (exit $($proc.ExitCode)): $Cmd" }
+  if ($proc.ExitCode -eq 0) { Ok "$ItemName -> $Cmd"; return $true }
+  Warn "$ItemName 실패 (exit $($proc.ExitCode)): $Cmd"
+  return $false
 }
 
 # ==============================================================================
@@ -634,6 +636,15 @@ function Get-PlatformVerdict($Platform) {
   if ($named.Count -eq 0) { return "match" }
   if ($named -contains $script:Platform) { return "match" }
   return "skip"
+}
+
+# 이 실행에서 복원되지 않은 항목. 항목 하나의 실패는 그 자리에서 경고로 끝나고
+# 나머지는 계속 가는데(그게 맞습니다), 그러면 마지막 줄만 보는 사람에게는
+# 실패가 스크롤 위로 사라집니다. 끝에서 한 번 더, 개수와 이름으로 말합니다.
+$script:NotRestored = New-Object System.Collections.Generic.List[string]
+
+function Add-NotRestored([string]$Item, [string]$Why) {
+  $script:NotRestored.Add("$Item - $Why")
 }
 
 function Invoke-Manifest([string]$TmpDir) {
@@ -738,7 +749,10 @@ function Invoke-Manifest([string]$TmpDir) {
 
       $payload = Join-Path $TmpDir "payload"
       if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload -Force }
-      if (-not (Get-Payload -ItemName $item -Source $src -OutFile $payload)) { continue }
+      if (-not (Get-Payload -ItemName $item -Source $src -OutFile $payload)) {
+        Add-NotRestored $item "vault 에서 내용을 가져오지 못했습니다"
+        continue
+      }
 
       if ($dest) {
         Copy-Into -Tmp $payload -Dest (Expand-DestPath $dest) -Mode $mode
@@ -746,11 +760,13 @@ function Invoke-Manifest([string]$TmpDir) {
         & $native.Action -ItemName $item -PayloadFile $payload
         Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
       } else {
-        Invoke-ExecEntry -ItemName $item -Cmd $exec -PayloadFile $payload
+        $applied = Invoke-ExecEntry -ItemName $item -Cmd $exec -PayloadFile $payload
         Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
+        if (-not $applied) { Add-NotRestored $item "exec 가 적용되지 않았습니다" }
       }
     } catch {
       Warn "$item 실패: $($_.Exception.Message)"
+      Add-NotRestored $item $_.Exception.Message
     }
   }
 
@@ -815,4 +831,13 @@ try {
 
 Write-Host ""
 Info "이 셸에서 vault 는 열린 채로 남습니다. 끝나면 bw lock."
+
+# 항목마다의 경고는 이미 위에 있습니다. 여기서는 개수와 이름만 모아서, 마지막
+# 줄만 보는 사람이 "다 됐다" 로 읽지 않게 합니다. 종료 코드도 같은 말을 합니다.
+if ($script:NotRestored.Count -gt 0) {
+  Warn "복원되지 않은 항목 $($script:NotRestored.Count) 개:"
+  foreach ($n in $script:NotRestored) { Info "  $n" }
+  Info "원인을 고친 뒤 다시 실행하세요. 이미 복원된 항목은 '변경 없음' 으로 지나갑니다."
+  exit 1
+}
 Ok "복원 완료"
