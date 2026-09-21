@@ -244,18 +244,34 @@ EOF
 # `set -o pipefail` because a pipeline reports the last command's status: a tar
 # that failed halfway would be gzipped successfully and stored as a backup of
 # part of the directory, with nothing saying so.
+#
+# COPYFILE_DISABLE=1 and --no-mac-metadata drop the `._name` files tar writes
+# for extended attributes. They differ between machines that hold the same
+# data, so without this every machine reports every other one as changed.
 [[track]]
 name = "app:otpeek"
 scope = "mixed"
 spans = ["personal", "work"]
 platform = ["macos"]
-command = { export = "set -o pipefail; tar -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = 'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' }
+command = { export = "set -o pipefail; COPYFILE_DISABLE=1 tar --no-mac-metadata -cf - -C \"$HOME\" 'Library/Application Support/otpeek/config.toml' 'Library/Group Containers/group.com.otpeek.app/vault.otpvault' | gzip -n", restore = 'tar -xzf - -C "$HOME" && sed -i "" "s#^active_vault = .*#active_vault = \"$HOME/Library/Group Containers/group.com.otpeek.app/vault.otpvault\"#" "$HOME/Library/Application Support/otpeek/config.toml"' }
 EOF
     fi
 
     if [[ -d "$HOME/Library/Application Support/BarShelf" ]]; then
         cat <<'EOF'
 
+# Marked volatile, after trying not to. The app rewrites files while it runs —
+# the same bytes, a new mtime — and tar records mtimes, so the archive differs
+# even when nothing in it does. macOS tar is bsdtar and has no `--mtime`, and
+# there is no GNU tar on any of these machines, so the archive cannot be made
+# deterministic. `volatile` says what is true: comparing it answers nothing.
+#
+# Two files are left out because the app rewrites them every time it runs:
+# launch-receipt.json says when it last started and refresh-stats.json counts
+# what it has fetched. Neither is configuration, and with them in, four
+# machines holding identical widgets still conflict forever — whoever opened
+# the app last wins. Same shape as the gzip timestamp, one layer further in.
+#
 # Quit the app before writing over its data, or it writes its own state back
 # on the way out and the restore is quietly undone. Started again afterwards,
 # but only if it is installed here.
@@ -263,7 +279,31 @@ EOF
 name = "app:barshelf"
 scope = "personal"
 platform = ["macos"]
-command = { export = "set -o pipefail; tar -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' BarShelf | gzip -n", restore = 'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' }
+volatile = true
+command = { export = "set -o pipefail; COPYFILE_DISABLE=1 tar --no-mac-metadata -cf - -C \"$HOME/Library/Application Support\" --exclude 'BarShelf/runtime' --exclude 'BarShelf/cache' --exclude 'BarShelf/launch-receipt.json' --exclude 'BarShelf/refresh-stats.json' BarShelf | gzip -n", restore = 'pkill -f "/BarShelf.app/" 2>/dev/null; mkdir -p "$HOME/Library/Application Support" && tar -xzf - -C "$HOME/Library/Application Support" && { [ ! -d /Applications/BarShelf.app ] || open -a BarShelf; }' }
+EOF
+    fi
+
+    # What is installed here, as a list rather than as binaries. A kilobyte
+    # names what several gigabytes would have carried, and the gigabytes would
+    # have been built for one architecture besides.
+    #
+    # `per_machine`, for the same reason the ssh key is: these four machines
+    # hold four different sets, and one shared item means whoever pushed last
+    # decides what the others were supposed to have.
+    #
+    # Restoring this installs what is missing. It removes nothing — the list is
+    # what a machine must not lack, not what it may not exceed — but it does
+    # reach the network and it can take a while, so a machine that would rather
+    # not can name `programs` in secrets.skip like anything else.
+    if command_exists brew || command_exists cargo || command_exists npm; then
+        cat <<'EOF'
+
+[[track]]
+name = "programs"
+scope = "personal"
+per_machine = true
+command = { export = "kitbag programs", restore = "kitbag programs --restore" }
 EOF
     fi
 }
