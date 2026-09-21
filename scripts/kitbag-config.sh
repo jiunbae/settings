@@ -12,6 +12,10 @@
 # `# scope:` markers - kitbag reads the same markers, which is why this is a
 # translation rather than a migration.
 #
+# ~/.config/settings/secrets.skip is read too: the items this machine keeps
+# for itself, one name per line. kitbag reads its own config, so a skip list
+# that is not written into it does nothing when kitbag is run directly.
+#
 # ~/.config/settings/secrets-paths is read for the extra paths, one per line:
 #
 #   <path>  <scope>  [owner]  [item-name]  [platforms]
@@ -37,6 +41,7 @@ source "$ROOT/lib/core.sh"
 
 CONFIG="${SETTINGS_KITBAG_CONFIG:-$HOME/.config/kitbag/machine.toml}"
 SCOPE_FILE="${SETTINGS_SECRETS_SCOPE_FILE:-$HOME/.config/settings/secrets.scope}"
+SKIP_FILE="${SETTINGS_SECRETS_SKIP_FILE:-$HOME/.config/settings/secrets.skip}"
 TRACKED_PATHS="${SETTINGS_TRACKED_PATHS:-$HOME/.config/settings/secrets-paths}"
 
 WRITE=false
@@ -116,6 +121,18 @@ generate() {
 
 scopes = [$(scopes)]
 EOF
+
+    # What this machine keeps for itself. It lives in the file all three
+    # engines read, and kitbag reads its own config — so unless it is written
+    # here, running `kitbag` directly behaves as though nothing were declared.
+    # That is how a machine got asked whether to overwrite its own SSH key.
+    if [[ -f "$SKIP_FILE" ]]; then
+        local names
+        names="$(grep -vE '^[[:space:]]*(#|$)' "$SKIP_FILE" 2>/dev/null |
+                 sed 's/[[:space:]]//g' | grep -v '^$' |
+                 sed 's/^/"/; s/$/", /' | tr -d '\n' | sed 's/, $//')"
+        [[ -n "$names" ]] && printf '\nskip = [%s]\n' "$names"
+    fi
 
     # Directories of marked files. The pattern goes in, never the list of what
     # is in it - the same rule this repository follows everywhere else.
