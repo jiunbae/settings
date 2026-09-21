@@ -38,7 +38,17 @@ is usually the moment it matters. All three engines read it — this one, kitbag
 (which also takes `skip = [...]` in its own config), and the Windows restore as
 `-Skip`.
 
-kitbag goes one step further and refuses to **push** it too. A machine keeping
+For an SSH key there is a better answer than not exchanging it, and kitbag
+v0.8.1 has it: `per_machine` names the item after the machine, so four
+machines keep four keys under four names — `ssh:id_ed25519@jiun-mbp` — and
+each one is backed up instead of three of them existing in one place only.
+The file stays at `~/.ssh/id_ed25519`; only the name in the vault differs.
+A restore leaves alone anything stamped with another machine's name.
+
+`skip` remains for what it is actually for: an item this machine wants
+nothing to do with in either direction.
+
+kitbag goes one step further and refuses to **push** a skipped item too. A machine keeping
 its own key must not send that key over the one in the store either; it is the
 same mistake from the other end, and it is the end that loses something.
 

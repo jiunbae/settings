@@ -150,9 +150,17 @@ EOF
         case "$f" in *.pub|*.scope) continue ;; esac
         cat <<'EOF'
 
+# This machine's own key, named after this machine.
+#
+# Four machines derive the same item name from this path and hold four
+# different keys. Keeping them apart by refusing to exchange it left three of
+# them backed up nowhere, and a key that exists in one place is gone with the
+# machine it is on. `per_machine` names it `ssh:id_ed25519@<host>` instead: each
+# machine keeps its own, backs its own up, and takes nobody else's.
 [[track]]
 path = "~/.ssh/id_ed25519"
 scope = "personal"
+per_machine = true
 EOF
         break
     done
