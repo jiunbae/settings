@@ -15,6 +15,9 @@ scripts/kitbag-config.sh --write
 kitbag status                  # what it makes of this machine — reads only
 kitbag doctor                  # and whether anything is unmarked or loose
 kitbag push --backend bw       # the inverse; replaces scripts/secrets-push.sh
+kitbag diff --backend bw       # what differs from the store — shapes, never values
+kitbag resolve --backend bw    # settle what neither side can settle alone
+kitbag programs                # what is installed here, as a list
 ```
 
 ## Why
@@ -106,32 +109,94 @@ the markers already on disk when nothing is declared, and says that it did.
 
 ## What has been done, and what has not
 
-The vault holds 39 kitbag items, pushed from this machine. `./install.sh
-secrets` restores with kitbag. The round trip has been checked with this
-machine's own files, through an `age` store into a throwaway `$HOME`: 36 of 36
-came back byte for byte, every one of them `0600`. The public half of the SSH
-key is not stored and does not need to be — `ssh-keygen -y` derives it from the
-private key, and it matches.
+Four Macs run it: june-mba, june-mbp, jiun-mini and jiun-mbp. Each pushed its
+own state, took what it was behind on, and settled what was left by hand; all
+four now report nothing outstanding. The round trip was checked before any of
+that, through an `age` store into a throwaway `$HOME`: 36 of 36 files came back
+byte for byte, every one of them `0600`, including the one stored as an
+attachment. The public half of the SSH key is not stored and does not need to
+be — `ssh-keygen -y` derives it from the private key, and it matches.
 
-Still true, and worth keeping in view:
-
-Reading back has since been checked against the real vault too, by restoring
-into a throwaway `$HOME`: all 36 files came back byte for byte at `0600`,
-including the one stored as an attachment. Worth knowing that
-`kitbag restore --backend bw --dry-run` does **not** check this — it is fast
-precisely because it reads nothing, comparing the store's hashes against the
-files here and fetching only what differs.
+Worth knowing that `kitbag restore --backend bw --dry-run` does **not** check
+that — it is fast precisely because it reads nothing, comparing the store's
+hashes against the files here and fetching only what differs.
 
 Still true:
 
-- **No machine has been set up from the vault with kitbag.** Restoring into a
-  throwaway home is not the same as a machine coming up on it.
-- The other machines still restore with `SETTINGS_SECRETS_ENGINE=bash`, and
-  their manifest is untouched. They move across one at a time.
+- **No machine has been set up from bare metal with kitbag.** Four machines
+  that already had their files took kitbag over; that is not the same as one
+  coming up on it from nothing.
+- **Windows still restores with the shell engine**, and that machine needs
+  `ssh:id_ed25519` in its own `secrets.skip` before it restores anything — see
+  [windows.md](windows.md).
+- **The Linux server has not moved across** and has no settings repo on it yet.
+- The two engines share one vault *and one set of item names*. Every reader
+  filters on the `kitbag` field to tell one namespace from the other; a tool
+  that forgets to will show you two of everything, or delete the wrong one.
 - The `op` and `pass` stores are tested against stub clients, not real accounts.
 - `kitbag apply` covers packages, links, macOS defaults, downloads, clones,
   merges and commands. The modules here are not ported to it, and
   `./install.sh` remains what installs a machine.
+
+## Things only one machine should own
+
+Four machines keep a private key at `~/.ssh/id_ed25519`. Four different keys,
+one path — so one item name, and whoever pushed last would have been the only
+one backed up. Refusing to exchange it at all was the first answer, and it left
+three of the four keys stored nowhere; a key that exists in one place is gone
+with the machine it is on.
+
+```toml
+[[track]]
+path = "~/.ssh/id_ed25519"
+scope = "personal"
+per_machine = true
+```
+
+What moves is the **item name**, to `ssh:id_ed25519@jiun-mini`, and the
+`machine:` header travels with it. The path does not move: the key is written
+back to `~/.ssh/id_ed25519`, where ssh looks for it. Each machine backs up its
+own and takes nobody else's.
+
+`skip` is the other half of the same question and is not the same answer. It
+says *this machine exchanges this item in neither direction* — right for a
+machine whose key must never be touched by a restore, wrong as a way of keeping
+four keys apart, because it keeps them apart by keeping three of them unsaved.
+
+## Programs, as a list
+
+Binaries do not belong in a vault. They are large, built for one architecture,
+and whoever published them will hand them over again. What is worth keeping is
+the list:
+
+```bash
+kitbag programs
+```
+
+```
+kitbag/programs 1
+brew	ripgrep
+cask	ghostty
+cargo	kitbag	0.12.1
+npm	@bitwarden/cli	2026.8.0
+```
+
+Seventy-one entries here, a little over a kilobyte. `scripts/kitbag-config.sh`
+emits it as a `per_machine` track — four machines hold four different sets, and
+a shared item would mean whoever pushed last decided what the others were
+supposed to have.
+
+Restoring it installs what is missing and **removes nothing**: the list is what
+a machine must not lack, not what it may not exceed. A manager kitbag cannot
+drive is named rather than guessed at, because installing a plausible thing is
+worse than saying nothing. It reaches the network and it can take a while, so a
+machine that would rather not do this can name `programs` in
+`~/.config/settings/secrets.skip` like any other item.
+
+`brew leaves` rather than `brew list`, so what comes back is what somebody
+asked for rather than that plus everything dragged in behind it. Sorted, too —
+an unordered list differs from itself between two runs, and the store would
+report a machine as changed for having named the same things in another order.
 
 ## Where an item belongs
 
@@ -265,7 +330,7 @@ other had not.
 ## One item reads `?`, and that is the answer
 
 ```
-= 38 unchanged   ? 1 not comparable
+= 38 unchanged   ? 2 not comparable
 ```
 
 `app:aas` exports credentials that rotate on their own, so its bytes differ
@@ -273,6 +338,14 @@ between two exports a moment apart. It is marked `volatile`: kitbag sends it
 every time and declines to call that a change, because nothing was observed to
 change. An item that can never read `=` would otherwise shout on every run
 until the report stopped being read.
+
+`app:barshelf` is the second, and it took longer to accept. The app rewrites
+its files while it runs — the same bytes, a new mtime — and `tar` records
+mtimes, so the archive differs when its contents do not. Two files that are
+pure runtime bookkeeping are excluded outright, and the AppleDouble `._name`
+entries with them, but the mtimes cannot be normalised: macOS `tar` is bsdtar
+and has no `--mtime`, and there is no GNU tar on any of these machines. So the
+track says what is true rather than pretending otherwise.
 
 The other two application bundles pipe through `gzip -n`. Plain `tar -czf`
 stamps the current time into the gzip header, so the same unchanged files
