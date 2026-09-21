@@ -177,7 +177,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.13.1
+cargo	kitbag	0.14.1
 npm	@bitwarden/cli	2026.8.0
 ```
 
@@ -209,6 +209,27 @@ kitbag programs --from jiun-mbp --backend bw --restore   # or become it
 The last one is the point of keeping the list at all: the machine worth copying
 is usually the one that is gone.
 
+### Restoring asks first
+
+```
+The store holds 39 item(s) for this machine.
+Restoring writes over files here and runs the restore commands
+the store carries — which can install software.
+`kitbag restore --dry-run` says exactly what, and writes nothing.
+
+Go ahead? [y/N]
+```
+
+`apply` always asked and `restore` never did, which was fine while restoring
+meant writing files — each one is backed up before it is written over, and a
+backup can be put back. A `programs` item made restore able to install
+software, which reaches the network, takes minutes, and no backup undoes.
+
+`-y` answers in advance and `--only` is already an answer. With no terminal it
+writes nothing and says which flag to add, so `./install.sh secrets` passes
+`--yes` — the intent belongs where the decision was made, not inferred from
+what a pipe means.
+
 ### The things no manager will list
 
 `rustup`, `uv`, `cargo-binstall`, `claude`, kitbag itself — everything this
@@ -229,7 +250,7 @@ being rebuilt, and it has no config yet. kitbag prints the line before running
 it.
 
 This is the same list the modules here have always kept, in the one form that
-survives the machine they are on. Needs kitbag v0.13.1 or newer.
+survives the machine they are on. Needs kitbag v0.14.1 or newer.
 
 ## Where an item belongs
 

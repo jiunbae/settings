@@ -522,7 +522,12 @@ restore_with_kitbag() {
         "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/kitbag-config.sh" --write || return 1
     fi
 
-    local args=(restore --backend bw)
+    # `--yes` because the question has already been asked and answered: this
+    # runs from `./install.sh secrets`, which the person is watching, and
+    # kitbag would otherwise find no terminal and write nothing. Written out
+    # rather than left to kitbag's judgement about what a pipe means — the
+    # intent belongs where the decision was made.
+    local args=(restore --backend bw --yes)
     local scope
     scope="$(secrets_scope_declared)"
     [[ -n "$scope" ]] && args+=(--scope "$scope")
