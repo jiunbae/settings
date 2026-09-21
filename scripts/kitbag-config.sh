@@ -332,6 +332,13 @@ EOF
     # runs it. That is the same trust the app tracks above already ask for, and
     # the same reason: the machine being restored is the one that has to run
     # it, and it has no config yet.
+    # A non-interactive shell — which is what an ssh command gets — has none of
+    # the profile's PATH additions, so kitbag and claude in ~/.local/bin look
+    # absent and the config comes out different depending on how the shell was
+    # started. Deploying to four machines over ssh is exactly how that was
+    # found: three of them wrote a list missing the tool that wrote it.
+    export PATH="$HOME/.local/bin:$HOME/bin:$HOME/.cargo/bin:$PATH"
+
     declare_program() {
         printf '\n[[program]]\nname = "%s"\ninstall = "%s"\n' "$1" "$2"
         [[ -n "${3:-}" ]] && printf 'version_from = "%s"\n' "$3"
