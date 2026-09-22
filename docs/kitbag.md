@@ -107,6 +107,21 @@ shared files and would have pushed **16 of its 39 items**, reporting only that
 it sent what it sent. So `scripts/kitbag-config.sh` now reads the scopes off
 the markers already on disk when nothing is declared, and says that it did.
 
+## Starting from nothing
+
+```bash
+kitbag backup
+```
+
+One command: which store, which scopes this machine takes, then what it found —
+one item at a time. It runs nothing that `discover`, `push` and `resolve` do not,
+so there is no second behaviour to keep in step with them.
+
+`scripts/kitbag-config.sh` is still what this repository's machines use. It
+knows things a general walkthrough cannot: which tracks are macOS-only, which
+app exports need quitting first, which installers arrive as `curl … | sh`. The
+walkthrough is for a machine that is not this repository's.
+
 ## What has been done, and what has not
 
 Four Macs run it: june-mba, june-mbp, jiun-mini and jiun-mbp. Each pushed its
@@ -177,7 +192,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.14.1
+cargo	kitbag	0.15.0
 npm	@bitwarden/cli	2026.8.0
 ```
 
