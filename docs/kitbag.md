@@ -192,7 +192,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.15.0
+cargo	kitbag	0.15.1
 npm	@bitwarden/cli	2026.8.0
 ```
 
