@@ -107,6 +107,29 @@ shared files and would have pushed **16 of its 39 items**, reporting only that
 it sent what it sent. So `scripts/kitbag-config.sh` now reads the scopes off
 the markers already on disk when nothing is declared, and says that it did.
 
+## Three questions, three commands
+
+```bash
+kitbag tracked      # what this machine was told to keep, as it was told
+kitbag status       # the items those come to, marked against the store
+kitbag catalogue    # the rules about where to look
+```
+
+`tracked` is worth running here. It found two paths this repository's config
+names and this machine does not have:
+
+```
+~/.docker/config.json   personal   nothing here
+~/.npmrc                personal   nothing here
+```
+
+Neither is a problem — they are listed for the machines that do have them —
+but "tracked and absent" is the quietest way to believe in a backup that does
+not exist, and until now nothing said it plainly.
+
+It is also the only place a filter's effect shows: `status` lists what came
+through, and silence about the rest reads as "there was nothing else".
+
 ## Adding something by hand
 
 ```bash
@@ -234,7 +257,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.18.0
+cargo	kitbag	0.18.1
 npm	@bitwarden/cli	2026.8.0
 ```
 
