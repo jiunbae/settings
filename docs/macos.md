@@ -52,7 +52,7 @@ used a `dev.jiun.capslock-to-control` LaunchAgent instead; the module removes it
 
 ### Text key bindings
 
-`configs/macos/DefaultKeyBinding.dict` is linked to
+`home/Library/KeyBindings/DefaultKeyBinding.dict` is linked to
 `~/Library/KeyBindings/DefaultKeyBinding.dict`. It makes the `₩` key (what the
 backtick key types under the Korean input source) insert `` ` `` in Cocoa text fields.
 Relaunch an app to pick it up. Terminal emulators and Electron apps generally do their
@@ -182,7 +182,7 @@ shell.
 
 | Font | Source | Used by |
 |---|---|---|
-| JetBrainsMonoHangul Nerd Font Mono | [Jhyub/JetBrainsMonoHangul](https://github.com/Jhyub/JetBrainsMonoHangul) release `20260222`, SHA-256 pinned | `configs/ghostty/config` (Ghostty and cmux) |
+| JetBrainsMonoHangul Nerd Font Mono | [Jhyub/JetBrainsMonoHangul](https://github.com/Jhyub/JetBrainsMonoHangul) release `20260222`, SHA-256 pinned | `home/Library/Application Support/com.mitchellh.ghostty/config` (Ghostty and cmux) |
 | JetBrainsMono Nerd Font | cask `font-jetbrains-mono-nerd-font` | editors |
 | MesloLGS Nerd Font | cask `font-meslo-lg-nerd-font` | Powerlevel10k |
 
@@ -193,7 +193,7 @@ the Hangul font, change `JBM_HANGUL_VERSION` and `JBM_HANGUL_SHA256` together.
 
 cmux embeds libghostty and searches the same config paths as Ghostty, including
 `~/Library/Application Support/com.mitchellh.ghostty/config`, which the `ghostty`
-module links to `configs/ghostty/config`. Font, colors, Option-as-Alt and keybinds are
+module links to `home/Library/Application Support/com.mitchellh.ghostty/config`. Font, colors, Option-as-Alt and keybinds are
 therefore shared with Ghostty; `cmux` runs that link step itself.
 
 `configs/cmux/config.ghostty` holds only cmux's theme block. It is copied into
@@ -205,7 +205,7 @@ the cask installs it.
 
 `~/.gitconfig` stays a real, machine-local file. The module puts
 `[include] path = <repo>/configs/git/gitconfig` at its top, so anything later in
-`~/.gitconfig` wins. `configs/git/ignore` is linked to `~/.config/git/ignore`, git's
+`~/.gitconfig` wins. `home/dot_config/git/ignore` is linked to `~/.config/git/ignore`, git's
 default global excludes file.
 With `--copy` (and in the release bundle, whose extraction directory is deleted after
 installing) the shared file is copied to `~/.config/git/shared.gitconfig` and that copy
@@ -224,7 +224,7 @@ What stays in `~/.gitconfig` and out of this repo:
 
 | Piece | How |
 |---|---|
-| nvm | Homebrew formula. `~/.nvm/nvm.sh` is a symlink into the keg, because `configs/.zshrc` loads nvm from `$NVM_DIR/nvm.sh`. |
+| nvm | Homebrew formula. `~/.nvm/nvm.sh` is a symlink into the keg, because `home/dot_zshrc` loads nvm from `$NVM_DIR/nvm.sh`. |
 | Node.js | `nvm install 24` and `nvm alias default 24`. |
 | Codex CLI | `npm install -g @openai/codex` under the default Node. |
 | Claude Code | Native installer (`curl -fsSL https://claude.ai/install.sh \| bash`), skipped when `claude` is already on PATH. It updates itself and does not depend on Node. |

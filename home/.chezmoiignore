@@ -1,0 +1,9 @@
+# Files chezmoi must never manage. Stage 2 adds component and platform
+# selection here; these two are here from the start because they are a safety
+# property, not a preference.
+#
+# The vault restores these (see docs/secrets.md). If chezmoi managed them it
+# would either overwrite the vault's copy on apply, or — worse — `chezmoi add`
+# would copy an employer's host list into this public repository.
+.ssh/config.d/20-company.conf
+.ssh/config.d/30-internal.conf

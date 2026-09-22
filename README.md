@@ -159,7 +159,7 @@ exec zsh                           # or: source ~/.zshrc
 eza --version && rg --version      # sanity check
 ```
 
-The aliases come from `configs/.zshrc`: `ls`/`ll`/`la`/`lt` → eza, `find` → fd,
+The aliases come from `home/dot_zshrc`: `ls`/`ll`/`la`/`lt` → eza, `find` → fd,
 `grep` → rg, `du` → dust, `ps` → procs, `top`/`htop` → btm, `vim`/`vi` → nvim, and
 `zs`/`za`/`zl` for zellij sessions. The `ta`/`tl`/`ts`/`to`/`tds` session shortcuts run
 rmux where it is installed and tmux otherwise, and are left undefined when neither is.
@@ -175,13 +175,16 @@ settings/
 ├── bootstrap.sh            # One-line installer (also published to gh-pages)
 ├── lib/                    # Shared: cli, core, platform
 ├── modules/                # One file per component
-├── configs/                # The dotfiles themselves
-│   ├── .zshrc .p10k.zsh .tmux.conf .rmux.conf
-│   ├── nvim/ zellij/ powershell/ windows-terminal/
-│   ├── claude/ codex/ cship/ hishtory/
-│   └── macos/ git/ ghostty/ cmux/
-├── bin/                    # Personal CLI scripts, linked onto PATH
-│   └── windows/            #   Windows-only; install.sh never sees this dir
+├── .chezmoiroot            # "home": chezmoi reads its source from home/ only
+├── home/                   # The dotfiles, named the way chezmoi places them
+│   ├── dot_zshrc dot_p10k.zsh dot_tmux.conf
+│   ├── dot_config/         #   nvim/ zellij/ git/ starship.toml cship.toml
+│   ├── dot_local/bin/      #   personal CLI scripts, placed on PATH
+│   ├── private_dot_ssh/    #   ssh config, mode 600
+│   └── Library/            #   Ghostty, key bindings (macOS)
+├── configs/                # What is not placed as-is: merges, seeds, Windows
+│   └── claude/ codex/ cmux/ hishtory/ git/ macos/ powershell/ windows-terminal/
+├── bin/windows/            # Windows-only; install.sh never sees this dir
 ├── scripts/                # Build and maintenance helpers
 ├── docs/                   # The guides linked below, plus the README GIF
 │   └── demo.tape           #   and the VHS tape and sandbox that record it
@@ -193,6 +196,7 @@ settings/
 
 | | |
 | :--- | :--- |
+| [chezmoi.md](docs/chezmoi.md) | The move to chezmoi: where it stands, how to edit, what must never happen |
 | [macos.md](docs/macos.md) | Keyboard, shortcuts, Finder, fonts, cmux and git on macOS |
 | [components.md](docs/components.md) | hishtory sync, Hammerspoon permissions, the managed Codex config |
 | [windows.md](docs/windows.md) | rmux, PowerShell, NeoVim, Windows Terminal, Nextcloud upload, secrets restore |

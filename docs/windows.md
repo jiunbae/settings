@@ -10,7 +10,7 @@ is installed automatically.
 | [Windows Terminal](#windows-terminal) | `configs/windows-terminal/settings.json` |
 | [rmux](#rmux) | `configs/.rmux.conf` — tmux-compatible, native on Windows |
 | [PowerShell](#powershell) | `configs/powershell/` — `.zshrc` ported, starship prompt |
-| [NeoVim](#neovim) | `configs/nvim/` — same config as everywhere else |
+| [NeoVim](#neovim) | `home/dot_config/nvim/` — same config as everywhere else |
 | [Nextcloud upload](#nextcloud-upload) | `bin/windows/cloud-upload.ps1` |
 | [Secrets](#secrets) | `bin/windows/Restore-Secrets.ps1` — SSH keys and private configs, from the vault |
 
@@ -33,7 +33,7 @@ Configuration for Windows Terminal is available in `configs/windows-terminal/set
 
 [rmux](https://github.com/Helvesec/rmux) is a tmux-compatible multiplexer that runs
 natively on Windows, where `install.sh` cannot go — `lib/platform.sh` only detects
-Linux and Darwin. `configs/.rmux.conf` is the subset of `configs/.tmux.conf` that
+Linux and Darwin. `configs/.rmux.conf` is the subset of `home/dot_tmux.conf` that
 works there: mouse, copy-mode, splits, `hjkl` navigation/resize and the Korean
 two-set prefix mappings. Plugins (TPM, catppuccin), the `uname`-based `if-shell`
 blocks and the muxa popups are omitted.
@@ -62,7 +62,7 @@ its default.
 `configs/powershell/profile.ps1` is `.zshrc` ported to PowerShell 7, for the same
 reason as `.rmux.conf`: `install.sh` cannot run on Windows. `configs/powershell/starship.toml`
 is the prompt that replaces Powerlevel10k, laid out to match the p10k config in
-`configs/.p10k.zsh`. Its right half is right-aligned with starship's `fill` module
+`home/dot_p10k.zsh`. Its right half is right-aligned with starship's `fill` module
 rather than `right_format`, which PowerShell never renders — see below.
 
 There is no zinit equivalent and none is needed — PSReadLine 2.4 ships prediction
@@ -135,12 +135,12 @@ buffer. If nothing answers within 400ms it falls back to the local clipboard, wh
 is what `Paste` would have done anyway.
 
 Terminals gate OSC 52 reads. Ghostty needs `clipboard-read = allow`, which
-`configs/ghostty/config` already sets. A terminal that refuses simply takes the
+`home/Library/Application Support/com.mitchellh.ghostty/config` already sets. A terminal that refuses simply takes the
 fallback path.
 
 ## NeoVim
 
-`configs/nvim/` needs no Windows variant — nothing in it is POSIX-specific. What it
+`home/dot_config/nvim/` needs no Windows variant — nothing in it is POSIX-specific. What it
 needs is to be *found*: NeoVim reads `%LOCALAPPDATA%\nvim` on Windows, so installing
 the binary alone (`winget install Neovim.Neovim`) leaves a stock editor with no
 plugins and no keymaps, which looks like a working install until you notice `vim` has
@@ -176,7 +176,7 @@ parsers.
 > `lazy-lock.json` is a tracked file reached through the junction, so lazy.nvim writes
 > into the repo. If lazy ever dies while writing it, the file is left truncated to
 > `{` — check `git status` in this repo after a plugin operation, and
-> `git restore configs/nvim/lazy-lock.json` if it looks short. A line-ending-only diff
+> `git restore home/dot_config/nvim/lazy-lock.json` if it looks short. A line-ending-only diff
 > is normal and expected: lazy writes LF, `core.autocrlf` checks out CRLF.
 
 ### Repairing an existing lazy.nvim install

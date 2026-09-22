@@ -19,7 +19,7 @@ fi
 #
 # cmux is built on libghostty and reads Ghostty's own config search path —
 # ~/Library/Application Support/com.mitchellh.ghostty/config — so the font,
-# colors, Option-as-Alt and keybinds all come from configs/ghostty/config via
+# colors, Option-as-Alt and keybinds all come from home/Library/Application Support/com.mitchellh.ghostty/config via
 # the ghostty module. The only cmux-specific file is its theme block, which
 # cmux rewrites itself when the theme is changed in its UI; it is seeded once
 # and never linked.

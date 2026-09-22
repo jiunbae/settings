@@ -196,7 +196,7 @@ brew install zellij
 curl -LsSf https://settings.jiun.dev | bash -s -- zsh zellij
 
 # Or manually copy
-cp -r configs/zellij ~/.config/zellij
+cp -r home/dot_config/zellij ~/.config/zellij
 ```
 
 ### 3. Create layout files for your projects

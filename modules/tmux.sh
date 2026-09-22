@@ -87,8 +87,8 @@ link_tmux_config() {
     local config_source
 
     # Check configs/ first, then root
-    if [[ -f "$root_dir/configs/.tmux.conf" ]]; then
-        config_source="$root_dir/configs/.tmux.conf"
+    if [[ -f "$root_dir/home/dot_tmux.conf" ]]; then
+        config_source="$root_dir/home/dot_tmux.conf"
     elif [[ -f "$root_dir/.tmux.conf" ]]; then
         config_source="$root_dir/.tmux.conf"
     else

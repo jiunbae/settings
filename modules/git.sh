@@ -84,7 +84,7 @@ install_git_ignore() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local source="$root_dir/configs/git/ignore"
+    local source="$root_dir/home/dot_config/git/ignore"
 
     if [[ "$LINK_MODE" == "copy" ]]; then
         if [[ -f "$GIT_IGNORE_TARGET" && ! -L "$GIT_IGNORE_TARGET" ]] && cmp -s "$source" "$GIT_IGNORE_TARGET"; then

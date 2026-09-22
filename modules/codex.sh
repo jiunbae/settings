@@ -15,7 +15,7 @@ SETTINGS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 install_codex_trust_sync() {
     print_section "Installing Codex workspace trust sync"
 
-    local source="$SETTINGS_ROOT/scripts/codex/workspace-trust-sync.sh"
+    local source="$SETTINGS_ROOT/home/dot_local/bin/executable_codex-workspace-trust-sync"
     local target="$HOME/.local/bin/codex-workspace-trust-sync"
 
     if [[ ! -f "$source" ]]; then

@@ -30,7 +30,12 @@ install_scripts() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local source_dir="$root_dir/bin"
+    # The scripts live in chezmoi's source tree now, named the way chezmoi
+    # wants them (`executable_mkln` is placed as `mkln`). This module still
+    # links them for anyone installing with ./install.sh; the prefix is
+    # stripped here so both paths put the same name on PATH.
+    local source_dir="$root_dir/home/dot_local/bin"
+    local old_source_dir="$root_dir/bin"
 
     if [[ ! -d "$source_dir" ]]; then
         log_warn "bin directory not found in settings"
@@ -51,7 +56,9 @@ install_scripts() {
     for target in "$SCRIPTS_BIN_DIR"/*; do
         [[ -L "$target" ]] || continue
         current_target=$(readlink "$target")
-        [[ "$current_target" == "$source_dir"/* ]] || continue
+        # And links into the old bin/: after the move every one of them
+        # dangles, and a dangling command on PATH fails in a confusing way.
+        [[ "$current_target" == "$source_dir"/* || "$current_target" == "$old_source_dir"/* ]] || continue
         [[ -e "$current_target" ]] && continue
 
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -67,6 +74,7 @@ install_scripts() {
         [[ -f "$source" ]] || continue
 
         name="$(basename "$source")"
+        name="${name#executable_}"
 
         # bin/ is a PATH directory, so anything without the execute bit would
         # link in as an unrunnable command. Say so rather than linking it.

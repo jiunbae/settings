@@ -59,7 +59,7 @@ link_zellij_config() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local config_source="$root_dir/configs/zellij"
+    local config_source="$root_dir/home/dot_config/zellij"
 
     if [[ ! -d "$config_source" ]]; then
         log_warn "zellij config directory not found"

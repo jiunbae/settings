@@ -54,7 +54,7 @@ install_hammerspoon_config() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local config_source="$root_dir/.hammerspoon/init.lua"
+    local config_source="$root_dir/home/dot_hammerspoon/init.lua"
 
     if [[ ! -f "$config_source" ]]; then
         log_error "Hammerspoon config not found at: $config_source"

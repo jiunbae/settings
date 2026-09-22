@@ -71,7 +71,10 @@ copy_ssh_config() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local ssh_source="$root_dir/.ssh"
+    # chezmoi's source tree names these for chezmoi: `private_config` is
+    # placed as `config` with mode 600. This module copies them for anyone
+    # installing with ./install.sh, so it maps the names back by hand.
+    local ssh_source="$root_dir/home/private_dot_ssh"
 
     if [[ ! -d "$ssh_source" ]]; then
         log_warn ".ssh directory not found in settings"
@@ -90,8 +93,8 @@ copy_ssh_config() {
     fi
 
     # Copy config file
-    if [[ -f "$ssh_source/config" ]]; then
-        backup_and_copy "$ssh_source/config" "$SSH_DIR/config"
+    if [[ -f "$ssh_source/private_config" ]]; then
+        backup_and_copy "$ssh_source/private_config" "$SSH_DIR/config"
         if [[ "$DRY_RUN" != "true" ]]; then
             chmod 600 "$SSH_DIR/config"
         fi
@@ -99,8 +102,19 @@ copy_ssh_config() {
     fi
 
     # Copy config.d directory
-    if [[ -d "$ssh_source/config.d" ]]; then
-        backup_and_copy "$ssh_source/config.d" "$SSH_DIR/config.d"
+    if [[ -d "$ssh_source/private_config.d" ]]; then
+        # File by file, not the directory: `cp -r` would carry the `private_`
+        # names across, and a config.d the vault also writes into must not be
+        # replaced wholesale — 20-company.conf lives there.
+        if [[ "$DRY_RUN" != "true" ]]; then
+            mkdir -p "$SSH_DIR/config.d"
+            local fragment
+            for fragment in "$ssh_source/private_config.d"/*; do
+                [[ -f "$fragment" ]] || continue
+                local name; name="$(basename "$fragment")"
+                cp "$fragment" "$SSH_DIR/config.d/${name#private_}"
+            done
+        fi
         if [[ "$DRY_RUN" != "true" ]]; then
             chmod 700 "$SSH_DIR/config.d"
             find "$SSH_DIR/config.d" -type f -exec chmod 600 {} \;
@@ -109,8 +123,8 @@ copy_ssh_config() {
     fi
 
     # Copy mux directory (for ControlMaster sockets)
-    if [[ -d "$ssh_source/mux" ]]; then
-        backup_and_copy "$ssh_source/mux" "$SSH_DIR/mux"
+    if [[ -d "$ssh_source/private_mux" ]]; then
+        mkdir -p "$SSH_DIR/mux"
         if [[ "$DRY_RUN" != "true" ]]; then
             chmod 700 "$SSH_DIR/mux"
         fi
