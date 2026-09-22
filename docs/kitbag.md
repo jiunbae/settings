@@ -107,6 +107,22 @@ shared files and would have pushed **16 of its 39 items**, reporting only that
 it sent what it sent. So `scripts/kitbag-config.sh` now reads the scopes off
 the markers already on disk when nothing is declared, and says that it did.
 
+## Adding something by hand
+
+```bash
+kitbag add ~/work/deploy --scope work
+```
+
+A directory becomes `~/work/deploy/*`, so files added later are covered. A
+directory holding both scripts and installed binaries gets `only = "scripts"`,
+and says how many it left out. A file carrying its own `# scope:` marker gets
+no second answer written beside it. Adding the same thing twice adds it once.
+
+`--everywhere` writes a catalogue rule as well, so every machine looks there —
+though on this repository's machines `scripts/kitbag-config.sh` is what builds
+the config, and anything added by hand is overwritten the next time it runs.
+Put it in the generator instead.
+
 ## Starting from nothing
 
 ```bash
@@ -218,7 +234,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.17.0
+cargo	kitbag	0.18.0
 npm	@bitwarden/cli	2026.8.0
 ```
 
