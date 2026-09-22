@@ -115,20 +115,15 @@ kitbag status       # the items those come to, marked against the store
 kitbag catalogue    # the rules about where to look
 ```
 
-`tracked` is worth running here. It found two paths this repository's config
-names and this machine does not have:
+`status` is the one to reach for. It names a tracked path with no file behind
+it — on june-mba, `~/.docker/config.json` and `~/.npmrc`, which is correct,
+since those entries exist for the machines that do have them — and it counts
+what a track's filter left out.
 
-```
-~/.docker/config.json   personal   nothing here
-~/.npmrc                personal   nothing here
-```
-
-Neither is a problem — they are listed for the machines that do have them —
-but "tracked and absent" is the quietest way to believe in a backup that does
-not exist, and until now nothing said it plainly.
-
-It is also the only place a filter's effect shows: `status` lists what came
-through, and silence about the rest reads as "there was nothing else".
+`tracked` is the config read back as written: one line per track rather than
+per file, which here is fourteen lines against the forty-odd items they come
+to. `catalogue` is the only genuinely separate question, being about what this
+machine does *not* keep yet.
 
 ## Adding something by hand
 
@@ -257,7 +252,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.18.1
+cargo	kitbag	0.18.2
 npm	@bitwarden/cli	2026.8.0
 ```
 
