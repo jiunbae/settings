@@ -122,6 +122,32 @@ knows things a general walkthrough cannot: which tracks are macOS-only, which
 app exports need quitting first, which installers arrive as `curl … | sh`. The
 walkthrough is for a machine that is not this repository's.
 
+## What this repository already keeps, and kitbag does not
+
+`bin/`, `scripts/`, `configs/` and `modules/` live in git here, and `~/.zshrc`,
+`~/.tmux.conf`, `~/.config/nvim` and nine scripts in `~/.local/bin` are
+symlinks into them. They are backed up — by this repository — and kitbag says
+so rather than keeping a second copy:
+
+```
+14 already kept by a git repository, so not proposed:
+  ~/.zshrc                               ~/workspace/settings
+  ~/.local/bin/mkln                      ~/workspace/settings
+Whatever keeps that repository keeps these.
+```
+
+It is asked of every file a pattern matches, not the first, so a `bin`
+directory holding one linked script and one loose one offers the loose one.
+
+The installed binaries in the same directory — `kitbag`, `starship`, `cship` —
+are never offered at all. A track can say `only = "scripts"`, which takes the
+files beginning `#!`: a store has no business keeping a binary built for one
+architecture, and `programs` already carries it as a name.
+
+So on these machines kitbag keeps the secrets and the program lists, and git
+keeps the rest. On a machine that is *not* this repository's, `kitbag backup`
+offers both halves — that is what v0.16.0 added.
+
 ## What has been done, and what has not
 
 Four Macs run it: june-mba, june-mbp, jiun-mini and jiun-mbp. Each pushed its
@@ -192,7 +218,7 @@ kitbag programs
 kitbag/programs 1
 brew	ripgrep
 cask	ghostty
-cargo	kitbag	0.15.1
+cargo	kitbag	0.16.0
 npm	@bitwarden/cli	2026.8.0
 ```
 
