@@ -2,12 +2,12 @@
 
 # Shell prompt for PowerShell — the Powerlevel10k replacement.
 #
-# NOT the same file as configs/cship/starship.toml: that one is consumed only
+# NOT the same file as home/dot_config/starship.toml: that one is consumed only
 # through cship's Starship passthrough for the Claude Code statusline and lives at
 # ~/.config/starship.toml. profile.ps1 pins STARSHIP_CONFIG to this file so the
 # two never collide.
 #
-# Layout mirrors the p10k lean config in configs/.p10k.zsh:
+# Layout mirrors the p10k lean config in home/dot_p10k.zsh:
 #   left  : os_icon · dir · vcs · newline · prompt_char
 #   right : status · command_execution_time · background_jobs · virtualenv ·
 #           nvm · rbenv · kubecontext · aws · context · time

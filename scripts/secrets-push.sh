@@ -221,7 +221,11 @@ collect() {
     # git tracks has a source of truth already; duplicating it into the vault
     # would create a second one that silently drifts.
     local tracked
-    tracked="$(cd "$ROOT" && git ls-files .ssh/config.d 2>/dev/null | while read -r t; do basename "$t"; done || true)"
+    # The fragments live in chezmoi's source tree now, named for chezmoi:
+    # private_00-defaults.conf is placed as 00-defaults.conf. The prefix comes
+    # off before comparing — asking git for the old path returned nothing, and
+    # "nothing is tracked" sends every fragment to the vault as a second copy.
+    tracked="$(cd "$ROOT" && git ls-files home/private_dot_ssh/private_config.d 2>/dev/null | while read -r t; do t="$(basename "$t")"; echo "${t#private_}"; done || true)"
     for f in "$HOME"/.ssh/config.d/*.conf; do
         [[ -f "$f" ]] || continue
         base="$(basename "$f")"

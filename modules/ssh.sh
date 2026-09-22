@@ -103,18 +103,25 @@ copy_ssh_config() {
 
     # Copy config.d directory
     if [[ -d "$ssh_source/private_config.d" ]]; then
-        # File by file, not the directory: `cp -r` would carry the `private_`
-        # names across, and a config.d the vault also writes into must not be
-        # replaced wholesale — 20-company.conf lives there.
-        if [[ "$DRY_RUN" != "true" ]]; then
-            mkdir -p "$SSH_DIR/config.d"
-            local fragment
-            for fragment in "$ssh_source/private_config.d"/*; do
-                [[ -f "$fragment" ]] || continue
-                local name; name="$(basename "$fragment")"
-                cp "$fragment" "$SSH_DIR/config.d/${name#private_}"
-            done
-        fi
+        # File by file, never the directory. Copying the directory used to
+        # move the whole existing config.d aside first — and the vault restores
+        # 20-company.conf and 30-internal.conf into it, so a re-run swept them
+        # into a backup directory and out of ssh's sight. One file at a time
+        # leaves what this repo does not own exactly where it is.
+        #
+        # An identical file is left alone rather than backed up and rewritten,
+        # or every re-run adds another .backup.<ts> beside it. A file that
+        # differs is backed up first — somebody may have edited it by hand.
+        local fragment name target
+        for fragment in "$ssh_source/private_config.d"/*; do
+            [[ -f "$fragment" ]] || continue
+            name="$(basename "$fragment")"
+            target="$SSH_DIR/config.d/${name#private_}"
+            if [[ -f "$target" ]] && cmp -s "$fragment" "$target"; then
+                continue
+            fi
+            backup_and_copy "$fragment" "$target"
+        done
         if [[ "$DRY_RUN" != "true" ]]; then
             chmod 700 "$SSH_DIR/config.d"
             find "$SSH_DIR/config.d" -type f -exec chmod 600 {} \;
@@ -124,8 +131,8 @@ copy_ssh_config() {
 
     # Copy mux directory (for ControlMaster sockets)
     if [[ -d "$ssh_source/private_mux" ]]; then
-        mkdir -p "$SSH_DIR/mux"
         if [[ "$DRY_RUN" != "true" ]]; then
+            mkdir -p "$SSH_DIR/mux"
             chmod 700 "$SSH_DIR/mux"
         fi
         track_installed "SSH mux directory"
