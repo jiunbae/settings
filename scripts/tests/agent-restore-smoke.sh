@@ -166,7 +166,7 @@ test_trust_sync_legacy_tables() {
     > "$test_home/.codex/config.toml"
 
   env HOME="$test_home" CODEX_WORKSPACE_ROOT="$workspace" PATH=/usr/bin:/bin \
-    "$REPO_ROOT/scripts/codex/workspace-trust-sync.sh"
+    "$REPO_ROOT/home/dot_local/bin/executable_codex-workspace-trust-sync"
 
   python3 - "$test_home/.codex/config.toml" "$workspace" "$outside" <<'PY'
 import pathlib

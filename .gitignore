@@ -16,9 +16,13 @@ credentials.json
 service-account*.json
 nas-renew-ssl.sh
 
-# SSH config - sensitive host configurations
-.ssh/config.d/20-company.conf
-.ssh/config.d/30-internal.conf
+# SSH config - sensitive host configurations. These come from the vault, never
+# from here. The glob covers the name `chezmoi add` would give them
+# (private_20-company.conf, because the file is mode 600) as well as the plain
+# one: `chezmoi add ~/.ssh/config.d/20-company.conf` is one command away from
+# putting an employer's hosts in a public repository.
+home/private_dot_ssh/private_config.d/*20-company.conf
+home/private_dot_ssh/private_config.d/*30-internal.conf
 
 # VS Code ignores
 .vscode/
@@ -38,7 +42,9 @@ MANIFEST
 
 # C/C++ ignores (dependency files only)
 *.d
-!.ssh/config.d/
+# config.d ends in .d too. Without this exception, a fragment added there is
+# ignored without a word — `git add` would have to be forced to see it.
+!home/private_dot_ssh/private_config.d/
 *.slo
 *.lo
 *.o

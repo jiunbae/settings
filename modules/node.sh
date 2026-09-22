@@ -16,7 +16,7 @@ fi
 # ==============================================================================
 # Configuration
 #
-# nvm comes from Homebrew, but configs/.zshrc looks for $HOME/.nvm/nvm.sh, so
+# nvm comes from Homebrew, but the .zshrc (home/dot_zshrc) looks for $HOME/.nvm/nvm.sh, so
 # that path is a symlink into the Homebrew keg (the layout the old machine
 # used). The default alias is a bare major version: .zshrc resolves it with a
 # v<major>* glob, and `nvm install <major>` always picks that line's latest.

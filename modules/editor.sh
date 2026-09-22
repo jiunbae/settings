@@ -120,7 +120,7 @@ install_lazyvim() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local config_source="$root_dir/configs/nvim"
+    local config_source="$root_dir/home/dot_config/nvim"
 
     # Check if our config exists
     if [[ ! -d "$config_source" ]]; then

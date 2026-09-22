@@ -40,8 +40,13 @@ embed_file() {
     local dir_path
     dir_path=$(dirname "$rel_path")
 
+    # The path is written into generated shell inside single quotes
+    # (`cat > '$rel_path'`), so what must never appear is what ends that
+    # quoting: a quote or a newline. A space is inert there, and macOS puts one
+    # in the path chezmoi needs for Ghostty ("Application Support"), so it is
+    # the one character added. Everything else stays refused.
     case "$rel_path" in
-        *[!A-Za-z0-9_./-]*)
+        *[!A-Za-z0-9_./\ -]*)
             printf 'bundle: unsafe embedded path: %s\n' "$rel_path" >&2
             return 1
             ;;
@@ -91,11 +96,17 @@ for file in "$SCRIPT_DIR"/modules/*.sh; do
     embed_file "$file"
 done
 
-# Embed the complete config tree. Keeping an allowlist here caused newly added
-# components to ship their module code without the files that code consumes.
-while IFS= read -r file; do
-    embed_file "$file"
-done < <(find "$SCRIPT_DIR/configs" -type f | LC_ALL=C sort)
+# Embed the complete config trees. Keeping an allowlist here caused newly added
+# components to ship their module code without the files that code consumes —
+# which is exactly what happened when the dotfiles moved into home/ for chezmoi
+# and this loop still read configs/ alone: the bundle shipped modules that link
+# files it did not contain. Both trees, then, and anything added under either.
+for tree in "$SCRIPT_DIR/configs" "$SCRIPT_DIR/home"; do
+    [[ -d "$tree" ]] || continue
+    while IFS= read -r file; do
+        embed_file "$file"
+    done < <(find "$tree" -type f | LC_ALL=C sort)
+done
 
 # Scripts that the `scripts` component links onto PATH.
 if [[ -d "$SCRIPT_DIR/bin" ]]; then

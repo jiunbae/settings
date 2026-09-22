@@ -221,8 +221,8 @@ install_cship_config() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local cship_src="$root_dir/configs/cship/cship.toml"
-    local starship_src="$root_dir/configs/cship/starship.toml"
+    local cship_src="$root_dir/home/dot_config/cship.toml"
+    local starship_src="$root_dir/home/dot_config/starship.toml"
 
     for src in "$cship_src" "$starship_src"; do
         if [[ ! -f "$src" ]]; then

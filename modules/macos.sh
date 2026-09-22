@@ -241,7 +241,7 @@ install_macos_keybindings() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local source="$root_dir/configs/macos/DefaultKeyBinding.dict"
+    local source="$root_dir/home/Library/KeyBindings/DefaultKeyBinding.dict"
     local target="$MACOS_KEYBINDINGS_DIR/DefaultKeyBinding.dict"
 
     # Copy mode compares contents; otherwise every re-run would back up and

@@ -21,7 +21,7 @@ fi
 # Hangul-merged JetBrains Mono, which has no cask and is pinned to a release
 # with a checksum instead.
 #
-#   JetBrainsMonoHangul Nerd Font Mono  configs/ghostty/config (Ghostty and cmux)
+#   JetBrainsMonoHangul Nerd Font Mono  home/Library/Application Support/com.mitchellh.ghostty/config (Ghostty and cmux)
 #   JetBrainsMono Nerd Font             general coding font
 #   MesloLGS Nerd Font                  Powerlevel10k's recommended font
 # ==============================================================================

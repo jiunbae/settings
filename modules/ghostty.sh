@@ -33,7 +33,7 @@ install_ghostty_config() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local config_source="$root_dir/configs/ghostty/config"
+    local config_source="$root_dir/home/Library/Application Support/com.mitchellh.ghostty/config"
 
     if [[ ! -f "$config_source" ]]; then
         log_error "Ghostty config not found at: $config_source"

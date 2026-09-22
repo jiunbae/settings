@@ -1,5 +1,5 @@
 # Jiun Bae
-# PowerShell profile — ported from configs/.zshrc
+# PowerShell profile — ported from home/dot_zshrc
 # github.com/jiunbae/settings.git
 #
 # Loaded by $PROFILE, which should contain nothing but a stub pointing here —
@@ -551,7 +551,7 @@ if (Test-Tool rmux) {
     function rx { rmux kill-session -t @args }
 
     # The t* names from the oh-my-zsh tmux plugin, backed by rmux. This mirrors the
-    # block configs/.zshrc sets up in the same spirit, so the same shortcuts work on
+    # block home/dot_zshrc sets up in the same spirit, so the same shortcuts work on
     # every machine — including `ts` meaning `new-session -s` and `to` meaning
     # `new-session -A -s`, which is the plugin's split and not an obvious one.
     #

@@ -79,11 +79,11 @@ link_zsh_configs() {
 
     local root_dir
     root_dir=$(get_root_dir)
-    local configs_dir="$root_dir/configs"
+    local configs_dir="$root_dir/home"
 
     # Link .zshrc
-    if [[ -f "$configs_dir/.zshrc" ]]; then
-        backup_and_link "$configs_dir/.zshrc" "$HOME/.zshrc"
+    if [[ -f "$configs_dir/dot_zshrc" ]]; then
+        backup_and_link "$configs_dir/dot_zshrc" "$HOME/.zshrc"
     elif [[ -f "$root_dir/.zshrc" ]]; then
         backup_and_link "$root_dir/.zshrc" "$HOME/.zshrc"
     else
@@ -91,8 +91,8 @@ link_zsh_configs() {
     fi
 
     # Link .p10k.zsh
-    if [[ -f "$configs_dir/.p10k.zsh" ]]; then
-        backup_and_link "$configs_dir/.p10k.zsh" "$HOME/.p10k.zsh"
+    if [[ -f "$configs_dir/dot_p10k.zsh" ]]; then
+        backup_and_link "$configs_dir/dot_p10k.zsh" "$HOME/.p10k.zsh"
     elif [[ -f "$root_dir/.p10k.zsh" ]]; then
         backup_and_link "$root_dir/.p10k.zsh" "$HOME/.p10k.zsh"
     else
