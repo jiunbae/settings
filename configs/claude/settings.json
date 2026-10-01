@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/workspace/agents/scripts/agents-index.sh digest",
+            "command": "d=$(dirname \"$(readlink -f \"$HOME/workspace/agents\")\"); s=\"$HOME/workspace/agents/scripts/agents-index.sh\"; if agt gate --help >/dev/null 2>&1; then agt gate \"$d\" -- bash \"$s\" digest; else bash \"$s\" digest; fi",
             "statusMessage": "Loading ~/.agents capabilities..."
           }
         ]
