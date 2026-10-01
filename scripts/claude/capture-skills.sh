@@ -26,8 +26,10 @@ DRY_RUN=false
 
 # Repos the farm may point into. Parallel indexed arrays keep this script
 # compatible with the Bash 3.2 that still ships with macOS.
-SKILL_REPO_TOKENS=(agent-skills agents)
-SKILL_REPO_ROOTS=("$HOME/personal/agent-skills" "$HOME/workspace/agents")
+# agent-skills lives under ~/workspace on newer machines and ~/personal on
+# older ones (see AGENT_SKILLS_REPO in modules/claude.sh); both map to one token.
+SKILL_REPO_TOKENS=(agent-skills agent-skills agents)
+SKILL_REPO_ROOTS=("$HOME/workspace/agent-skills" "$HOME/personal/agent-skills" "$HOME/workspace/agents")
 
 if [[ ! -d "$SKILLS_DIR" ]]; then
     printf '%s\n' "claude: no skills dir at $SKILLS_DIR" >&2

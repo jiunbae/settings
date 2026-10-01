@@ -172,6 +172,14 @@ install_claude_hooks() {
     done
 }
 
+# True when layers.toml exists AND the installed agt can apply it. Both the
+# skill farm and the skill index hand over to agt only then, so a machine with
+# an older agt keeps its farm and the index into it.
+_agt_layers_active() {
+    [[ -f "$AGT_LAYERS_FILE" ]] && command -v agt >/dev/null 2>&1 \
+        && agt apply --help >/dev/null 2>&1
+}
+
 install_claude_skill_index() {
     print_section "Setting up Claude Code skill index"
 
@@ -182,10 +190,14 @@ install_claude_skill_index() {
     # deep. The category trees below it are invisible to the harness, so this
     # index is the entry point that makes them reachable. `agt apply` installs
     # skills flat, so with layers.toml there are no category trees to index.
-    if [[ -f "$AGT_LAYERS_FILE" ]]; then
+    if _agt_layers_active; then
         if [[ -L "$CLAUDE_SKILLS_DIR/skill-index" ]]; then
-            rm "$CLAUDE_SKILLS_DIR/skill-index"
-            log_info "Removed skill-index link (agt apply installs skills flat)"
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_info "[DRY-RUN] Would remove skill-index link (agt apply installs skills flat)"
+            else
+                rm "$CLAUDE_SKILLS_DIR/skill-index"
+                log_info "Removed skill-index link (agt apply installs skills flat)"
+            fi
         fi
         track_skipped "Claude skill-index (agt apply in use)"
         return 0
@@ -197,15 +209,17 @@ install_claude_skill_index() {
 }
 
 install_claude_skills() {
-    if [[ -f "$AGT_LAYERS_FILE" ]]; then
+    if _agt_layers_active; then
         print_section "Applying skill layers (agt apply)"
-        if ! command -v agt >/dev/null 2>&1 || ! agt apply --help >/dev/null 2>&1; then
-            log_warn "$AGT_LAYERS_FILE exists but this agt has no 'apply'; update agt"
-            track_skipped "Claude skills (agt apply unavailable)"
-            return 0
+        if [[ "$DRY_RUN" == "true" ]]; then
+            agt --claude-dir "$CLAUDE_HOME" apply --dry-run
+        else
+            agt --claude-dir "$CLAUDE_HOME" apply
         fi
-        agt --claude-dir "$CLAUDE_HOME" apply
         return
+    fi
+    if [[ -f "$AGT_LAYERS_FILE" ]]; then
+        log_warn "$AGT_LAYERS_FILE exists but this agt has no 'apply'; restoring the farm until agt is updated"
     fi
 
     print_section "Restoring Claude Code skill farm"
