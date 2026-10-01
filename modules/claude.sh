@@ -180,7 +180,17 @@ install_claude_skill_index() {
 
     # Claude Code only auto-discovers ~/.claude/skills/<name>/SKILL.md, one level
     # deep. The category trees below it are invisible to the harness, so this
-    # index is the entry point that makes them reachable.
+    # index is the entry point that makes them reachable. `agt apply` installs
+    # skills flat, so with layers.toml there are no category trees to index.
+    if [[ -f "$AGT_LAYERS_FILE" ]]; then
+        if [[ -L "$CLAUDE_SKILLS_DIR/skill-index" ]]; then
+            rm "$CLAUDE_SKILLS_DIR/skill-index"
+            log_info "Removed skill-index link (agt apply installs skills flat)"
+        fi
+        track_skipped "Claude skill-index (agt apply in use)"
+        return 0
+    fi
+
     mkdir -p "$CLAUDE_SKILLS_DIR"
     _claude_link "$root_dir/configs/claude/skill-index" \
                  "$CLAUDE_SKILLS_DIR/skill-index" "Claude skill-index"
