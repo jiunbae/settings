@@ -202,13 +202,29 @@ backup_and_link() {
     local source=$1
     local target=$2
 
+    # A link into this repository whose file has moved (configs/ -> home/ in the
+    # chezmoi move) is stale, not user data, so it is replaced without --force.
+    local stale_repo_link=false
+    if [[ -L "$target" && ! -e "$target" && "$(readlink "$target")" == "$(get_root_dir)/"* ]]; then
+        stale_repo_link=true
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
-        if [[ "$LINK_MODE" == "copy" ]]; then
+        if [[ "$stale_repo_link" == "true" ]]; then
+            log_info "[DRY-RUN] Would replace stale link: $target -> $source"
+        elif [[ (-L "$target" || -e "$target") && "$FORCE" != "true" ]]; then
+            log_info "[DRY-RUN] Would skip, target exists: $target (use --force to overwrite)"
+        elif [[ "$LINK_MODE" == "copy" ]]; then
             log_info "[DRY-RUN] Would copy: $source -> $target"
         else
             log_info "[DRY-RUN] Would link: $source -> $target"
         fi
         return 0
+    fi
+
+    if [[ "$stale_repo_link" == "true" ]]; then
+        log_info "Replacing stale link: $target"
+        rm "$target"
     fi
 
     # Create backup if target exists and is not a symlink
