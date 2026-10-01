@@ -212,8 +212,10 @@ backup_and_link() {
     if [[ "$DRY_RUN" == "true" ]]; then
         if [[ "$stale_repo_link" == "true" ]]; then
             log_info "[DRY-RUN] Would replace stale link: $target -> $source"
-        elif [[ (-L "$target" || -e "$target") && "$FORCE" != "true" ]]; then
-            log_info "[DRY-RUN] Would skip, target exists: $target (use --force to overwrite)"
+        elif [[ -L "$target" && "$FORCE" != "true" ]]; then
+            log_info "[DRY-RUN] Would skip, link exists: $target (use --force to overwrite)"
+        elif [[ -e "$target" && ! -L "$target" ]]; then
+            log_info "[DRY-RUN] Would back up $target and link: $source"
         elif [[ "$LINK_MODE" == "copy" ]]; then
             log_info "[DRY-RUN] Would copy: $source -> $target"
         else
