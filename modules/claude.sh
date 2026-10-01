@@ -35,7 +35,17 @@ fi
 readonly CLAUDE_HOME="$HOME/.claude"
 readonly CLAUDE_HOOKS_DIR="$CLAUDE_HOME/hooks"
 readonly CLAUDE_SKILLS_DIR="$CLAUDE_HOME/skills"
-readonly AGENT_SKILLS_REPO="$HOME/personal/agent-skills"
+# The working checkout of jiunbae/agent-skills. Older machines still have it
+# under ~/personal; prefer ~/workspace when both exist.
+if [[ -d "$HOME/workspace/agent-skills" ]]; then
+    readonly AGENT_SKILLS_REPO="$HOME/workspace/agent-skills"
+else
+    readonly AGENT_SKILLS_REPO="$HOME/personal/agent-skills"
+fi
+
+# Machine-local layer config for `agt apply` (sources, stacks, targets). When
+# present, it owns the skill directories and the manifest farm is skipped.
+readonly AGT_LAYERS_FILE="${AGT_LAYERS:-$HOME/.config/agt/layers.toml}"
 
 # Hook scripts live in the agent-skills repo, not here — they are shared with
 # Codex and evolve with the oh-my-prompt tooling.
@@ -177,6 +187,17 @@ install_claude_skill_index() {
 }
 
 install_claude_skills() {
+    if [[ -f "$AGT_LAYERS_FILE" ]]; then
+        print_section "Applying skill layers (agt apply)"
+        if ! command -v agt >/dev/null 2>&1 || ! agt apply --help >/dev/null 2>&1; then
+            log_warn "$AGT_LAYERS_FILE exists but this agt has no 'apply'; update agt"
+            track_skipped "Claude skills (agt apply unavailable)"
+            return 0
+        fi
+        agt --claude-dir "$CLAUDE_HOME" apply
+        return
+    fi
+
     print_section "Restoring Claude Code skill farm"
 
     local root_dir
