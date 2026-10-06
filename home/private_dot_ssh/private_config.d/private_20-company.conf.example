@@ -17,6 +17,8 @@ Host github.com-company
 #   HostName dev.company.com
 #   User yourname
 #   Port 22
+#   # Forward the agent only to a host you trust as much as this laptop:
+#   # anyone with root there can use your keys while you are connected.
 #   ForwardAgent yes
 
 # Example: Production servers
