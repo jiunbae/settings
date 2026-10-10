@@ -1,6 +1,6 @@
 ---
 name: linear-issue-get-identifier-broken
-description: "linear-issue.sh get <TEAM>-123 by identifier broke on 2026-08-05 (issueSearch deprecated) but is fixed — use the helper; raw GraphQL only if it regresses."
+description: "linear-issue.sh get <TEAM>-123 works; if an identifier lookup ever misses, don't conclude the issue is absent — fall back to raw GraphQL."
 metadata:
   node_type: memory
   type: reference
