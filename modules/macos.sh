@@ -20,8 +20,8 @@ fi
 # _macos_default, which reads first and only writes on a difference, so a
 # re-run reports "already set" instead of touching the preference store.
 #
-# Deliberately NOT managed: screenshot location, language/region, Siri,
-# privacy (TCC) grants — see docs/macos.md.
+# Deliberately NOT managed: language/region, Siri, privacy (TCC) grants —
+# see docs/macos.md.
 # ==============================================================================
 readonly MACOS_KEYBINDINGS_DIR="$HOME/Library/KeyBindings"
 readonly MACOS_LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
@@ -83,6 +83,10 @@ readonly MACOS_TRACKPAD_DEFAULTS=(
     "com.apple.driver.AppleBluetoothMultitouch.trackpad|TrackpadThreeFingerVertSwipeGesture|int|0"
     "host:-g|com.apple.mouse.tapBehavior|int|1"
 )
+
+# Screenshots go into OneDrive. Only set once that folder exists (OneDrive
+# signed in and synced); until then macOS keeps its default (Desktop).
+readonly MACOS_SCREENSHOT_DIR="$HOME/Library/CloudStorage/OneDrive-Personal/사진/screenshots"
 
 # pmset values: never idle-sleep on AC, sleep after 3 minutes on battery.
 readonly MACOS_PMSET_AC_SLEEP=0
@@ -387,6 +391,24 @@ install_macos_menubar() {
     fi
 }
 
+install_macos_screenshots() {
+    print_section "Screenshot location"
+
+    if [[ ! -d "$MACOS_SCREENSHOT_DIR" ]]; then
+        log_warn "Screenshot folder not found (OneDrive not synced yet?): $MACOS_SCREENSHOT_DIR"
+        track_skipped "Screenshot location (no OneDrive folder)"
+        return 0
+    fi
+
+    if _macos_default com.apple.screencapture location string "$MACOS_SCREENSHOT_DIR"; then
+        _MACOS_UI_CHANGED=true
+        track_installed "Screenshot location"
+    else
+        log_info "Screenshot location already set"
+        track_skipped "Screenshot location"
+    fi
+}
+
 install_macos_power() {
     print_section "Power: sleep on AC and battery"
 
@@ -471,6 +493,7 @@ install_macos() {
     install_macos_dock
     install_macos_trackpad
     install_macos_menubar
+    install_macos_screenshots
     install_macos_power
     _macos_refresh
 

@@ -4,7 +4,7 @@ Six macOS-only components. On Linux and WSL each one logs a skip and returns.
 
 | Component | What it does |
 |---|---|
-| `macos` | Keyboard, system shortcuts, Caps Lock → Control, appearance, Finder, Dock, trackpad, menu bar, sleep |
+| `macos` | Keyboard, system shortcuts, Caps Lock → Control, appearance, Finder, Dock, trackpad, menu bar, screenshot location, sleep |
 | `fonts` | Nerd Fonts and the Hangul-merged JetBrains Mono used by the terminal config |
 | `hammerspoon` | Hammerspoon.app + `init.lua` — see [components.md](components.md#hammerspoon) |
 | `cmux` | cmux.app, the Ghostty config it reads, and its theme |
@@ -151,6 +151,14 @@ Control Center keeps a per-module int under `-currentHost com.apple.controlcente
 `NSStatusItem VisibleCC <item>` bool when an item is toggled, and that bool wins, so Focus
 and Spotlight are additionally set to `false` there.
 
+### Screenshot location
+
+`com.apple.screencapture location` is set to
+`~/Library/CloudStorage/OneDrive-Personal/사진/screenshots`, so screenshots sync through
+OneDrive. The folder is not created: it is set only once OneDrive is signed in and has
+synced that folder; until then the step logs a warning and macOS keeps saving to the
+Desktop. Re-run `./install.sh macos` after OneDrive finishes syncing.
+
 ### Power
 
 | Power | `pmset` |
@@ -243,7 +251,6 @@ globally under the old version is not carried over.
 | | Why |
 |---|---|
 | Privacy grants (Accessibility, Input Monitoring, Screen Recording) | TCC cannot be scripted without MDM. Grant Hammerspoon, cmux and the rest in System Settings › Privacy & Security. |
-| Screenshot location | Points into a cloud-synced folder that may not exist yet. |
 | Language, region, Siri | Per-machine choice. |
 | Dock layout, login items | Depend on which apps are installed. |
 | `~/.envs`, `~/.gnupg`, `~/.aws`, `~/.kube` | Secrets. Copy from the old machine over SSH, never into git. |
