@@ -79,34 +79,16 @@ function Test-RmuxSession {
   return ($LASTEXITCODE -eq 0)
 }
 
-# 복원하는 동안 서버를 살려두는 임시 세션. 스냅샷 세션과 겹치지 않을 이름
-$BootPlaceholder = '__rmux_boot'
-
-# muxa 최신 스냅샷을 빈 서버에 복원합니다. 스냅샷이 이 라벨의 서버(같은 SID /
-# 무결성 수준 / 라벨 해시)에서 찍힌 것일 때만 합니다 — 파이프 끝의 랜덤 부분은
-# 서버를 띄울 때마다 바뀌고, muxa 가 새 파이프를 알아서 따라갑니다.
+# 빈 서버에 muxa 최신 스냅샷을 복원합니다. `muxa restore --boot` 가 서버를 띄우고,
+# 스냅샷이 이 서버(같은 SID / 무결성 수준)에서 찍힌 것인지 확인하며, 세션이
+# 하나라도 있으면 아무것도 하지 않습니다. muxad 는 기본 라벨 서버만 스냅샷하므로
+# 다른 라벨에는 복원할 것이 없습니다.
 function Invoke-BootRestore {
+  if ($Label -ne 'default') { Log "라벨 $Label 은 muxa 스냅샷 대상이 아니라 복원하지 않음"; return }
   $muxa = (Get-Command muxa.exe -ErrorAction SilentlyContinue).Source
   if (-not $muxa) { $muxa = Join-Path $env:USERPROFILE ".cargo\bin\muxa.exe" }
   if (-not (Test-Path $muxa)) { Log "muxa.exe 가 없어 복원하지 않음"; return }
-
-  $plan = (& $muxa restore --json 2>$null) -join "`n"
-  if ($LASTEXITCODE -ne 0 -or -not $plan) { Log "복원할 스냅샷이 없음"; return }
-  $plan = $plan | ConvertFrom-Json
-
-  $line = (& $rmux -L $Label diagnose --human 2>$null | Select-String 'socket_path' | Select-Object -First 1)
-  if (-not ("$line" -match 'socket_path:\s*(\S*-g-[0-9a-f]+)-[0-9a-f]+')) { Log "rmux diagnose 를 읽지 못함"; return }
-  $prefix = $Matches[1]
-  if (-not "$($plan.socket)".StartsWith("$prefix-")) {
-    Log "최신 스냅샷 $($plan.id) 은 다른 서버의 것이라 복원하지 않음 ($($plan.socket))"
-    return
-  }
-
-  # muxa 는 살아 있는 서버의 파이프를 찾아 복원하므로 먼저 서버를 띄워 둡니다
-  & $rmux -L $Label new-session -d -s $BootPlaceholder -c $WorkDir
-  Start-Sleep -Milliseconds 500
-  Log "스냅샷 $($plan.id) 복원 시작: $($plan.summary.sessions) 세션, $($plan.summary.panes) pane, 에이전트 $($plan.summary.agents)"
-  & $muxa restore $plan.dir --run *>&1 | ForEach-Object { Log "  $_" }
+  & $muxa restore --boot *>&1 | ForEach-Object { Log "  $_" }
   Log "복원 종료 (코드 $LASTEXITCODE)"
 }
 
@@ -131,11 +113,7 @@ if ($Ensure) {
   if (-not (Test-RmuxSession)) {
     & $rmux -L $Label new-session -d -s $Session -c $WorkDir
   }
-  $code = $LASTEXITCODE
-  # 복원용으로 띄운 자리표시 세션은 $Session 이 생긴 뒤에 치워야 서버가 안 꺼집니다
-  & $rmux -L $Label has-session -t $BootPlaceholder *>$null
-  if ($LASTEXITCODE -eq 0) { & $rmux -L $Label kill-session -t $BootPlaceholder *>$null }
-  exit $code
+  exit $LASTEXITCODE
 }
 
 # ---- 헬퍼 -------------------------------------------------------------
