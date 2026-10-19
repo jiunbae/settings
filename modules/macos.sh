@@ -185,18 +185,12 @@ install_macos_keyboard() {
     fi
 }
 
-install_macos_shortcuts() {
-    print_section "System keyboard shortcuts"
-
-    local root_dir
-    root_dir=$(get_root_dir)
-    local table="$root_dir/configs/macos/symbolichotkeys.tsv"
-
-    # plistlib compares the live dictionary entry by entry; only entries that
-    # differ are written, each as a single -dict-add so every other shortcut
-    # on the machine is left alone.
-    local changes
-    changes=$(python3 - "$table" "$MACOS_BARSHELF_AUTOMATION" <<'PY'
+# Prints "<id>\t<dict xml>" for each shortcut in the table ($1) that differs
+# from the live com.apple.symbolichotkeys. A function of its own, not inline in
+# $( ): /bin/bash 3.2 scans a heredoc inside command substitution for quotes,
+# and an apostrophe in the Python stops macos.sh from loading at all.
+_macos_shortcut_changes() {
+    python3 - "$1" "$2" <<'PY'
 import json, plistlib, re, subprocess, sys
 
 # ⌘Space "Select next source" (61) commits only on ⌘ release. When BarShelf's
@@ -245,7 +239,20 @@ for line in open(sys.argv[1], encoding="utf-8"):
     if current.get(hid) != want:
         print("%s\t%s" % (hid, xml))
 PY
-    ) || { log_error "Could not read com.apple.symbolichotkeys"; return 1; }
+}
+
+install_macos_shortcuts() {
+    print_section "System keyboard shortcuts"
+
+    local root_dir
+    root_dir=$(get_root_dir)
+    local table="$root_dir/configs/macos/symbolichotkeys.tsv"
+
+    # plistlib compares the live dictionary entry by entry; only entries that
+    # differ are written, each as a single -dict-add so every other shortcut
+    # on the machine is left alone.
+    local changes
+    changes=$(_macos_shortcut_changes "$table" "$MACOS_BARSHELF_AUTOMATION") || { log_error "Could not read com.apple.symbolichotkeys"; return 1; }
 
     if [[ -z "$changes" ]]; then
         log_info "System shortcuts already match $table"
