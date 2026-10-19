@@ -200,9 +200,12 @@ install_macos_shortcuts() {
 import json, plistlib, re, subprocess, sys
 
 # ⌘Space "Select next source" (61) commits only on ⌘ release. When BarShelf's
-# automation binds ⌘Space to selectNextInputSource (switches on key-down), the
-# system shortcut is turned off so the two do not both toggle. Machines without
-# that binding keep the table's value.
+# automation binds ⌘Space to selectNextInputSource, 61 moves to F18 alone:
+# BarShelf (>= 0.7.1) relays ⌘Space as an F18 press, and a modifier-less system
+# shortcut commits on key-down. The switch stays the system's own, so the
+# focused app's input context follows (a TIS call from a background app can
+# leave it behind). F-key shortcuts carry the fn bit, as macOS itself writes
+# them. Machines without the binding keep the table's value.
 def barshelf_owns_cmd_space(path):
     try:
         script = json.load(open(path, encoding="utf-8"))
@@ -229,7 +232,7 @@ for line in open(sys.argv[1], encoding="utf-8"):
         continue
     hid, enabled, params = line.rstrip("\n").split("\t")[:3]
     if hid == "61" and handover:
-        enabled = "0"
+        enabled, params = "1", "65535,79,8388608"  # F18 (kVK_F18) + fn
     want = {"enabled": enabled == "1"}
     xml = "<dict><key>enabled</key><%s/>" % ("true" if want["enabled"] else "false")
     if params:
