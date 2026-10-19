@@ -78,11 +78,16 @@ log out if one does not take effect.
 | ⌥⇧A | Launchpad / Apps | — |
 | *(off)* | ⌘⇧Space previous input source, ⌘F5 VoiceOver, ⌥⌘F5 Accessibility controls | on |
 
-⌘Space next input source is turned off on a machine where BarShelf's
-automation script (`~/Library/Application Support/barshelf/automation.json`, enabled)
-binds `["cmd"], "space"` to `barshelf.selectNextInputSource()`. That binding
-switches on key-down; the system shortcut would otherwise also fire and undo it.
-Without the binding the row above applies. After the binding arrives (it syncs
+On a machine where BarShelf's automation script
+(`~/Library/Application Support/barshelf/automation.json`, enabled) binds
+`["cmd"], "space"` to `barshelf.selectNextInputSource()`, next input source moves
+from ⌘Space to F18 alone (`65535,79,8388608`, F18 plus the fn bit macOS gives
+F-key shortcuts). BarShelf 0.7.1+ relays ⌘Space as an F18 press. A shortcut with
+no modifier commits on key-down, and because the system performs the switch the
+focused app's input context follows; a direct `TISSelectInputSource` call from
+BarShelf could change the menu bar while the app kept typing the old language.
+The relayed F18 must carry exactly the fn flag — measured on macOS 27, F18 with no
+flags or with ⌘ does not match. Without the binding the row above applies. After the binding arrives (it syncs
 with the `app:barshelf` kitbag item), run `./install.sh macos` on that machine.
 
 > [!WARNING]
