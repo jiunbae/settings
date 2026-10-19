@@ -79,7 +79,7 @@ log out if one does not take effect.
 | *(off)* | ⌘⇧Space previous input source, ⌘F5 VoiceOver, ⌥⌘F5 Accessibility controls | on |
 
 ⌘Space next input source is turned off on a machine where BarShelf's
-automation script (`~/Library/Application Support/BarShelf/automation.json`, enabled)
+automation script (`~/Library/Application Support/barshelf/automation.json`, enabled)
 binds `["cmd"], "space"` to `barshelf.selectNextInputSource()`. That binding
 switches on key-down; the system shortcut would otherwise also fire and undo it.
 Without the binding the row above applies. After the binding arrives (it syncs

@@ -28,7 +28,9 @@ readonly MACOS_LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 # Label of the hidutil LaunchAgent earlier versions installed; removed on sight.
 readonly MACOS_CAPSLOCK_LABEL="dev.jiun.capslock-to-control"
 # BarShelf's automation script; see install_macos_shortcuts (⌘Space handover).
-readonly MACOS_BARSHELF_AUTOMATION="$HOME/Library/Application Support/BarShelf/automation.json"
+# Lowercase, as BarShelf writes it: on a case-sensitive volume "BarShelf"
+# would not be found and 61 would quietly come back on.
+readonly MACOS_BARSHELF_AUTOMATION="$HOME/Library/Application Support/barshelf/automation.json"
 readonly MACOS_ACTIVATE_SETTINGS="/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings"
 
 # Caps Lock (HID usage 0x39) -> Control. 0xE4 is what System Settings writes
@@ -206,9 +208,15 @@ def barshelf_owns_cmd_space(path):
         script = json.load(open(path, encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    source = script.get("source", "") if script.get("enabled") else ""
+    if not isinstance(script, dict) or not script.get("enabled"):
+        return False
+    source = script.get("source", "")
+    if not isinstance(source, str):
+        return False
+    # A commented-out binding does not run, so it does not count.
+    live = "\n".join(l for l in source.splitlines() if not l.lstrip().startswith("//"))
     return re.search(r"""bind\(\s*\[\s*["'](?:cmd|command)["']\s*\]\s*,\s*["']space["']\s*,"""
-                     r"""[^;]*selectNextInputSource""", source) is not None
+                     r"""[^;]*selectNextInputSource""", live) is not None
 
 handover = barshelf_owns_cmd_space(sys.argv[2])
 
