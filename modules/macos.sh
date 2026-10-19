@@ -27,6 +27,8 @@ readonly MACOS_KEYBINDINGS_DIR="$HOME/Library/KeyBindings"
 readonly MACOS_LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 # Label of the hidutil LaunchAgent earlier versions installed; removed on sight.
 readonly MACOS_CAPSLOCK_LABEL="dev.jiun.capslock-to-control"
+# BarShelf's automation script; see install_macos_shortcuts (⌘Space handover).
+readonly MACOS_BARSHELF_AUTOMATION="$HOME/Library/Application Support/BarShelf/automation.json"
 readonly MACOS_ACTIVATE_SETTINGS="/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings"
 
 # Caps Lock (HID usage 0x39) -> Control. 0xE4 is what System Settings writes
@@ -192,8 +194,23 @@ install_macos_shortcuts() {
     # differ are written, each as a single -dict-add so every other shortcut
     # on the machine is left alone.
     local changes
-    changes=$(python3 - "$table" <<'PY'
-import plistlib, subprocess, sys
+    changes=$(python3 - "$table" "$MACOS_BARSHELF_AUTOMATION" <<'PY'
+import json, plistlib, re, subprocess, sys
+
+# ⌘Space "Select next source" (61) commits only on ⌘ release. When BarShelf's
+# automation binds ⌘Space to selectNextInputSource (switches on key-down), the
+# system shortcut is turned off so the two do not both toggle. Machines without
+# that binding keep the table's value.
+def barshelf_owns_cmd_space(path):
+    try:
+        script = json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    source = script.get("source", "") if script.get("enabled") else ""
+    return re.search(r"""bind\(\s*\[\s*["'](?:cmd|command)["']\s*\]\s*,\s*["']space["']\s*,"""
+                     r"""[^;]*selectNextInputSource""", source) is not None
+
+handover = barshelf_owns_cmd_space(sys.argv[2])
 
 raw = subprocess.run(["defaults", "export", "com.apple.symbolichotkeys", "-"],
                      capture_output=True).stdout
@@ -203,6 +220,8 @@ for line in open(sys.argv[1], encoding="utf-8"):
     if not line.strip() or line.startswith("#"):
         continue
     hid, enabled, params = line.rstrip("\n").split("\t")[:3]
+    if hid == "61" and handover:
+        enabled = "0"
     want = {"enabled": enabled == "1"}
     xml = "<dict><key>enabled</key><%s/>" % ("true" if want["enabled"] else "false")
     if params:

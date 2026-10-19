@@ -78,6 +78,13 @@ log out if one does not take effect.
 | ⌥⇧A | Launchpad / Apps | — |
 | *(off)* | ⌘⇧Space previous input source, ⌘F5 VoiceOver, ⌥⌘F5 Accessibility controls | on |
 
+⌘Space next input source is turned off on a machine where BarShelf's
+automation script (`~/Library/Application Support/BarShelf/automation.json`, enabled)
+binds `["cmd"], "space"` to `barshelf.selectNextInputSource()`. That binding
+switches on key-down; the system shortcut would otherwise also fire and undo it.
+Without the binding the row above applies. After the binding arrives (it syncs
+with the `app:barshelf` kitbag item), run `./install.sh macos` on that machine.
+
 > [!WARNING]
 > System shortcuts are taken before any app sees the key. ⌃H, ⌃J, ⌃K and ⌃L never
 > reach terminals, shells or editors (backspace, newline, kill-line and clear-screen in
