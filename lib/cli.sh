@@ -11,12 +11,14 @@ readonly VERSION="2.0.0"
 # Available Components
 # ==============================================================================
 # Component list (bash 3.2 compatible - no associative arrays)
-readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory macos fonts hammerspoon ghostty cmux git node codex claude cship scripts)
+readonly COMPONENTS_ORDER=(base zsh nvim tmux zellij rust uv tools tools-extra ssh hishtory macos fonts ghostty cmux git node codex claude cship scripts)
 
 # Opt-in only components. Kept OUT of COMPONENTS_ORDER on purpose so that --all
 # and the interactive menu can never restore private keys onto a machine that
 # just wanted dotfiles. These are valid only when named explicitly.
-readonly OPTIN_COMPONENTS=(secrets kitbag)
+# hammerspoon is here because BarShelf's automation replaced it; it stays as
+# the fallback for a Mac without BarShelf.
+readonly OPTIN_COMPONENTS=(secrets kitbag hammerspoon)
 
 # Basic components for --basic option
 readonly BASIC_COMPONENTS=(base zsh nvim tmux)
@@ -40,7 +42,7 @@ get_component_desc() {
         hishtory)    echo "hishtory (better shell history with self-hosted sync)" ;;
         macos)       echo "macOS preferences (macOS-only: keyboard, shortcuts, Caps Lock->Control, Finder, menu bar)" ;;
         fonts)       echo "Nerd Fonts + JetBrainsMonoHangul (macOS-only)" ;;
-        hammerspoon) echo "Hammerspoon (macOS-only: window manager + keybindings)" ;;
+        hammerspoon) echo "Hammerspoon (macOS-only, opt-in: fallback keybindings where BarShelf is absent)" ;;
         ghostty)     echo "Ghostty terminal config (macOS-only: Option-as-Alt so TUI Alt bindings work)" ;;
         cmux)        echo "cmux terminal (macOS-only: reads the Ghostty config)" ;;
         git)         echo "Git shared config, global ignore, commit signing (macOS-only)" ;;
