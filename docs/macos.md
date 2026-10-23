@@ -34,8 +34,14 @@ value first and only writes on a difference, so a re-run is a no-op.
 | `NSAutomaticCapitalizationEnabled` | `false` | No automatic capitalization. |
 | `AppleKeyboardUIMode` | `0` | Keyboard navigation (Tab through every control) off. |
 | `TISRomanSwitchState` | `0` | Input-source Caps Lock switch state as captured; moot once Caps Lock is Control. |
+| `TSMLanguageIndicatorEnabled` | `false` | No input-source badge next to the cursor on every switch. Cosmetic: it does not change when the switch happens (see below). |
 
 Key repeat is read when an app launches — relaunch apps or log out to feel it.
+
+The ⌘Space "Select next source" shortcut commits the switch only when ⌘ is
+released (measured on macOS 27), which is the Korean/English toggle lag. Key
+repeat and the indicator above do not change that. Where BarShelf relays ⌘Space,
+the switch happens on key-down — see [System shortcuts](#system-shortcuts).
 
 ### Caps Lock → Control
 

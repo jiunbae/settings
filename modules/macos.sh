@@ -53,6 +53,7 @@ readonly MACOS_KEYBOARD_DEFAULTS=(
     "-g|NSAutomaticSpellingCorrectionEnabled|bool|false"
     "-g|WebAutomaticSpellingCorrectionEnabled|bool|false"
     "-g|TISRomanSwitchState|int|0"
+    "-g|TSMLanguageIndicatorEnabled|bool|false"
 )
 
 readonly MACOS_UI_DEFAULTS=(
