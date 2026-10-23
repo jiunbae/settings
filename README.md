@@ -66,7 +66,7 @@ git clone https://github.com/jiunbae/settings.git && cd settings
 | **Toolchains** | [Rust](https://www.rust-lang.org/) + [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) · [uv](https://github.com/astral-sh/uv) · [nvm](https://github.com/nvm-sh/nvm) on macOS, [fnm](https://github.com/Schniz/fnm) on Windows |
 | **AI agents** | Claude Code · Codex · [cship](https://github.com/stephenleo/cship) statusline — see [agent-state.md](docs/agent-state.md) |
 | **History** | [hishtory](https://github.com/ddworken/hishtory) — context, search, cross-device sync |
-| **macOS** | Keyboard, shortcuts, Caps Lock → Control, Finder and menu bar preferences · Nerd Fonts · [Hammerspoon](https://www.hammerspoon.org/) · [cmux](https://www.cmux.dev/) · git config · nvm + Node LTS + Codex/Claude Code CLIs — see [macos.md](docs/macos.md) |
+| **macOS** | Keyboard, shortcuts, Caps Lock → Control, Finder and menu bar preferences · Nerd Fonts · [cmux](https://www.cmux.dev/) · git config · nvm + Node LTS + Codex/Claude Code CLIs — see [macos.md](docs/macos.md) |
 
 Components install independently and are safe to re-run; `--dry-run` previews any
 combination of them without changing anything.
@@ -118,7 +118,6 @@ Components:
   hishtory      hishtory (better shell history with self-hosted sync)
   macos         macOS preferences (macOS-only: keyboard, shortcuts, Caps Lock->Control, Finder, menu bar)
   fonts         Nerd Fonts + JetBrainsMonoHangul (macOS-only)
-  hammerspoon   Hammerspoon (macOS-only: window manager + keybindings)
   ghostty       Ghostty terminal config (macOS-only: Option-as-Alt so TUI Alt bindings work)
   cmux          cmux terminal (macOS-only: reads the Ghostty config)
   git           Git shared config, global ignore, commit signing (macOS-only)
@@ -131,6 +130,7 @@ Components:
 Opt-in components:
   Excluded from --all and the interactive menu. Name them explicitly.
   secrets       SSH/GPG keys, env files and app data (aas, BarShelf, OTPeek) restored from the vault
+  hammerspoon   Hammerspoon (macOS-only, opt-in: fallback keybindings where BarShelf is absent)
 ```
 
 `secrets` restores private material from a Bitwarden-compatible vault. The list of

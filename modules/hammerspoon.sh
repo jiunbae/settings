@@ -19,6 +19,9 @@ fi
 readonly HAMMERSPOON_APP="/Applications/Hammerspoon.app"
 readonly HAMMERSPOON_CONFIG_DIR="$HOME/.hammerspoon"
 readonly HAMMERSPOON_INIT_FILE="$HAMMERSPOON_CONFIG_DIR/init.lua"
+# BarShelf's automation script carries the same bindings (imported from
+# home/dot_hammerspoon/init.lua); with it enabled, Hammerspoon would fight it.
+readonly HAMMERSPOON_BARSHELF_AUTOMATION="$HOME/Library/Application Support/barshelf/automation.json"
 
 # ==============================================================================
 # Installation Functions
@@ -94,6 +97,13 @@ install_hammerspoon() {
     if [[ "$PLATFORM" != "macos" ]]; then
         log_info "Hammerspoon is macOS-only, skipping on platform: $PLATFORM"
         track_skipped "Hammerspoon (not macOS)"
+        return 0
+    fi
+
+    # plutil reads JSON; a missing file or key prints nothing.
+    if [[ "$(plutil -extract enabled raw -o - "$HAMMERSPOON_BARSHELF_AUTOMATION" 2>/dev/null)" == "true" ]]; then
+        log_info "BarShelf automation is enabled and owns these bindings; skipping Hammerspoon"
+        track_skipped "Hammerspoon (BarShelf automation)"
         return 0
     fi
 

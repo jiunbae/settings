@@ -8,7 +8,7 @@ the rest is unchanged.
 | | |
 | :--- | :--- |
 | [hishtory](#hishtory) | Shell history with cross-device sync |
-| [Hammerspoon](#hammerspoon) | macOS automation, needs an Accessibility grant |
+| [Hammerspoon](#hammerspoon) | Opt-in fallback for BarShelf's keyboard automation |
 | [Codex](#codex) | What the managed config does and does not touch |
 
 ## hishtory
@@ -39,7 +39,12 @@ To sync across devices, use the same `HISHTORY_SECRET` on all machines.
 [Hammerspoon](https://www.hammerspoon.org/) is Lua-scriptable macOS automation for
 windows, screens and the keyboard.
 
-**Installs via Homebrew Cask and symlinks `~/.hammerspoon/init.lua` to this repo.**
+**Opt-in: not part of `--all` or the interactive menu; run `./install.sh hammerspoon`.**
+BarShelf's automation script now carries the same bindings (it imports
+`home/dot_hammerspoon/init.lua`), so the component is skipped when
+`~/Library/Application Support/barshelf/automation.json` is enabled — running both
+would register the same shortcuts and Fn remaps twice. On a Mac without BarShelf it
+installs via Homebrew Cask and symlinks `~/.hammerspoon/init.lua` to this repo.
 Skipped automatically on Linux/WSL. Accessibility permission must be granted manually:
 System Settings → Privacy & Security → Accessibility → enable Hammerspoon.
 

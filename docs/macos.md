@@ -6,13 +6,13 @@ Six macOS-only components. On Linux and WSL each one logs a skip and returns.
 |---|---|
 | `macos` | Keyboard, system shortcuts, Caps Lock → Control, appearance, Finder, Dock, trackpad, menu bar, screenshot location, sleep |
 | `fonts` | Nerd Fonts and the Hangul-merged JetBrains Mono used by the terminal config |
-| `hammerspoon` | Hammerspoon.app + `init.lua` — see [components.md](components.md#hammerspoon) |
+| `hammerspoon` | Opt-in. Hammerspoon.app + `init.lua`, for a Mac without BarShelf — see [components.md](components.md#hammerspoon) |
 | `cmux` | cmux.app, the Ghostty config it reads, and its theme |
 | `git` | Shared git config, global ignore, commit signing |
 | `node` | nvm, Node.js 24 LTS as the default, Codex and Claude Code CLIs |
 
 ```bash
-./install.sh macos fonts hammerspoon cmux git node
+./install.sh macos fonts cmux git node
 ./install.sh -n macos          # show what would change
 ```
 
