@@ -591,3 +591,6 @@ export PATH="$HOME/.grok/bin:$PATH"
 # Machine-local additions. This file is a symlink into a PUBLIC repo, so anything
 # work-specific — and anything an installer wants to append — belongs here instead.
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+
+# Unity CLI
+[[ -r "$HOME/.unity/env" ]] && source "$HOME/.unity/env"
