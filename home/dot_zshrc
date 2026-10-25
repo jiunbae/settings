@@ -276,6 +276,13 @@ codex() {
   command codex "$@"
 }
 
+# Pre-trust every directory Claude Code is launched from, so the workspace
+# trust dialog never appears.
+claude() {
+  "$HOME/.local/bin/claude-trust-sync" "$PWD" || return
+  command claude "$@"
+}
+
 alias cx="codex --yolo"
 alias c="claude --dangerously-skip-permissions"
 alias oc="opencode"

@@ -398,6 +398,33 @@ install_claude_mcp() {
     done
 }
 
+install_claude_trust_sync() {
+    print_section "Installing Claude trust sync"
+
+    local source="$(get_root_dir)/home/dot_local/bin/executable_claude-trust-sync"
+    local target="$HOME/.local/bin/claude-trust-sync"
+
+    if [[ ! -f "$source" ]]; then
+        log_error "Claude trust sync source not found: $source"
+        return 1
+    fi
+
+    if [[ "$LINK_MODE" == "copy" ]]; then
+        if [[ -x "$target" ]] && diff -q "$source" "$target" >/dev/null 2>&1; then
+            log_info "Claude trust sync already up to date"
+            track_skipped "Claude trust sync"
+            return 0
+        fi
+    elif [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
+        log_info "Claude trust sync already linked"
+        track_skipped "Claude trust sync"
+        return 0
+    fi
+
+    FORCE=true backup_and_link "$source" "$target"
+    track_installed "Claude trust sync"
+}
+
 # ==============================================================================
 # Main Installation
 # ==============================================================================
@@ -411,6 +438,7 @@ install_claude() {
     install_claude_skills || return 1
     install_claude_memory || return 1
     install_claude_mcp || return 1
+    install_claude_trust_sync || return 1
 
     log_success "Claude Code configuration complete!"
     log_info "Run './install.sh cship' for the statusline it references"

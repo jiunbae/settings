@@ -179,6 +179,30 @@ assert data["tui"]["notifications"] is True
 PY
 }
 
+test_claude_trust_sync() {
+  local test_home="$TEST_ROOT/claude-trust"
+  local repo="$test_home/repo"
+  mkdir -p "$repo/sub"
+  git -C "$repo" init -q
+  printf '%s\n' '{"numStartups": 3, "projects": {"/kept": {"allowedTools": ["Bash"]}}}' \
+    > "$test_home/.claude.json"
+
+  env HOME="$test_home" PATH=/usr/bin:/bin \
+    "$REPO_ROOT/home/dot_local/bin/executable_claude-trust-sync" "$repo/sub"
+
+  python3 - "$test_home/.claude.json" "$(cd "$repo" && pwd -P)" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+projects = data["projects"]
+assert data["numStartups"] == 3
+assert projects["/kept"] == {"allowedTools": ["Bash"]}
+assert projects[sys.argv[2]]["hasTrustDialogAccepted"] is True
+assert projects[f"{sys.argv[2]}/sub"]["hasTrustDialogAccepted"] is True
+PY
+}
+
 test_bundle() {
   local bundle="$TEST_ROOT/install-bundled.sh"
   "$REPO_ROOT/scripts/bundle.sh" > "$bundle"
@@ -215,5 +239,6 @@ test_codex_merge
 test_claude_modes
 test_manifest_path_guard
 test_trust_sync_legacy_tables
+test_claude_trust_sync
 test_bundle
 printf '%s\n' 'agent restore smoke tests: ok'

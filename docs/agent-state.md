@@ -72,6 +72,7 @@ the contents and resolve the install-static placeholder warning before use.
 | Claude Code | MCP servers | `claude mcp add` (idempotent, run by the module) |
 | Codex | `~/.codex/config.toml` | **merge** — managed plugins/MCP/hooks + local trust, notify and UI state |
 | Codex | `~/.local/bin/codex-workspace-trust-sync` | symlink/copy from this repo; regenerates exact-path project trust |
+| Claude Code | `~/.local/bin/claude-trust-sync` | symlink/copy from this repo; the zsh `claude` wrapper runs it to pre-accept the workspace trust dialog for `$PWD` and its Git root |
 | Both | statusline | `cship` module (binaries + `~/.config/{cship,starship}.toml` symlinks) |
 
 **Why Claude Code is symlinked but Codex is not.** Claude Code never rewrites

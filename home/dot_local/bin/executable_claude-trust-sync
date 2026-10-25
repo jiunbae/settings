@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Mark a directory (and its Git root) as trusted in Claude Code's ~/.claude.json
+# so the "Accessing workspace" trust dialog never appears for it.
+
+set -euo pipefail
+umask 077
+
+claude_config="${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"
+target_path="${1:-$PWD}"
+
+if [[ ! -d "$target_path" ]]; then
+  printf 'Not a directory: %s\n' "$target_path" >&2
+  exit 1
+fi
+
+# Claude Code keys project state by the physical path it was launched from.
+target_path=$(cd "$target_path" && pwd -P)
+git_root=$(git -C "$target_path" rev-parse --show-toplevel 2>/dev/null || true)
+
+if ! command -v python3 >/dev/null 2>&1; then
+  printf 'python3 is required to edit %s\n' "$claude_config" >&2
+  exit 1
+fi
+
+python3 - "$claude_config" "$target_path" "$git_root" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+config_path, *paths = sys.argv[1:]
+paths = [p for p in dict.fromkeys(paths) if p]
+
+try:
+    with open(config_path) as f:
+        data = json.load(f)
+except FileNotFoundError:
+    data = {}
+
+projects = data.setdefault("projects", {})
+pending = [p for p in paths if not projects.get(p, {}).get("hasTrustDialogAccepted")]
+# Running sessions rewrite this file constantly; only touch it when needed.
+if not pending:
+    sys.exit(0)
+
+for p in pending:
+    projects.setdefault(p, {})["hasTrustDialogAccepted"] = True
+
+directory = os.path.dirname(config_path) or "."
+fd, tmp_path = tempfile.mkstemp(prefix=".claude.json.", dir=directory)
+try:
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, config_path)
+except BaseException:
+    os.unlink(tmp_path)
+    raise
+PY
