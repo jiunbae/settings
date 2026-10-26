@@ -181,22 +181,41 @@ Desktop. Re-run `./install.sh macos` after OneDrive finishes syncing.
 
 | Power | `pmset` |
 |---|---|
-| AC | `sleep 0` — never idle-sleeps |
-| Battery | `sleep 3` — sleeps after 3 minutes (skipped on Macs without a battery) |
+| AC | `sleep 0`: never idle-sleeps |
+| Battery | `sleep 1`, `displaysleep 1`: display off and sleep after a minute idle (skipped on Macs without a battery) |
 
 Needs sudo: from a terminal it prompts, otherwise it prints the `sudo pmset …` commands
 to run by hand. `powermode` (High Power) is left alone, so a machine that uses it keeps it.
 
-#### Lid closed
+#### PowerDisplayGuard
 
-`pmset sleep` does not cover the lid: a MacBook sleeps when it closes — dropping SSH —
-unless it is in clamshell mode with an external display. Keeping it awake on AC is left
-to Amphetamine, configured in the app (its preferences live in its sandbox container):
+`pmset sleep` does not cover the lid, and the AC supply on these laptops can drop for a
+second at a time. A small LaunchAgent, built from
+`configs/macos/power-display-guard/main.swift` on laptops (needs `swiftc`), owns the rest:
 
-- a Trigger with the *Power Adapter* condition (connected), with *Allow system sleep when
-  display is closed* off
-- **Power Protect** installed from Amphetamine's settings (Apple Silicon laptops; admin
-  password, adds `/etc/sudoers.d/amphetamine_PowerProtect`)
+| State | Display / idle sleep | Lid closed (`SleepDisabled`) |
+|---|---|---|
+| On AC | held awake | stays awake (`1`) |
+| Battery, first 60 s after AC | held awake | stays awake (`1`) |
+| Battery after 60 s | normal battery timers | sleeps (`0`) |
+| Keep-awake override | held awake until it ends (12 h cap) | awake only if the override asks and battery > 20 % |
+
+- A blip under 60 s changes nothing, with the lid open or closed.
+- It is the only thing that writes `SleepDisabled`, through `sudo -n /usr/bin/pmset -a
+  disablesleep 1|0`. That passwordless rule is `/etc/sudoers.d/amphetamine_PowerProtect`
+  (installed by Amphetamine's Power Protect); the installer warns when it is missing.
+- It re-checks `SleepDisabled` every 2 s for 90 s after a power change and every 30 s
+  otherwise, and puts it back if something else changed it. On SIGTERM (logout,
+  `launchctl bootout`) it sets `SleepDisabled 0` before exiting, so the flag never stays
+  on without the guard.
+- Files in `~/Library/Application Support/PowerDisplayGuard/`: `guard.log`,
+  `status.json` (phase, grace countdown, override, other processes' sleep assertions;
+  rewritten at least every 5 s) and `override.json` (a keep-awake request written by
+  BarShelf's Keep Awake widget, deleted to cancel). `power-display-guard --self-test`
+  checks the policy.
+- Amphetamine, if still installed, must have *Allow system sleep when display is closed*
+  on, both globally and in its triggers, so it does not fight over `SleepDisabled`.
+  Amphetamine is otherwise redundant with the guard.
 
 ### Default shell
 
