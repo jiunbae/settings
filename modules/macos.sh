@@ -95,7 +95,14 @@ readonly MACOS_SCREENSHOT_DIR="$HOME/Library/CloudStorage/OneDrive-Personal/ì‚¬ì
 
 # pmset values: never idle-sleep on AC, sleep after 3 minutes on battery.
 readonly MACOS_PMSET_AC_SLEEP=0
-readonly MACOS_PMSET_BATTERY_SLEEP=3
+readonly MACOS_PMSET_BATTERY_SLEEP=1
+readonly MACOS_PMSET_BATTERY_DISPLAYSLEEP=1
+
+# PowerDisplayGuard: built from configs/macos/power-display-guard/main.swift.
+readonly MACOS_GUARD_LABEL="dev.jiun.power-display-guard"
+readonly MACOS_GUARD_DIR="$HOME/Library/Application Support/PowerDisplayGuard"
+readonly MACOS_GUARD_BIN="$MACOS_GUARD_DIR/power-display-guard"
+readonly MACOS_GUARD_PLIST="$MACOS_LAUNCH_AGENTS_DIR/$MACOS_GUARD_LABEL.plist"
 
 # Which system items appear in the menu bar. Control Center's per-module
 # ints live in -currentHost: 2 = show when active, 8 = don't show. The
@@ -452,15 +459,18 @@ install_macos_power() {
 
     # AC: never idle-sleep. Battery: sleep after a few minutes. A Mac without a
     # battery has no Battery Power section and only gets the AC value.
-    local custom ac battery
+    local custom ac battery battery_display
     custom=$(pmset -g custom 2>/dev/null)
     ac=$(awk '/^AC Power:/{s=1;next} /Power:$/{s=0} s && $1=="sleep"{print $2; exit}' <<< "$custom")
     battery=$(awk '/^Battery Power:/{s=1;next} /Power:$/{s=0} s && $1=="sleep"{print $2; exit}' <<< "$custom")
+    battery_display=$(awk '/^Battery Power:/{s=1;next} /Power:$/{s=0} s && $1=="displaysleep"{print $2; exit}' <<< "$custom")
 
     local -a todo=()
     [[ "$ac" == "$MACOS_PMSET_AC_SLEEP" ]] || todo+=("-c sleep $MACOS_PMSET_AC_SLEEP")
-    if grep -q '^Battery Power:' <<< "$custom" && [[ "$battery" != "$MACOS_PMSET_BATTERY_SLEEP" ]]; then
-        todo+=("-b sleep $MACOS_PMSET_BATTERY_SLEEP")
+    if grep -q '^Battery Power:' <<< "$custom"; then
+        [[ "$battery" == "$MACOS_PMSET_BATTERY_SLEEP" ]] || todo+=("-b sleep $MACOS_PMSET_BATTERY_SLEEP")
+        [[ "$battery_display" == "$MACOS_PMSET_BATTERY_DISPLAYSLEEP" ]] \
+            || todo+=("-b displaysleep $MACOS_PMSET_BATTERY_DISPLAYSLEEP")
     fi
 
     if [[ ${#todo[@]} -eq 0 ]]; then
@@ -486,7 +496,115 @@ install_macos_power() {
         sudo pmset $t
     done
     track_installed "pmset sleep"
-    log_success "Sleep set: AC never, battery ${MACOS_PMSET_BATTERY_SLEEP} min"
+    log_success "Sleep set: AC never, battery ${MACOS_PMSET_BATTERY_SLEEP} min (display ${MACOS_PMSET_BATTERY_DISPLAYSLEEP} min)"
+}
+
+_macos_guard_plist() {
+    cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>$MACOS_GUARD_LABEL</string>
+    <key>ProgramArguments</key><array><string>$MACOS_GUARD_BIN</string></array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ThrottleInterval</key><integer>10</integer>
+    <key>ProcessType</key><string>Background</string>
+    <key>LimitLoadToSessionType</key><string>Aqua</string>
+    <key>StandardOutPath</key><string>$MACOS_GUARD_DIR/guard.log</string>
+    <key>StandardErrorPath</key><string>$MACOS_GUARD_DIR/guard-error.log</string>
+</dict>
+</plist>
+PLIST
+}
+
+# Laptops only: the guard is about AC vs battery and the lid.
+install_macos_power_guard() {
+    print_section "PowerDisplayGuard (keep awake on AC, 60 s grace, lid-closed sleep)"
+
+    if ! pmset -g custom 2>/dev/null | grep -q '^Battery Power:'; then
+        log_info "No battery: PowerDisplayGuard not needed"
+        track_skipped "PowerDisplayGuard (no battery)"
+        return 0
+    fi
+    if ! command -v swiftc >/dev/null 2>&1; then
+        log_warn "swiftc not found (xcode-select --install): PowerDisplayGuard not built"
+        track_skipped "PowerDisplayGuard (no swiftc)"
+        return 0
+    fi
+
+    local root_dir source plist_now want_sum have_sum
+    root_dir=$(get_root_dir)
+    source="$root_dir/configs/macos/power-display-guard/main.swift"
+    want_sum=$(shasum -a 256 "$source" | awk '{print $1}')
+    have_sum=$(cat "$MACOS_GUARD_DIR/.source-sha256" 2>/dev/null || true)
+    plist_now=$(cat "$MACOS_GUARD_PLIST" 2>/dev/null || true)
+
+    local domain build=false plist=false loaded=true
+    domain="gui/$(id -u)"
+    [[ "$want_sum" == "$have_sum" && -x "$MACOS_GUARD_BIN" ]] || build=true
+    [[ "$plist_now" == "$(_macos_guard_plist)" ]] || plist=true
+    launchctl print "$domain/$MACOS_GUARD_LABEL" >/dev/null 2>&1 || loaded=false
+
+    # SleepDisabled is switched through the passwordless rule Amphetamine's
+    # Power Protect installs; without it the lid half of the policy is a no-op.
+    if ! sudo -n -l /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1; then
+        log_warn "No passwordless 'pmset -a disablesleep 0/1' sudoers rule: lid-closed sleep will not be managed"
+    fi
+
+    if [[ "$build" == false && "$plist" == false && "$loaded" == true ]]; then
+        log_info "PowerDisplayGuard already up to date"
+        track_skipped "PowerDisplayGuard"
+        return 0
+    fi
+    if [[ "$DRY_RUN" == "true" ]]; then
+        [[ "$build" == true ]] && log_info "[DRY-RUN] Would build $MACOS_GUARD_BIN"
+        [[ "$plist" == true ]] && log_info "[DRY-RUN] Would write $MACOS_GUARD_PLIST"
+        [[ "$loaded" == false ]] && log_info "[DRY-RUN] Would load $MACOS_GUARD_LABEL"
+        return 0
+    fi
+
+    mkdir -p "$MACOS_GUARD_DIR" "$MACOS_LAUNCH_AGENTS_DIR"
+    chmod 700 "$MACOS_GUARD_DIR"
+    if [[ "$build" == true ]]; then
+        local tmp="$MACOS_GUARD_BIN.new"
+        if ! swiftc -O "$source" -o "$tmp" || ! "$tmp" --self-test >/dev/null; then
+            rm -f "$tmp"
+            log_error "PowerDisplayGuard failed to build or self-test; the running copy is untouched"
+            return 1
+        fi
+        mv "$tmp" "$MACOS_GUARD_BIN"
+        cp "$source" "$MACOS_GUARD_DIR/main.swift"
+        printf '%s\n' "$want_sum" > "$MACOS_GUARD_DIR/.source-sha256"
+    fi
+    if [[ "$plist" == true ]]; then
+        _macos_guard_plist > "$MACOS_GUARD_PLIST"
+    fi
+
+    if [[ "$plist" == true || "$loaded" == false ]]; then
+        # bootout returns before the job is gone; bootstrapping too early fails
+        # with "5: Input/output error" and leaves the guard stopped.
+        if [[ "$loaded" == true ]]; then
+            launchctl bootout "$domain/$MACOS_GUARD_LABEL" 2>/dev/null || true
+            local i
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+                launchctl print "$domain/$MACOS_GUARD_LABEL" >/dev/null 2>&1 || break
+                sleep 0.5
+            done
+        fi
+        if ! launchctl bootstrap "$domain" "$MACOS_GUARD_PLIST" 2>/dev/null; then
+            sleep 1
+            launchctl bootstrap "$domain" "$MACOS_GUARD_PLIST" || {
+                log_error "Could not load $MACOS_GUARD_LABEL; run: launchctl bootstrap $domain '$MACOS_GUARD_PLIST'"
+                return 1
+            }
+        fi
+    else
+        launchctl kickstart -k "$domain/$MACOS_GUARD_LABEL"
+    fi
+    track_installed "PowerDisplayGuard"
+    log_success "PowerDisplayGuard running (log: $MACOS_GUARD_DIR/guard.log)"
 }
 
 _macos_refresh() {
@@ -533,6 +651,7 @@ install_macos() {
     install_macos_menubar
     install_macos_screenshots
     install_macos_power
+    install_macos_power_guard
     _macos_refresh
 
     log_success "macOS preferences complete!"
