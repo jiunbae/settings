@@ -93,7 +93,7 @@ readonly MACOS_TRACKPAD_DEFAULTS=(
 # signed in and synced); until then macOS keeps its default (Desktop).
 readonly MACOS_SCREENSHOT_DIR="$HOME/Library/CloudStorage/OneDrive-Personal/사진/screenshots"
 
-# pmset values: never idle-sleep on AC, sleep after 3 minutes on battery.
+# pmset values: never idle-sleep on AC; display off and sleep after 1 minute on battery.
 readonly MACOS_PMSET_AC_SLEEP=0
 readonly MACOS_PMSET_BATTERY_SLEEP=1
 readonly MACOS_PMSET_BATTERY_DISPLAYSLEEP=1
@@ -551,6 +551,13 @@ install_macos_power_guard() {
     # Power Protect installs; without it the lid half of the policy is a no-op.
     if ! sudo -n -l /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1; then
         log_warn "No passwordless 'pmset -a disablesleep 0/1' sudoers rule: lid-closed sleep will not be managed"
+    fi
+
+    # A second writer of SleepDisabled undoes the 60 s grace on every AC blip.
+    if defaults read com.if.Amphetamine >/dev/null 2>&1 &&
+        { [[ "$(defaults read com.if.Amphetamine 'Allow Closed-Display Sleep' 2>/dev/null)" != "1" ]] ||
+          defaults read com.if.Amphetamine 'Trigger Data' 2>/dev/null | grep -q 'AllowSysSleepOnClsdDisp = 0'; }; then
+        log_warn "Amphetamine still manages closed-display sleep: turn on 'Allow system sleep when display is closed' (global and triggers)"
     fi
 
     if [[ "$build" == false && "$plist" == false && "$loaded" == true ]]; then
