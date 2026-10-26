@@ -4,7 +4,7 @@
 #
 # Usage:
 #     ./vault-sync-machines.sh              # Sync to all machines
-#     ./vault-sync-machines.sh june-mbp     # Sync to specific machine
+#     ./vault-sync-machines.sh jiun-mbp     # Sync to specific machine
 #     ./vault-sync-machines.sh --dry-run    # Preview changes
 #
 # Syncs: articles/, workspace/, workspace-vibe/, workspace-ext/, Notes/, TaskManager/
@@ -23,7 +23,6 @@ SYNC_DIRS=(
 
 # Target machines (SSH hosts from ~/.ssh/config)
 MACHINES=(
-    "june-mbp"
     "jiun-mbp"
 )
 
