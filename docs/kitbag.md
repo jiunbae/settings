@@ -184,7 +184,8 @@ offers both halves — that is what v0.16.0 added.
 
 ## What has been done, and what has not
 
-Four Macs run it: june-mba, june-mbp, jiun-mini and jiun-mbp. Each pushed its
+Four Macs ran it: june-mba, june-mbp, jiun-mini and jiun-mbp (june-mbp was retired on
+2026-10-26: its `@june-mbp` items were deleted and its key revoked). Each pushed its
 own state, took what it was behind on, and settled what was left by hand; all
 four now report nothing outstanding. The round trip was checked before any of
 that, through an `age` store into a throwaway `$HOME`: 36 of 36 files came back

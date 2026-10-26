@@ -195,7 +195,7 @@ rsync를 사용하여 SSH로 다른 Mac에 vault 동기화.
 
 ```bash
 ./vault-sync-machines.sh                   # 모든 머신에 동기화
-./vault-sync-machines.sh june-mbp          # 특정 머신만
+./vault-sync-machines.sh jiun-mbp          # 특정 머신만
 ./vault-sync-machines.sh --dry-run         # 미리보기
 ```
 
